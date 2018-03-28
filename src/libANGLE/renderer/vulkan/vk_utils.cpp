@@ -1367,11 +1367,11 @@ LineLoopHandler::LineLoopHandler()
     : mObserverBinding(this, 0u),
       mStreamingLineLoopIndicesData(
           new StreamingBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                              kLineLoopStreamingBufferMinSize,
-                              1)),
+                              kLineLoopStreamingBufferMinSize)),
       mLineLoopIndexBuffer(VK_NULL_HANDLE),
       mLineLoopIndexBufferOffset(VK_NULL_HANDLE)
 {
+    mStreamingLineLoopIndicesData->init(1);
 }
 
 LineLoopHandler::~LineLoopHandler() = default;
@@ -1482,7 +1482,7 @@ void LineLoopHandler::onSubjectStateChange(const gl::Context *context,
                                            angle::SubjectMessage message)
 {
     // Indicate we want to recopy on next draw since something changed in the buffer.
-    if (message == angle::SubjectMessage::STATE_CHANGE)
+    if (message == angle::SubjectMessage::STORAGE_CHANGED)
     {
         mLineLoopIndexBuffer = VK_NULL_HANDLE;
     }

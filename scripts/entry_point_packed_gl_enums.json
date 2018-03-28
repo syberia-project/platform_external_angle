@@ -1,4 +1,10 @@
 {
+    "glAlphaFunc": {
+        "func": "AlphaTestFunc"
+    },
+    "glAlphaFuncx": {
+        "func": "AlphaTestFunc"
+    },
     "glBindBuffer": {
         "target": "BufferBinding"
     },
@@ -60,6 +66,12 @@
     "glCopyBufferSubData": {
         "readTarget": "BufferBinding",
         "writeTarget": "BufferBinding"
+    },
+    "glCreateShader": {
+        "type": "ShaderType"
+    },
+    "glCreateShaderProgramv": {
+        "type": "ShaderType"
     },
     "glCullFace": {
         "mode": "CullFaceMode"

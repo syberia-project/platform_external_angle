@@ -614,7 +614,7 @@ GLuint Context::createProgram()
     return mState.mShaderPrograms->createProgram(mImplementation.get());
 }
 
-GLuint Context::createShader(GLenum type)
+GLuint Context::createShader(ShaderType type)
 {
     return mState.mShaderPrograms->createShader(mImplementation.get(), mLimitations, type);
 }
@@ -661,7 +661,7 @@ GLuint Context::createProgramPipeline()
     return mState.mPipelines->createProgramPipeline();
 }
 
-GLuint Context::createShaderProgramv(GLenum type, GLsizei count, const GLchar *const *strings)
+GLuint Context::createShaderProgramv(ShaderType type, GLsizei count, const GLchar *const *strings)
 {
     UNIMPLEMENTED();
     return 0u;
@@ -6371,6 +6371,21 @@ bool Context::getQueryParameterInfo(GLenum pname, GLenum *type, unsigned int *nu
         *type      = GL_INT;
         *numParams = 1;
         return true;
+    }
+
+    if (getClientVersion() < Version(2, 0))
+    {
+        switch (pname)
+        {
+            case GL_ALPHA_TEST_FUNC:
+                *type      = GL_INT;
+                *numParams = 1;
+                return true;
+            case GL_ALPHA_TEST_REF:
+                *type      = GL_FLOAT;
+                *numParams = 1;
+                return true;
+        }
     }
 
     if (getClientVersion() < Version(3, 0))

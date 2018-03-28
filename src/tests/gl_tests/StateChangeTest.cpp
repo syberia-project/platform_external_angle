@@ -277,6 +277,65 @@ TEST_P(StateChangeTest, FramebufferIncompleteDepthStencilAttachment)
     ASSERT_GL_NO_ERROR();
 }
 
+const char kSimpleAttributeVS[] = R"(attribute vec2 position;
+attribute vec4 testAttrib;
+varying vec4 testVarying;
+void main()
+{
+    gl_Position = vec4(position, 0, 1);
+    testVarying = testAttrib;
+})";
+
+const char kSimpleAttributeFS[] = R"(precision mediump float;
+varying vec4 testVarying;
+void main()
+{
+    gl_FragColor = testVarying;
+})";
+
+// Tests that using a buffered attribute, then disabling it and using current value, works.
+TEST_P(StateChangeTest, DisablingBufferedVertexAttribute)
+{
+    ANGLE_GL_PROGRAM(program, kSimpleAttributeVS, kSimpleAttributeFS);
+    glUseProgram(program);
+    GLint attribLoc   = glGetAttribLocation(program, "testAttrib");
+    GLint positionLoc = glGetAttribLocation(program, "position");
+    ASSERT_NE(-1, attribLoc);
+    ASSERT_NE(-1, positionLoc);
+
+    // Set up the buffered attribute.
+    std::vector<GLColor> red(6, GLColor::red);
+    GLBuffer attribBuffer;
+    glBindBuffer(GL_ARRAY_BUFFER, attribBuffer);
+    glBufferData(GL_ARRAY_BUFFER, red.size() * sizeof(GLColor), red.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(attribLoc);
+    glVertexAttribPointer(attribLoc, 4, GL_UNSIGNED_BYTE, GL_TRUE, 0, nullptr);
+
+    // Also set the current value to green now.
+    glVertexAttrib4f(attribLoc, 0.0f, 1.0f, 0.0f, 1.0f);
+
+    // Set up the position attribute as well.
+    setupQuadVertexBuffer(0.5f, 1.0f);
+    glEnableVertexAttribArray(positionLoc);
+    glVertexAttribPointer(positionLoc, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Draw with the buffered attribute. Verify red.
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+
+    // Draw with the disabled "current value attribute". Verify green.
+    glDisableVertexAttribArray(attribLoc);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+
+    // Verify setting buffer data on the disabled buffer doesn't change anything.
+    std::vector<GLColor> blue(128, GLColor::blue);
+    glBindBuffer(GL_ARRAY_BUFFER, attribBuffer);
+    glBufferData(GL_ARRAY_BUFFER, blue.size() * sizeof(GLColor), blue.data(), GL_STATIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
 // Ensure that CopyTexSubImage3D syncs framebuffer changes.
 TEST_P(StateChangeTestES3, CopyTexSubImage3DSync)
 {
@@ -1331,6 +1390,56 @@ TEST_P(SimpleStateChangeTest, ScissorTest)
 
     // Test inside, red of the fragment shader.
     EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, getWindowHeight() / 2, GLColor::red);
+}
+
+// This test validates we are able to change the valid of a uniform dynamically.
+TEST_P(SimpleStateChangeTest, UniformUpdateTest)
+{
+    constexpr char kPositionUniformVertexShader[] = R"(
+precision mediump float;
+attribute vec2 position;
+uniform vec2 uniPosModifier;
+void main()
+{
+    gl_Position = vec4(position + uniPosModifier, 0, 1);
+})";
+
+    constexpr char kColorUniformFragmentShader[] = R"(
+precision mediump float;
+uniform vec4 uniColor;
+void main()
+{
+    gl_FragColor = uniColor;
+})";
+
+    ANGLE_GL_PROGRAM(program, kPositionUniformVertexShader, kColorUniformFragmentShader);
+    glUseProgram(program);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    GLint posUniformLocation = glGetUniformLocation(program, "uniPosModifier");
+    ASSERT_NE(posUniformLocation, -1);
+    GLint colorUniformLocation = glGetUniformLocation(program, "uniColor");
+    ASSERT_NE(colorUniformLocation, -1);
+
+    // draw a red quad to the left side.
+    glUniform2f(posUniformLocation, -0.5, 0.0);
+    glUniform4f(colorUniformLocation, 1.0, 0.0, 0.0, 1.0);
+    drawQuad(program.get(), "position", 0.0f, 0.5f, true);
+
+    // draw a green quad to the right side.
+    glUniform2f(posUniformLocation, 0.5, 0.0);
+    glUniform4f(colorUniformLocation, 0.0, 1.0, 0.0, 1.0);
+    drawQuad(program.get(), "position", 0.0f, 0.5f, true);
+
+    ASSERT_GL_NO_ERROR();
+
+    // Test the center of the left quad. Should be red.
+    EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 4, getWindowHeight() / 2, GLColor::red);
+
+    // Test the center of the right quad. Should be green.
+    EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 4 * 3, getWindowHeight() / 2, GLColor::green);
 }
 
 // Tests that changing the storage of a Renderbuffer currently in use by GL works as expected.
