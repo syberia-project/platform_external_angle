@@ -14,6 +14,7 @@
     {
         'angle_unittests_sources':
         [
+            '<(angle_path)/src/common/FixedVector_unittest.cpp',
             '<(angle_path)/src/common/Optional_unittest.cpp',
             '<(angle_path)/src/common/aligned_memory_unittest.cpp',
             '<(angle_path)/src/common/angleutils_unittest.cpp',
@@ -71,6 +72,7 @@
             '<(angle_path)/src/tests/compiler_tests/GLSLCompatibilityOutput_test.cpp',
             '<(angle_path)/src/tests/compiler_tests/GlFragDataNotModified_test.cpp',
             '<(angle_path)/src/tests/compiler_tests/GeometryShader_test.cpp',
+            '<(angle_path)/src/tests/compiler_tests/ImmutableString_test.cpp',
             '<(angle_path)/src/tests/compiler_tests/ImmutableString_test_autogen.cpp',
             '<(angle_path)/src/tests/compiler_tests/InitOutputVariables_test.cpp',
             '<(angle_path)/src/tests/compiler_tests/IntermNode_test.cpp',

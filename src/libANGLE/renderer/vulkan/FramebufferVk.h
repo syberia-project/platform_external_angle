@@ -12,6 +12,7 @@
 
 #include "libANGLE/renderer/FramebufferImpl.h"
 #include "libANGLE/renderer/RenderTargetCache.h"
+#include "libANGLE/renderer/vulkan/CommandGraph.h"
 #include "libANGLE/renderer/vulkan/vk_cache_utils.h"
 
 namespace rx
@@ -20,7 +21,7 @@ class RendererVk;
 class RenderTargetVk;
 class WindowSurfaceVk;
 
-class FramebufferVk : public FramebufferImpl, public ResourceVk
+class FramebufferVk : public FramebufferImpl, public vk::CommandGraphResource
 {
   public:
     // Factory methods so we don't have to use constructors with overloads.
@@ -96,13 +97,15 @@ class FramebufferVk : public FramebufferImpl, public ResourceVk
     gl::ErrorOrResult<vk::Framebuffer *> getFramebuffer(const gl::Context *context,
                                                         RendererVk *rendererVk);
 
-    gl::Error clearColorAttachmentsWithScissorRegion(const gl::Context *context);
+    gl::Error clearAttachmentsWithScissorRegion(const gl::Context *context,
+                                                bool clearColor,
+                                                bool clearDepth,
+                                                bool clearStencil);
 
     WindowSurfaceVk *mBackbuffer;
 
     Optional<vk::RenderPassDesc> mRenderPassDesc;
     vk::Framebuffer mFramebuffer;
-    Serial mLastRenderNodeSerial;
     RenderTargetCache<RenderTargetVk> mRenderTargetCache;
 };
 

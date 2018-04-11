@@ -31,6 +31,7 @@ struct LinkedUniform;
 class Program;
 class Shader;
 
+void SetRobustLengthParam(GLsizei *length, GLsizei value);
 bool IsETC2EACFormat(const GLenum format);
 bool ValidTextureTarget(const Context *context, TextureType type);
 bool ValidTexture2DTarget(const Context *context, TextureType type);
@@ -227,12 +228,30 @@ bool ValidateUniformMatrix(Context *context,
                            GLint location,
                            GLsizei count,
                            GLboolean transpose);
-
+bool ValidateGetBooleanvRobustANGLE(Context *context,
+                                    GLenum pname,
+                                    GLsizei bufSize,
+                                    GLsizei *length,
+                                    GLboolean *params);
+bool ValidateGetFloatvRobustANGLE(Context *context,
+                                  GLenum pname,
+                                  GLsizei bufSize,
+                                  GLsizei *length,
+                                  GLfloat *params);
 bool ValidateStateQuery(Context *context,
                         GLenum pname,
                         GLenum *nativeType,
                         unsigned int *numParams);
-
+bool ValidateGetIntegervRobustANGLE(Context *context,
+                                    GLenum pname,
+                                    GLsizei bufSize,
+                                    GLsizei *length,
+                                    GLint *data);
+bool ValidateGetInteger64vRobustANGLE(Context *context,
+                                      GLenum pname,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLint64 *data);
 bool ValidateRobustStateQuery(Context *context,
                               GLenum pname,
                               GLsizei bufSize,
@@ -304,11 +323,29 @@ bool ValidateGetnUniformfvEXT(Context *context,
                               GLint location,
                               GLsizei bufSize,
                               GLfloat *params);
+bool ValidateGetnUniformfvRobustANGLE(Context *context,
+                                      GLuint program,
+                                      GLint location,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLfloat *params);
 bool ValidateGetnUniformivEXT(Context *context,
                               GLuint program,
                               GLint location,
                               GLsizei bufSize,
                               GLint *params);
+bool ValidateGetnUniformivRobustANGLE(Context *context,
+                                      GLuint program,
+                                      GLint location,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLint *params);
+bool ValidateGetnUniformuivRobustANGLE(Context *context,
+                                       GLuint program,
+                                       GLint location,
+                                       GLsizei bufSize,
+                                       GLsizei *length,
+                                       GLuint *params);
 bool ValidateGetUniformfvRobustANGLE(Context *context,
                                      GLuint program,
                                      GLint location,
@@ -391,7 +428,8 @@ bool ValidateGetFramebufferAttachmentParameterivRobustANGLE(Context *context,
                                                             GLenum attachment,
                                                             GLenum pname,
                                                             GLsizei bufSize,
-                                                            GLsizei *numParams);
+                                                            GLsizei *length,
+                                                            GLint *params);
 
 bool ValidateGetBufferParameterBase(Context *context,
                                     BufferBinding target,
@@ -417,7 +455,8 @@ bool ValidateGetProgramivRobustANGLE(Context *context,
                                      GLuint program,
                                      GLenum pname,
                                      GLsizei bufSize,
-                                     GLsizei *numParams);
+                                     GLsizei *length,
+                                     GLint *params);
 
 bool ValidateGetRenderbufferParameterivBase(Context *context,
                                             GLenum target,
@@ -454,6 +493,18 @@ bool ValidateGetTexParameterivRobustANGLE(Context *context,
                                           GLsizei bufSize,
                                           GLsizei *length,
                                           GLint *params);
+bool ValidateGetTexParameterIivRobustANGLE(Context *context,
+                                           TextureType target,
+                                           GLenum pname,
+                                           GLsizei bufSize,
+                                           GLsizei *length,
+                                           GLint *params);
+bool ValidateGetTexParameterIuivRobustANGLE(Context *context,
+                                            TextureType target,
+                                            GLenum pname,
+                                            GLsizei bufSize,
+                                            GLsizei *length,
+                                            GLuint *params);
 
 template <typename ParamType>
 bool ValidateTexParameterBase(Context *context,
@@ -471,6 +522,16 @@ bool ValidateTexParameterivRobustANGLE(Context *context,
                                        GLenum pname,
                                        GLsizei bufSize,
                                        const GLint *params);
+bool ValidateTexParameterIivRobustANGLE(Context *context,
+                                        TextureType target,
+                                        GLenum pname,
+                                        GLsizei bufSize,
+                                        const GLint *params);
+bool ValidateTexParameterIuivRobustANGLE(Context *context,
+                                         TextureType target,
+                                         GLenum pname,
+                                         GLsizei bufSize,
+                                         const GLuint *params);
 
 bool ValidateGetSamplerParameterfvRobustANGLE(Context *context,
                                               GLuint sampler,
@@ -481,9 +542,21 @@ bool ValidateGetSamplerParameterfvRobustANGLE(Context *context,
 bool ValidateGetSamplerParameterivRobustANGLE(Context *context,
                                               GLuint sampler,
                                               GLenum pname,
-                                              GLuint bufSize,
+                                              GLsizei bufSize,
                                               GLsizei *length,
                                               GLint *params);
+bool ValidateGetSamplerParameterIivRobustANGLE(Context *context,
+                                               GLuint sampler,
+                                               GLenum pname,
+                                               GLsizei bufSize,
+                                               GLsizei *length,
+                                               GLint *params);
+bool ValidateGetSamplerParameterIuivRobustANGLE(Context *context,
+                                                GLuint sampler,
+                                                GLenum pname,
+                                                GLsizei bufSize,
+                                                GLsizei *length,
+                                                GLuint *params);
 
 bool ValidateSamplerParameterfvRobustANGLE(Context *context,
                                            GLuint sampler,
@@ -495,6 +568,16 @@ bool ValidateSamplerParameterivRobustANGLE(Context *context,
                                            GLenum pname,
                                            GLsizei bufSize,
                                            const GLint *params);
+bool ValidateSamplerParameterIivRobustANGLE(Context *context,
+                                            GLuint sampler,
+                                            GLenum pname,
+                                            GLsizei bufSize,
+                                            const GLint *param);
+bool ValidateSamplerParameterIuivRobustANGLE(Context *context,
+                                             GLuint sampler,
+                                             GLenum pname,
+                                             GLsizei bufSize,
+                                             const GLuint *param);
 
 bool ValidateGetVertexAttribBase(Context *context,
                                  GLuint index,
@@ -595,6 +678,8 @@ bool ValidateGetInternalFormativBase(Context *context,
 
 bool ValidateFramebufferComplete(Context *context, Framebuffer *framebuffer, bool isFramebufferOp);
 bool ValidateFramebufferNotMultisampled(Context *context, Framebuffer *framebuffer);
+
+bool ValidateMultitextureUnit(Context *context, GLenum texture);
 
 // Utility macro for handling implementation methods inside Validation.
 #define ANGLE_HANDLE_VALIDATION_ERR(X) \

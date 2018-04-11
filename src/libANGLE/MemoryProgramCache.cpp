@@ -66,10 +66,10 @@ void WriteShaderVariableBuffer(BinaryOutputStream *stream, const ShaderVariableB
     stream->writeInt(var.binding);
     stream->writeInt(var.dataSize);
 
-    stream->writeInt(var.vertexActive);
-    stream->writeInt(var.fragmentActive);
-    stream->writeInt(var.computeActive);
-    stream->writeInt(var.geometryActive);
+    for (ShaderType shaderType : AllShaderTypes())
+    {
+        stream->writeInt(var.isActive(shaderType));
+    }
 
     stream->writeInt(var.memberIndexes.size());
     for (unsigned int memberCounterIndex : var.memberIndexes)
@@ -82,10 +82,11 @@ void LoadShaderVariableBuffer(BinaryInputStream *stream, ShaderVariableBuffer *v
 {
     var->binding           = stream->readInt<int>();
     var->dataSize          = stream->readInt<unsigned int>();
-    var->vertexActive      = stream->readBool();
-    var->fragmentActive    = stream->readBool();
-    var->computeActive     = stream->readBool();
-    var->geometryActive    = stream->readBool();
+
+    for (ShaderType shaderType : AllShaderTypes())
+    {
+        var->setActive(shaderType, stream->readBool());
+    }
 
     unsigned int numMembers = stream->readInt<unsigned int>();
     for (unsigned int blockMemberIndex = 0; blockMemberIndex < numMembers; blockMemberIndex++)
@@ -105,9 +106,11 @@ void WriteBufferVariable(BinaryOutputStream *stream, const BufferVariable &var)
     stream->writeInt(var.blockInfo.isRowMajorMatrix);
     stream->writeInt(var.blockInfo.topLevelArrayStride);
     stream->writeInt(var.topLevelArraySize);
-    stream->writeInt(var.vertexActive);
-    stream->writeInt(var.fragmentActive);
-    stream->writeInt(var.computeActive);
+
+    for (ShaderType shaderType : AllShaderTypes())
+    {
+        stream->writeInt(var.isActive(shaderType));
+    }
 }
 
 void LoadBufferVariable(BinaryInputStream *stream, BufferVariable *var)
@@ -121,9 +124,11 @@ void LoadBufferVariable(BinaryInputStream *stream, BufferVariable *var)
     var->blockInfo.isRowMajorMatrix    = stream->readBool();
     var->blockInfo.topLevelArrayStride = stream->readInt<int>();
     var->topLevelArraySize             = stream->readInt<int>();
-    var->vertexActive                  = stream->readBool();
-    var->fragmentActive                = stream->readBool();
-    var->computeActive                 = stream->readBool();
+
+    for (ShaderType shaderType : AllShaderTypes())
+    {
+        var->setActive(shaderType, stream->readBool());
+    }
 }
 
 void WriteInterfaceBlock(BinaryOutputStream *stream, const InterfaceBlock &block)
@@ -244,11 +249,11 @@ LinkResult MemoryProgramCache::Deserialize(const Context *context,
     static_assert(MAX_VERTEX_ATTRIBS * 2 <= sizeof(uint32_t) * 8,
                   "All bits of mAttributesTypeMask types and mask fit into 32 bits each");
     state->mAttributesTypeMask.from_ulong(stream.readInt<uint32_t>());
-    state->mAttributesMask = stream.readInt<uint32_t>();
+    state->mAttributesMask = stream.readInt<gl::AttributesMask>();
 
     static_assert(MAX_VERTEX_ATTRIBS <= sizeof(unsigned long) * 8,
                   "Too many vertex attribs for mask");
-    state->mActiveAttribLocationsMask = stream.readInt<unsigned long>();
+    state->mActiveAttribLocationsMask = stream.readInt<gl::AttributesMask>();
 
     unsigned int attribCount = stream.readInt<unsigned int>();
     ASSERT(state->mAttributes.empty());
@@ -390,7 +395,7 @@ LinkResult MemoryProgramCache::Deserialize(const Context *context,
                   "All bits of mDrawBufferTypeMask and mActiveOutputVariables types and mask fit "
                   "into 32 bits each");
     state->mDrawBufferTypeMask.from_ulong(stream.readInt<uint32_t>());
-    state->mActiveOutputVariables = stream.readInt<uint32_t>();
+    state->mActiveOutputVariables = stream.readInt<gl::DrawBufferMask>();
 
     unsigned int samplerRangeLow  = stream.readInt<unsigned int>();
     unsigned int samplerRangeHigh = stream.readInt<unsigned int>();
@@ -426,7 +431,9 @@ LinkResult MemoryProgramCache::Deserialize(const Context *context,
 
     static_assert(static_cast<unsigned long>(ShaderType::EnumCount) <= sizeof(unsigned long) * 8,
                   "Too many shader types");
-    state->mLinkedShaderStages = stream.readInt<unsigned long>();
+    state->mLinkedShaderStages = stream.readInt<gl::ShaderBitSet>();
+
+    state->updateTransformFeedbackStrides();
 
     return program->getImplementation()->load(context, infoLog, &stream);
 }

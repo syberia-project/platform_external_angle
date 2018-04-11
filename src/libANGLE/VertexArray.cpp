@@ -9,6 +9,7 @@
 #include "libANGLE/VertexArray.h"
 #include "libANGLE/Buffer.h"
 #include "libANGLE/Context.h"
+#include "libANGLE/renderer/BufferImpl.h"
 #include "libANGLE/renderer/GLImplFactory.h"
 #include "libANGLE/renderer/VertexArrayImpl.h"
 
@@ -36,8 +37,13 @@ VertexArray::VertexArray(rx::GLImplFactory *factory,
                          size_t maxAttribBindings)
     : mId(id),
       mState(maxAttribs, maxAttribBindings),
-      mVertexArray(factory->createVertexArray(mState))
+      mVertexArray(factory->createVertexArray(mState)),
+      mElementArrayBufferObserverBinding(this, maxAttribBindings)
 {
+    for (size_t attribIndex = 0; attribIndex < maxAttribBindings; ++attribIndex)
+    {
+        mArrayBufferObserverBindings.emplace_back(this, attribIndex);
+    }
 }
 
 void VertexArray::onDestroy(const Context *context)
@@ -140,6 +146,8 @@ void VertexArray::bindVertexBufferImpl(const Context *context,
     binding->setBuffer(context, boundBuffer, isBound);
     binding->setOffset(offset);
     binding->setStride(stride);
+
+    updateObserverBinding(bindingIndex);
 }
 
 void VertexArray::bindVertexBuffer(const Context *context,
@@ -267,15 +275,19 @@ void VertexArray::setElementArrayBuffer(const Context *context, Buffer *buffer)
     mState.mElementArrayBuffer.set(context, buffer);
     if (isBound && mState.mElementArrayBuffer.get())
         mState.mElementArrayBuffer->onBindingChanged(true, BufferBinding::ElementArray);
+    mElementArrayBufferObserverBinding.bind(buffer ? buffer->getImplementation() : nullptr);
     mDirtyBits.set(DIRTY_BIT_ELEMENT_ARRAY_BUFFER);
 }
 
-void VertexArray::syncState(const Context *context)
+gl::Error VertexArray::syncState(const Context *context)
 {
     if (mDirtyBits.any())
     {
-        mVertexArray->syncState(context, mDirtyBits, mDirtyAttribBits, mDirtyBindingBits);
+        mDirtyBitsGuard = mDirtyBits;
+        ANGLE_TRY(
+            mVertexArray->syncState(context, mDirtyBits, mDirtyAttribBits, mDirtyBindingBits));
         mDirtyBits.reset();
+        mDirtyBitsGuard.reset();
 
         // This is a bit of an implementation hack - but since we know the implementation
         // details of the dirty bit class it should always have the same effect as iterating
@@ -284,6 +296,7 @@ void VertexArray::syncState(const Context *context)
         memset(&mDirtyAttribBits, 0, sizeof(mDirtyAttribBits));
         memset(&mDirtyBindingBits, 0, sizeof(mDirtyBindingBits));
     }
+    return gl::NoError();
 }
 
 void VertexArray::onBindingChanged(bool bound)
@@ -294,6 +307,41 @@ void VertexArray::onBindingChanged(bool bound)
     {
         binding.onContainerBindingChanged(bound);
     }
+}
+
+VertexArray::DirtyBitType VertexArray::getDirtyBitFromIndex(bool contentsChanged,
+                                                            angle::SubjectIndex index) const
+{
+    if (index == mArrayBufferObserverBindings.size())
+    {
+        return contentsChanged ? DIRTY_BIT_ELEMENT_ARRAY_BUFFER_DATA
+                               : DIRTY_BIT_ELEMENT_ARRAY_BUFFER;
+    }
+    else
+    {
+        // Note: this currently just gets the top-level dirty bit.
+        ASSERT(index < mArrayBufferObserverBindings.size());
+        return static_cast<DirtyBitType>(
+            (contentsChanged ? DIRTY_BIT_BUFFER_DATA_0 : DIRTY_BIT_BINDING_0) + index);
+    }
+}
+
+void VertexArray::onSubjectStateChange(const gl::Context *context,
+                                       angle::SubjectIndex index,
+                                       angle::SubjectMessage message)
+{
+    bool contentsChanged  = (message == angle::SubjectMessage::CONTENTS_CHANGED);
+    DirtyBitType dirtyBit = getDirtyBitFromIndex(contentsChanged, index);
+    ASSERT(!mDirtyBitsGuard.valid() || mDirtyBitsGuard.value().test(dirtyBit));
+    mDirtyBits.set(dirtyBit);
+    context->getGLState().setVertexArrayDirty(this);
+}
+
+void VertexArray::updateObserverBinding(size_t bindingIndex)
+{
+    Buffer *boundBuffer = mState.mVertexBindings[bindingIndex].getBuffer().get();
+    mArrayBufferObserverBindings[bindingIndex].bind(boundBuffer ? boundBuffer->getImplementation()
+                                                                : nullptr);
 }
 
 }  // namespace gl

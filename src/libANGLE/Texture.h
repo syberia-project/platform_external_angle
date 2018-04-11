@@ -115,6 +115,9 @@ struct TextureState final : private angle::NonCopyable
     GLenum getUsage() const { return mUsage; }
     GLenum getDepthStencilTextureMode() const { return mDepthStencilTextureMode; }
 
+    // Returns the desc of the base level. Only valid for cube-complete/mip-complete textures.
+    const ImageDesc &getBaseLevelDesc() const;
+
     // GLES1 emulation: For GL_OES_draw_texture
     void setCrop(const gl::Rectangle& rect);
     const gl::Rectangle& getCrop() const;
@@ -277,7 +280,7 @@ class Texture final : public egl::ImageSibling, public LabeledObject
     Error setImage(const Context *context,
                    const PixelUnpackState &unpackState,
                    TextureTarget target,
-                   size_t level,
+                   GLint level,
                    GLenum internalFormat,
                    const Extents &size,
                    GLenum format,
@@ -286,7 +289,7 @@ class Texture final : public egl::ImageSibling, public LabeledObject
     Error setSubImage(const Context *context,
                       const PixelUnpackState &unpackState,
                       TextureTarget target,
-                      size_t level,
+                      GLint level,
                       const Box &area,
                       GLenum format,
                       GLenum type,
@@ -295,7 +298,7 @@ class Texture final : public egl::ImageSibling, public LabeledObject
     Error setCompressedImage(const Context *context,
                              const PixelUnpackState &unpackState,
                              TextureTarget target,
-                             size_t level,
+                             GLint level,
                              GLenum internalFormat,
                              const Extents &size,
                              size_t imageSize,
@@ -303,7 +306,7 @@ class Texture final : public egl::ImageSibling, public LabeledObject
     Error setCompressedSubImage(const Context *context,
                                 const PixelUnpackState &unpackState,
                                 TextureTarget target,
-                                size_t level,
+                                GLint level,
                                 const Box &area,
                                 GLenum format,
                                 size_t imageSize,
@@ -311,32 +314,32 @@ class Texture final : public egl::ImageSibling, public LabeledObject
 
     Error copyImage(const Context *context,
                     TextureTarget target,
-                    size_t level,
+                    GLint level,
                     const Rectangle &sourceArea,
                     GLenum internalFormat,
                     Framebuffer *source);
     Error copySubImage(const Context *context,
                        TextureTarget target,
-                       size_t level,
+                       GLint level,
                        const Offset &destOffset,
                        const Rectangle &sourceArea,
                        Framebuffer *source);
 
     Error copyTexture(const Context *context,
                       TextureTarget target,
-                      size_t level,
+                      GLint level,
                       GLenum internalFormat,
                       GLenum type,
-                      size_t sourceLevel,
+                      GLint sourceLevel,
                       bool unpackFlipY,
                       bool unpackPremultiplyAlpha,
                       bool unpackUnmultiplyAlpha,
                       Texture *source);
     Error copySubTexture(const Context *context,
                          TextureTarget target,
-                         size_t level,
+                         GLint level,
                          const Offset &destOffset,
-                         size_t sourceLevel,
+                         GLint sourceLevel,
                          const Rectangle &sourceArea,
                          bool unpackFlipY,
                          bool unpackPremultiplyAlpha,

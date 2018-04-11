@@ -196,9 +196,6 @@ TParseContext::TParseContext(TSymbolTable &symt,
                         resources.WEBGL_debug_shader_precision == 1),
       mPreprocessor(mDiagnostics, &mDirectiveHandler, pp::PreprocessorSettings()),
       mScanner(nullptr),
-      mUsesFragData(false),
-      mUsesFragColor(false),
-      mUsesSecondaryOutputs(false),
       mMinProgramTexelOffset(resources.MinProgramTexelOffset),
       mMaxProgramTexelOffset(resources.MaxProgramTexelOffset),
       mMinProgramTextureGatherOffset(resources.MinProgramTextureGatherOffset),
@@ -219,8 +216,7 @@ TParseContext::TParseContext(TSymbolTable &symt,
       mGeometryShaderInvocations(0),
       mGeometryShaderMaxVertices(-1),
       mMaxGeometryShaderInvocations(resources.MaxGeometryShaderInvocations),
-      mMaxGeometryShaderMaxVertices(resources.MaxGeometryOutputVertices),
-      mGlInVariableWithArraySize(nullptr)
+      mMaxGeometryShaderMaxVertices(resources.MaxGeometryOutputVertices)
 {
 }
 
@@ -443,6 +439,36 @@ void TParseContext::checkPrecisionSpecified(const TSourceLoc &line,
     }
 }
 
+void TParseContext::markStaticReadIfSymbol(TIntermNode *node)
+{
+    TIntermSwizzle *swizzleNode = node->getAsSwizzleNode();
+    if (swizzleNode)
+    {
+        markStaticReadIfSymbol(swizzleNode->getOperand());
+        return;
+    }
+    TIntermBinary *binaryNode = node->getAsBinaryNode();
+    if (binaryNode)
+    {
+        switch (binaryNode->getOp())
+        {
+            case EOpIndexDirect:
+            case EOpIndexIndirect:
+            case EOpIndexDirectStruct:
+            case EOpIndexDirectInterfaceBlock:
+                markStaticReadIfSymbol(binaryNode->getLeft());
+                return;
+            default:
+                return;
+        }
+    }
+    TIntermSymbol *symbolNode = node->getAsSymbolNode();
+    if (symbolNode)
+    {
+        symbolTable.markStaticRead(symbolNode->variable());
+    }
+}
+
 // Both test and if necessary, spit out an error, to see if the node is really
 // an l-value that can be operated on this way.
 bool TParseContext::checkCanBeLValue(const TSourceLoc &line, const char *op, TIntermTyped *node)
@@ -584,6 +610,7 @@ bool TParseContext::checkCanBeLValue(const TSourceLoc &line, const char *op, TIn
     TIntermSymbol *symNode = node->getAsSymbolNode();
     if (message.empty() && symNode != nullptr)
     {
+        symbolTable.markStaticWrite(symNode->variable());
         return true;
     }
 
@@ -689,6 +716,7 @@ bool TParseContext::checkConstructorArguments(const TSourceLoc &line,
 
     for (TIntermNode *arg : arguments)
     {
+        markStaticReadIfSymbol(arg);
         const TIntermTyped *argTyped = arg->getAsTyped();
         ASSERT(argTyped != nullptr);
         if (type.getBasicType() != EbtStruct && IsOpaqueType(argTyped->getBasicType()))
@@ -1665,15 +1693,20 @@ void TParseContext::functionCallRValueLValueErrorCheck(const TFunction *fnCandid
     {
         TQualifier qual        = fnCandidate->getParam(i)->getType().getQualifier();
         TIntermTyped *argument = (*(fnCall->getSequence()))[i]->getAsTyped();
-        if (!IsImage(argument->getBasicType()) && (IsQualifierUnspecified(qual) || qual == EvqIn ||
-                                                   qual == EvqInOut || qual == EvqConstReadOnly))
+        bool argumentIsRead = (IsQualifierUnspecified(qual) || qual == EvqIn || qual == EvqInOut ||
+                               qual == EvqConstReadOnly);
+        if (argumentIsRead)
         {
-            if (argument->getMemoryQualifier().writeonly)
+            markStaticReadIfSymbol(argument);
+            if (!IsImage(argument->getBasicType()))
             {
-                error(argument->getLine(),
-                      "Writeonly value cannot be passed for 'in' or 'inout' parameters.",
-                      fnCall->functionName());
-                return;
+                if (argument->getMemoryQualifier().writeonly)
+                {
+                    error(argument->getLine(),
+                          "Writeonly value cannot be passed for 'in' or 'inout' parameters.",
+                          fnCall->functionName());
+                    return;
+                }
             }
         }
         if (qual == EvqOut || qual == EvqInOut)
@@ -1794,40 +1827,9 @@ const TVariable *TParseContext::getNamedVariable(const TSourceLoc &location,
         checkCanUseExtension(location, variable->extension());
     }
 
-    // Reject shaders using both gl_FragData and gl_FragColor
-    TQualifier qualifier = variable->getType().getQualifier();
-    if (qualifier == EvqFragData || qualifier == EvqSecondaryFragDataEXT)
-    {
-        mUsesFragData = true;
-    }
-    else if (qualifier == EvqFragColor || qualifier == EvqSecondaryFragColorEXT)
-    {
-        mUsesFragColor = true;
-    }
-    if (qualifier == EvqSecondaryFragDataEXT || qualifier == EvqSecondaryFragColorEXT)
-    {
-        mUsesSecondaryOutputs = true;
-    }
-
-    // This validation is not quite correct - it's only an error to write to
-    // both FragData and FragColor. For simplicity, and because users shouldn't
-    // be rewarded for reading from undefined varaibles, return an error
-    // if they are both referenced, rather than assigned.
-    if (mUsesFragData && mUsesFragColor)
-    {
-        const char *errorMessage = "cannot use both gl_FragData and gl_FragColor";
-        if (mUsesSecondaryOutputs)
-        {
-            errorMessage =
-                "cannot use both output variable sets (gl_FragData, gl_SecondaryFragDataEXT)"
-                " and (gl_FragColor, gl_SecondaryFragColorEXT)";
-        }
-        error(location, errorMessage, name);
-    }
-
     // GLSL ES 3.1 Revision 4, 7.1.3 Compute Shader Special Variables
     if (getShaderType() == GL_COMPUTE_SHADER && !mComputeShaderLocalSizeDeclared &&
-        qualifier == EvqWorkGroupSize)
+        variable->getType().getQualifier() == EvqWorkGroupSize)
     {
         error(location,
               "It is an error to use gl_WorkGroupSize before declaring the local group size",
@@ -1878,8 +1880,8 @@ TIntermTyped *TParseContext::parseVariableIdentifier(const TSourceLoc &location,
     else if ((mGeometryShaderInputPrimitiveType != EptUndefined) &&
              (variableType.getQualifier() == EvqPerVertexIn))
     {
-        ASSERT(mGlInVariableWithArraySize != nullptr);
-        node = new TIntermSymbol(mGlInVariableWithArraySize);
+        ASSERT(symbolTable.getGlInVariableWithArraySize() != nullptr);
+        node = new TIntermSymbol(symbolTable.getGlInVariableWithArraySize());
     }
     else
     {
@@ -1994,6 +1996,7 @@ bool TParseContext::executeInitializer(const TSourceLoc &line,
     }
 
     *initNode = new TIntermBinary(EOpInitialize, intermSymbol, initializer);
+    markStaticReadIfSymbol(initializer);
     (*initNode)->setLine(line);
     return true;
 }
@@ -2036,7 +2039,18 @@ TIntermNode *TParseContext::addLoop(TLoopType type,
     TIntermTyped *typedCond = nullptr;
     if (cond)
     {
+        markStaticReadIfSymbol(cond);
         typedCond = cond->getAsTyped();
+    }
+    if (expr)
+    {
+        markStaticReadIfSymbol(expr);
+    }
+    // In case the loop body was not parsed as a block and contains a statement that simply refers
+    // to a variable, we need to mark it as statically used.
+    if (body)
+    {
+        markStaticReadIfSymbol(body);
     }
     if (cond == nullptr || typedCond)
     {
@@ -2084,6 +2098,16 @@ TIntermNode *TParseContext::addIfElse(TIntermTyped *cond,
                                       const TSourceLoc &loc)
 {
     bool isScalarBool = checkIsScalarBool(loc, cond);
+    // In case the conditional statements were not parsed as blocks and contain a statement that
+    // simply refers to a variable, we need to mark them as statically used.
+    if (code.node1)
+    {
+        markStaticReadIfSymbol(code.node1);
+    }
+    if (code.node2)
+    {
+        markStaticReadIfSymbol(code.node2);
+    }
 
     // For compile time constant conditions, prune the code now.
     if (isScalarBool && cond->getAsConstantUnion())
@@ -2099,6 +2123,7 @@ TIntermNode *TParseContext::addIfElse(TIntermTyped *cond,
     }
 
     TIntermIfElse *node = new TIntermIfElse(cond, EnsureBlock(code.node1), EnsureBlock(code.node2));
+    markStaticReadIfSymbol(cond);
     node->setLine(loc);
 
     return node;
@@ -2346,9 +2371,9 @@ void TParseContext::checkGeometryShaderInputAndSetArraySize(const TSourceLoc &lo
             // input primitive declaration.
             if (mGeometryShaderInputPrimitiveType != EptUndefined)
             {
-                ASSERT(mGlInVariableWithArraySize != nullptr);
+                ASSERT(symbolTable.getGlInVariableWithArraySize() != nullptr);
                 type->sizeOutermostUnsizedArray(
-                    mGlInVariableWithArraySize->getType().getOutermostArraySize());
+                    symbolTable.getGlInVariableWithArraySize()->getType().getOutermostArraySize());
             }
             else
             {
@@ -2818,17 +2843,7 @@ bool TParseContext::checkPrimitiveTypeMatchesTypeQualifier(const TTypeQualifier 
 void TParseContext::setGeometryShaderInputArraySize(unsigned int inputArraySize,
                                                     const TSourceLoc &line)
 {
-    if (mGlInVariableWithArraySize == nullptr)
-    {
-        const TSymbol *glPerVertex = symbolTable.findBuiltIn(ImmutableString("gl_PerVertex"), 310);
-        const TInterfaceBlock *glPerVertexBlock = static_cast<const TInterfaceBlock *>(glPerVertex);
-        TType *glInType = new TType(glPerVertexBlock, EvqPerVertexIn, TLayoutQualifier::Create());
-        glInType->makeArray(inputArraySize);
-        mGlInVariableWithArraySize =
-            new TVariable(&symbolTable, ImmutableString("gl_in"), glInType, SymbolType::BuiltIn,
-                          TExtension::EXT_geometry_shader);
-    }
-    else if (mGlInVariableWithArraySize->getType().getOutermostArraySize() != inputArraySize)
+    if (!symbolTable.setGlInArraySize(inputArraySize))
     {
         error(line,
               "Array size or input primitive declaration doesn't match the size of earlier sized "
@@ -4010,6 +4025,7 @@ TIntermTyped *TParseContext::addIndexExpression(TIntermTyped *baseExpression,
         }
     }
 
+    markStaticReadIfSymbol(indexExpression);
     TIntermBinary *node = new TIntermBinary(EOpIndexIndirect, baseExpression, indexExpression);
     node->setLine(location);
     // Indirect indexing can never be constant folded.
@@ -4793,6 +4809,7 @@ TIntermSwitch *TParseContext::addSwitch(TIntermTyped *init,
         return nullptr;
     }
 
+    markStaticReadIfSymbol(init);
     TIntermSwitch *node = new TIntermSwitch(init, statementList);
     node->setLine(loc);
     return node;
@@ -4842,7 +4859,8 @@ TIntermCase *TParseContext::addDefault(const TSourceLoc &loc)
 
 TIntermTyped *TParseContext::createUnaryMath(TOperator op,
                                              TIntermTyped *child,
-                                             const TSourceLoc &loc)
+                                             const TSourceLoc &loc,
+                                             const TFunction *func)
 {
     ASSERT(child != nullptr);
 
@@ -4889,7 +4907,8 @@ TIntermTyped *TParseContext::createUnaryMath(TOperator op,
         return nullptr;
     }
 
-    TIntermUnary *node = new TIntermUnary(op, child);
+    markStaticReadIfSymbol(child);
+    TIntermUnary *node = new TIntermUnary(op, child, func);
     node->setLine(loc);
 
     return node->fold(mDiagnostics);
@@ -4898,7 +4917,7 @@ TIntermTyped *TParseContext::createUnaryMath(TOperator op,
 TIntermTyped *TParseContext::addUnaryMath(TOperator op, TIntermTyped *child, const TSourceLoc &loc)
 {
     ASSERT(op != EOpNull);
-    TIntermTyped *node = createUnaryMath(op, child, loc);
+    TIntermTyped *node = createUnaryMath(op, child, loc, nullptr);
     if (node == nullptr)
     {
         return child;
@@ -5292,6 +5311,9 @@ TIntermTyped *TParseContext::addBinaryMathInternal(TOperator op,
     }
 
     TIntermBinary *node = new TIntermBinary(op, left, right);
+    ASSERT(op != EOpAssign);
+    markStaticReadIfSymbol(left);
+    markStaticReadIfSymbol(right);
     node->setLine(loc);
     return expressionOrFoldedResult(node);
 }
@@ -5327,41 +5349,39 @@ TIntermTyped *TParseContext::addBinaryMathBooleanResult(TOperator op,
     return node;
 }
 
-TIntermBinary *TParseContext::createAssign(TOperator op,
-                                           TIntermTyped *left,
-                                           TIntermTyped *right,
-                                           const TSourceLoc &loc)
-{
-    if (binaryOpCommonCheck(op, left, right, loc))
-    {
-        if (op == EOpMulAssign)
-        {
-            op = TIntermBinary::GetMulAssignOpBasedOnOperands(left->getType(), right->getType());
-            if (!isMultiplicationTypeCombinationValid(op, left->getType(), right->getType()))
-            {
-                return nullptr;
-            }
-        }
-        TIntermBinary *node = new TIntermBinary(op, left, right);
-        node->setLine(loc);
-
-        return node;
-    }
-    return nullptr;
-}
-
 TIntermTyped *TParseContext::addAssign(TOperator op,
                                        TIntermTyped *left,
                                        TIntermTyped *right,
                                        const TSourceLoc &loc)
 {
     checkCanBeLValue(loc, "assign", left);
-    TIntermTyped *node = createAssign(op, left, right, loc);
+    TIntermBinary *node = nullptr;
+    if (binaryOpCommonCheck(op, left, right, loc))
+    {
+        if (op == EOpMulAssign)
+        {
+            op = TIntermBinary::GetMulAssignOpBasedOnOperands(left->getType(), right->getType());
+            if (isMultiplicationTypeCombinationValid(op, left->getType(), right->getType()))
+            {
+                node = new TIntermBinary(op, left, right);
+            }
+        }
+        else
+        {
+            node = new TIntermBinary(op, left, right);
+        }
+    }
     if (node == nullptr)
     {
         assignError(loc, "assign", left->getCompleteString(), right->getCompleteString());
         return left;
     }
+    if (op != EOpAssign)
+    {
+        markStaticReadIfSymbol(left);
+    }
+    markStaticReadIfSymbol(right);
+    node->setLine(loc);
     return node;
 }
 
@@ -5382,6 +5402,9 @@ TIntermTyped *TParseContext::addComma(TIntermTyped *left,
     }
 
     TIntermBinary *commaNode = TIntermBinary::CreateComma(left, right, mShaderVersion);
+    markStaticReadIfSymbol(left);
+    markStaticReadIfSymbol(right);
+    commaNode->setLine(loc);
 
     return expressionOrFoldedResult(commaNode);
 }
@@ -5427,6 +5450,7 @@ TIntermBranch *TParseContext::addBranch(TOperator op,
 {
     if (expression != nullptr)
     {
+        markStaticReadIfSymbol(expression);
         ASSERT(op == EOpReturn);
         mFunctionReturnsValue = true;
         if (mCurrentFunctionType->getBasicType() == EbtVoid)
@@ -5441,6 +5465,15 @@ TIntermBranch *TParseContext::addBranch(TOperator op,
     TIntermBranch *node = new TIntermBranch(op, expression);
     node->setLine(loc);
     return node;
+}
+
+void TParseContext::appendStatement(TIntermBlock *block, TIntermNode *statement)
+{
+    if (statement != nullptr)
+    {
+        markStaticReadIfSymbol(statement);
+        block->appendStatement(statement);
+    }
 }
 
 void TParseContext::checkTextureGather(TIntermAggregate *functionCall)
@@ -5747,7 +5780,7 @@ TIntermTyped *TParseContext::addMethod(TFunctionLookup *fnCall, const TSourceLoc
     }
     else
     {
-        TIntermUnary *node = new TIntermUnary(EOpArrayLength, thisNode);
+        TIntermUnary *node = new TIntermUnary(EOpArrayLength, thisNode, nullptr);
         node->setLine(loc);
         return node->fold(mDiagnostics);
     }
@@ -5805,7 +5838,8 @@ TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCa
                 {
                     // Treat it like a built-in unary operator.
                     TIntermNode *unaryParamNode = fnCall->arguments().front();
-                    TIntermTyped *callNode = createUnaryMath(op, unaryParamNode->getAsTyped(), loc);
+                    TIntermTyped *callNode =
+                        createUnaryMath(op, unaryParamNode->getAsTyped(), loc, fnCandidate);
                     ASSERT(callNode != nullptr);
                     return callNode;
                 }
@@ -5902,6 +5936,9 @@ TIntermTyped *TParseContext::addTernarySelection(TIntermTyped *cond,
     }
 
     TIntermTernary *node = new TIntermTernary(cond, trueExpression, falseExpression);
+    markStaticReadIfSymbol(cond);
+    markStaticReadIfSymbol(trueExpression);
+    markStaticReadIfSymbol(falseExpression);
     node->setLine(loc);
     return expressionOrFoldedResult(node);
 }

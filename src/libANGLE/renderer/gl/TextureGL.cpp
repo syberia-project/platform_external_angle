@@ -141,8 +141,7 @@ TextureGL::~TextureGL()
 }
 
 gl::Error TextureGL::setImage(const gl::Context *context,
-                              gl::TextureTarget target,
-                              size_t level,
+                              const gl::ImageIndex &index,
                               GLenum internalFormat,
                               const gl::Extents &size,
                               GLenum format,
@@ -152,6 +151,9 @@ gl::Error TextureGL::setImage(const gl::Context *context,
 {
     const gl::Buffer *unpackBuffer =
         context->getGLState().getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
+    gl::TextureTarget target = index.target;
+    size_t level             = static_cast<size_t>(index.mipIndex);
 
     if (mWorkarounds.unpackOverlappingRowsSeparatelyUnpackBuffer && unpackBuffer &&
         unpack.rowLength != 0 && unpack.rowLength < size.width)
@@ -248,21 +250,23 @@ void TextureGL::reserveTexImageToBeFilled(gl::TextureTarget target,
 }
 
 gl::Error TextureGL::setSubImage(const gl::Context *context,
-                                 gl::TextureTarget target,
-                                 size_t level,
+                                 const gl::ImageIndex &index,
                                  const gl::Box &area,
                                  GLenum format,
                                  GLenum type,
                                  const gl::PixelUnpackState &unpack,
                                  const uint8_t *pixels)
 {
-    ASSERT(TextureTargetToType(target) == getType());
+    ASSERT(TextureTargetToType(index.target) == getType());
 
     const gl::Buffer *unpackBuffer =
         context->getGLState().getTargetBuffer(gl::BufferBinding::PixelUnpack);
 
     nativegl::TexSubImageFormat texSubImageFormat =
         nativegl::GetTexSubImageFormat(mFunctions, mWorkarounds, format, type);
+
+    gl::TextureTarget target = index.target;
+    size_t level             = static_cast<size_t>(index.mipIndex);
 
     ASSERT(getLevelInfo(target, level).lumaWorkaround.enabled ==
            GetLevelInfo(format, texSubImageFormat.format).lumaWorkaround.enabled);
@@ -455,14 +459,15 @@ gl::Error TextureGL::setSubImagePaddingWorkaround(const gl::Context *context,
 }
 
 gl::Error TextureGL::setCompressedImage(const gl::Context *context,
-                                        gl::TextureTarget target,
-                                        size_t level,
+                                        const gl::ImageIndex &index,
                                         GLenum internalFormat,
                                         const gl::Extents &size,
                                         const gl::PixelUnpackState &unpack,
                                         size_t imageSize,
                                         const uint8_t *pixels)
 {
+    gl::TextureTarget target = index.target;
+    size_t level             = static_cast<size_t>(index.mipIndex);
     ASSERT(TextureTargetToType(target) == getType());
 
     nativegl::CompressedTexImageFormat compressedTexImageFormat =
@@ -495,14 +500,15 @@ gl::Error TextureGL::setCompressedImage(const gl::Context *context,
 }
 
 gl::Error TextureGL::setCompressedSubImage(const gl::Context *context,
-                                           gl::TextureTarget target,
-                                           size_t level,
+                                           const gl::ImageIndex &index,
                                            const gl::Box &area,
                                            GLenum format,
                                            const gl::PixelUnpackState &unpack,
                                            size_t imageSize,
                                            const uint8_t *pixels)
 {
+    gl::TextureTarget target = index.target;
+    size_t level             = static_cast<size_t>(index.mipIndex);
     ASSERT(TextureTargetToType(target) == getType());
 
     nativegl::CompressedTexSubImageFormat compressedTexSubImageFormat =
@@ -535,12 +541,13 @@ gl::Error TextureGL::setCompressedSubImage(const gl::Context *context,
 }
 
 gl::Error TextureGL::copyImage(const gl::Context *context,
-                               gl::TextureTarget target,
-                               size_t level,
+                               const gl::ImageIndex &index,
                                const gl::Rectangle &origSourceArea,
                                GLenum internalFormat,
                                gl::Framebuffer *source)
 {
+    gl::TextureTarget target = index.target;
+    size_t level             = static_cast<size_t>(index.mipIndex);
     GLenum type = GL_NONE;
     ANGLE_TRY(source->getImplementationColorReadType(context, &type));
     nativegl::CopyTexImageImageFormat copyTexImageFormat =
@@ -636,12 +643,13 @@ gl::Error TextureGL::copyImage(const gl::Context *context,
 }
 
 gl::Error TextureGL::copySubImage(const gl::Context *context,
-                                  gl::TextureTarget target,
-                                  size_t level,
+                                  const gl::ImageIndex &index,
                                   const gl::Offset &origDestOffset,
                                   const gl::Rectangle &origSourceArea,
                                   gl::Framebuffer *source)
 {
+    gl::TextureTarget target                 = index.target;
+    size_t level                             = static_cast<size_t>(index.mipIndex);
     const FramebufferGL *sourceFramebufferGL = GetImplAs<FramebufferGL>(source);
 
     // Clip source area to framebuffer.
@@ -695,8 +703,7 @@ gl::Error TextureGL::copySubImage(const gl::Context *context,
 }
 
 gl::Error TextureGL::copyTexture(const gl::Context *context,
-                                 gl::TextureTarget target,
-                                 size_t level,
+                                 const gl::ImageIndex &index,
                                  GLenum internalFormat,
                                  GLenum type,
                                  size_t sourceLevel,
@@ -705,6 +712,8 @@ gl::Error TextureGL::copyTexture(const gl::Context *context,
                                  bool unpackUnmultiplyAlpha,
                                  const gl::Texture *source)
 {
+    gl::TextureTarget target             = index.target;
+    size_t level                         = static_cast<size_t>(index.mipIndex);
     const TextureGL *sourceGL            = GetImplAs<TextureGL>(source);
     const gl::ImageDesc &sourceImageDesc =
         sourceGL->mState.getImageDesc(NonCubeTextureTypeToTarget(source->getType()), sourceLevel);
@@ -719,8 +728,7 @@ gl::Error TextureGL::copyTexture(const gl::Context *context,
 }
 
 gl::Error TextureGL::copySubTexture(const gl::Context *context,
-                                    gl::TextureTarget target,
-                                    size_t level,
+                                    const gl::ImageIndex &index,
                                     const gl::Offset &destOffset,
                                     size_t sourceLevel,
                                     const gl::Rectangle &sourceArea,
@@ -729,6 +737,8 @@ gl::Error TextureGL::copySubTexture(const gl::Context *context,
                                     bool unpackUnmultiplyAlpha,
                                     const gl::Texture *source)
 {
+    gl::TextureTarget target                 = index.target;
+    size_t level                             = static_cast<size_t>(index.mipIndex);
     const gl::InternalFormat &destFormatInfo = *mState.getImageDesc(target, level).format.info;
     return copySubTextureHelper(context, target, level, destOffset, sourceLevel, sourceArea,
                                 destFormatInfo.format, destFormatInfo.type, unpackFlipY,
@@ -771,8 +781,14 @@ gl::Error TextureGL::copySubTextureHelper(const gl::Context *context,
         sourceFormatContainSupersetOfDestFormat && sourceComponentType == destComponentType &&
         !destSRGB)
     {
-        return mBlitter->copyTexSubImage(sourceGL, sourceLevel, this, target, level, sourceArea,
-                                         destOffset);
+        bool copySucceded = false;
+        ANGLE_TRY_RESULT(mBlitter->copyTexSubImage(sourceGL, sourceLevel, this, target, level,
+                                                   sourceArea, destOffset),
+                         copySucceded);
+        if (copySucceded)
+        {
+            return gl::NoError();
+        }
     }
 
     // Check if the destination is renderable and copy on the GPU
@@ -780,11 +796,17 @@ gl::Error TextureGL::copySubTextureHelper(const gl::Context *context,
     if (!destSRGB && nativegl::SupportsNativeRendering(mFunctions, getType(),
                                                        destLevelInfo.nativeInternalFormat))
     {
-        return mBlitter->copySubTexture(context, sourceGL, sourceLevel, sourceComponentType, this,
-                                        target, level, destComponentType, sourceImageDesc.size,
-                                        sourceArea, destOffset, needsLumaWorkaround,
-                                        sourceLevelInfo.sourceFormat, unpackFlipY,
-                                        unpackPremultiplyAlpha, unpackUnmultiplyAlpha);
+        bool copySucceded = false;
+        ANGLE_TRY_RESULT(mBlitter->copySubTexture(
+                             context, sourceGL, sourceLevel, sourceComponentType, this, target,
+                             level, destComponentType, sourceImageDesc.size, sourceArea, destOffset,
+                             needsLumaWorkaround, sourceLevelInfo.sourceFormat, unpackFlipY,
+                             unpackPremultiplyAlpha, unpackUnmultiplyAlpha),
+                         copySucceded);
+        if (copySucceded)
+        {
+            return gl::NoError();
+        }
     }
 
     // Fall back to CPU-readback

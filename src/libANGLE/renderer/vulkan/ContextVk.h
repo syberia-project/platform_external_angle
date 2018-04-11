@@ -13,9 +13,7 @@
 #include <vulkan/vulkan.h>
 
 #include "libANGLE/renderer/ContextImpl.h"
-#include "libANGLE/renderer/vulkan/DynamicDescriptorPool.h"
-#include "libANGLE/renderer/vulkan/StreamingBuffer.h"
-#include "libANGLE/renderer/vulkan/vk_cache_utils.h"
+#include "libANGLE/renderer/vulkan/vk_helpers.h"
 
 namespace rx
 {
@@ -155,9 +153,8 @@ class ContextVk : public ContextImpl
     RendererVk *getRenderer() { return mRenderer; }
 
     void invalidateCurrentPipeline();
-    void onVertexArrayChange();
 
-    DynamicDescriptorPool *getDynamicDescriptorPool();
+    vk::DynamicDescriptorPool *getDynamicDescriptorPool();
 
     const VkClearValue &getClearColorValue() const;
     const VkClearValue &getClearDepthStencilValue() const;
@@ -166,12 +163,11 @@ class ContextVk : public ContextImpl
   private:
     gl::Error initPipeline(const gl::Context *context);
     gl::Error setupDraw(const gl::Context *context,
-                        GLenum mode,
-                        DrawType drawType,
-                        size_t firstVertex,
-                        size_t lastVertex,
-                        ResourceVk *elementArrayBufferOverride,
-                        vk::CommandBuffer **commandBuffer);
+                        const gl::DrawCallParams &drawCallParams,
+                        vk::CommandGraphNode **drawNodeOut,
+                        bool *newCommandBufferOut);
+
+    void updateScissor(const gl::State &glState);
 
     RendererVk *mRenderer;
     vk::PipelineAndSerial *mCurrentPipeline;
@@ -183,22 +179,16 @@ class ContextVk : public ContextImpl
 
     // The dynamic descriptor pool is externally sychronized, so cannot be accessed from different
     // threads simultaneously. Hence, we keep it in the ContextVk instead of the RendererVk.
-    DynamicDescriptorPool mDynamicDescriptorPool;
+    vk::DynamicDescriptorPool mDynamicDescriptorPool;
 
     // Triggers adding dependencies to the command graph.
-    bool mVertexArrayDirty;
     bool mTexturesDirty;
+    bool mVertexArrayBindingHasChanged;
 
     // Cached clear value for color and depth/stencil.
     VkClearValue mClearColorValue;
     VkClearValue mClearDepthStencilValue;
-
-    StreamingBuffer mStreamingVertexData;
-    StreamingBuffer mStreamingIndexData;
-
-    vk::LineLoopHandler mLineLoopHandler;
 };
-
 }  // namespace rx
 
 #endif  // LIBANGLE_RENDERER_VULKAN_CONTEXTVK_H_

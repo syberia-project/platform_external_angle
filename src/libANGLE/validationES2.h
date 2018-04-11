@@ -103,6 +103,11 @@ bool ValidateGetObjectPtrLabelKHR(Context *context,
                                   GLsizei *length,
                                   GLchar *label);
 bool ValidateGetPointervKHR(Context *context, GLenum pname, void **params);
+bool ValidateGetPointervRobustANGLERobustANGLE(Context *context,
+                                               GLenum pname,
+                                               GLsizei bufSize,
+                                               GLsizei *length,
+                                               void **params);
 bool ValidateBlitFramebufferANGLE(Context *context,
                                   GLint srcX0,
                                   GLint srcY0,
@@ -247,6 +252,8 @@ bool ValidateGetPathParameterivCHROMIUM(Context *context, GLuint path, GLenum pn
 bool ValidatePathStencilFuncCHROMIUM(Context *context, GLenum func, GLint ref, GLuint mask);
 bool ValidateStencilFillPathCHROMIUM(Context *context, GLuint path, GLenum fillMode, GLuint mask);
 bool ValidateStencilStrokePathCHROMIUM(Context *context, GLuint path, GLint reference, GLuint mask);
+bool ValidateCoverFillPathCHROMIUM(Context *context, GLuint path, GLenum coverMode);
+bool ValidateCoverStrokePathCHROMIUM(Context *context, GLuint path, GLenum coverMode);
 bool ValidateCoverPathCHROMIUM(Context *context, GLuint path, GLenum coverMode);
 bool ValidateStencilThenCoverFillPathCHROMIUM(Context *context,
                                               GLuint path,
@@ -258,7 +265,7 @@ bool ValidateStencilThenCoverStrokePathCHROMIUM(Context *context,
                                                 GLint reference,
                                                 GLuint mask,
                                                 GLenum coverMode);
-bool ValidateIsPathCHROMIUM(Context *context);
+bool ValidateIsPathCHROMIUM(Context *context, GLuint path);
 bool ValidateCoverFillPathInstancedCHROMIUM(Context *context,
                                             GLsizei numPaths,
                                             GLenum pathNameType,

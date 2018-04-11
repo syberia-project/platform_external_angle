@@ -11,6 +11,7 @@
 #include "common/debug.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/ErrorStrings.h"
+#include "libANGLE/validationES.h"
 
 #define ANGLE_VALIDATE_IS_GLES1(context)                              \
     if (context->getClientMajorVersion() > 1)                         \
@@ -72,8 +73,8 @@ bool ValidateClearDepthx(Context *context, GLfixed depth)
 
 bool ValidateClientActiveTexture(Context *context, GLenum texture)
 {
-    UNIMPLEMENTED();
-    return true;
+    ANGLE_VALIDATE_IS_GLES1(context);
+    return ValidateMultitextureUnit(context, texture);
 }
 
 bool ValidateClipPlanef(Context *context, GLenum p, const GLfloat *eqn)
@@ -90,19 +91,19 @@ bool ValidateClipPlanex(Context *context, GLenum plane, const GLfixed *equation)
 
 bool ValidateColor4f(Context *context, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateColor4ub(Context *context, GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateColor4x(Context *context, GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
@@ -322,19 +323,19 @@ bool ValidateLineWidthx(Context *context, GLfixed width)
 
 bool ValidateLoadIdentity(Context *context)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateLoadMatrixf(Context *context, const GLfloat *m)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateLoadMatrixx(Context *context, const GLfixed *m)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
@@ -368,21 +369,30 @@ bool ValidateMaterialxv(Context *context, GLenum face, GLenum pname, const GLfix
     return true;
 }
 
-bool ValidateMatrixMode(Context *context, GLenum mode)
+bool ValidateMatrixMode(Context *context, MatrixType mode)
 {
-    UNIMPLEMENTED();
-    return true;
+    ANGLE_VALIDATE_IS_GLES1(context);
+    switch (mode)
+    {
+        case MatrixType::Projection:
+        case MatrixType::Modelview:
+        case MatrixType::Texture:
+            return true;
+        default:
+            ANGLE_VALIDATION_ERR(context, InvalidEnum(), InvalidMatrixMode);
+            return false;
+    }
 }
 
 bool ValidateMultMatrixf(Context *context, const GLfloat *m)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateMultMatrixx(Context *context, const GLfixed *m)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
@@ -393,30 +403,30 @@ bool ValidateMultiTexCoord4f(Context *context,
                              GLfloat r,
                              GLfloat q)
 {
-    UNIMPLEMENTED();
-    return true;
+    ANGLE_VALIDATE_IS_GLES1(context);
+    return ValidateMultitextureUnit(context, target);
 }
 
 bool ValidateMultiTexCoord4x(Context *context,
-                             GLenum texture,
+                             GLenum target,
                              GLfixed s,
                              GLfixed t,
                              GLfixed r,
                              GLfixed q)
 {
-    UNIMPLEMENTED();
-    return true;
+    ANGLE_VALIDATE_IS_GLES1(context);
+    return ValidateMultitextureUnit(context, target);
 }
 
 bool ValidateNormal3f(Context *context, GLfloat nx, GLfloat ny, GLfloat nz)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
 bool ValidateNormal3x(Context *context, GLfixed nx, GLfixed ny, GLfixed nz)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
     return true;
 }
 
@@ -494,13 +504,25 @@ bool ValidatePolygonOffsetx(Context *context, GLfixed factor, GLfixed units)
 
 bool ValidatePopMatrix(Context *context)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
+    const auto &stack = context->getGLState().gles1().currentMatrixStack();
+    if (stack.size() == 1)
+    {
+        ANGLE_VALIDATION_ERR(context, StackUnderflow(), MatrixStackUnderflow);
+        return false;
+    }
     return true;
 }
 
 bool ValidatePushMatrix(Context *context)
 {
-    UNIMPLEMENTED();
+    ANGLE_VALIDATE_IS_GLES1(context);
+    const auto &stack = context->getGLState().gles1().currentMatrixStack();
+    if (stack.size() == stack.max_size())
+    {
+        ANGLE_VALIDATION_ERR(context, StackOverflow(), MatrixStackOverflow);
+        return false;
+    }
     return true;
 }
 

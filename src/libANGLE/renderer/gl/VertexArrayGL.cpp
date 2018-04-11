@@ -701,10 +701,10 @@ void VertexArrayGL::syncDirtyBinding(const gl::Context *context,
     }
 }
 
-void VertexArrayGL::syncState(const gl::Context *context,
-                              const VertexArray::DirtyBits &dirtyBits,
-                              const gl::VertexArray::DirtyAttribBitsArray &attribBits,
-                              const gl::VertexArray::DirtyBindingBitsArray &bindingBits)
+gl::Error VertexArrayGL::syncState(const gl::Context *context,
+                                   const VertexArray::DirtyBits &dirtyBits,
+                                   const gl::VertexArray::DirtyAttribBitsArray &attribBits,
+                                   const gl::VertexArray::DirtyBindingBitsArray &bindingBits)
 {
     mStateManager->bindVertexArray(mVertexArrayID, getAppliedElementArrayBufferID());
 
@@ -716,6 +716,9 @@ void VertexArrayGL::syncState(const gl::Context *context,
                 updateElementArrayBufferBinding(context);
                 break;
 
+            case VertexArray::DIRTY_BIT_ELEMENT_ARRAY_BUFFER_DATA:
+                break;
+
             default:
             {
                 ASSERT(dirtyBit >= VertexArray::DIRTY_BIT_ATTRIB_0);
@@ -724,16 +727,22 @@ void VertexArrayGL::syncState(const gl::Context *context,
                 {
                     syncDirtyAttrib(context, index, attribBits[index]);
                 }
+                else if (dirtyBit < VertexArray::DIRTY_BIT_BINDING_MAX)
+                {
+                    ASSERT(dirtyBit >= VertexArray::DIRTY_BIT_BINDING_0);
+                    syncDirtyBinding(context, index, bindingBits[index]);
+                }
                 else
                 {
-                    ASSERT(dirtyBit >= VertexArray::DIRTY_BIT_BINDING_0 &&
-                           dirtyBit < VertexArray::DIRTY_BIT_BINDING_MAX);
-                    syncDirtyBinding(context, index, bindingBits[index]);
+                    ASSERT(dirtyBit >= VertexArray::DIRTY_BIT_BUFFER_DATA_0 &&
+                           dirtyBit < VertexArray::DIRTY_BIT_BUFFER_DATA_MAX);
                 }
                 break;
             }
         }
     }
+
+    return gl::NoError();
 }
 
 void VertexArrayGL::applyNumViewsToDivisor(int numViews)
@@ -749,4 +758,4 @@ void VertexArrayGL::applyNumViewsToDivisor(int numViews)
     }
 }
 
-}  // rx
+}  // namespace rx

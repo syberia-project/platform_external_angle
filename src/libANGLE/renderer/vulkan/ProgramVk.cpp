@@ -13,10 +13,8 @@
 #include "common/utilities.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/renderer/vulkan/ContextVk.h"
-#include "libANGLE/renderer/vulkan/DynamicDescriptorPool.h"
 #include "libANGLE/renderer/vulkan/GlslangWrapper.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
-#include "libANGLE/renderer/vulkan/StreamingBuffer.h"
 #include "libANGLE/renderer/vulkan/TextureVk.h"
 
 namespace rx
@@ -25,7 +23,7 @@ namespace rx
 namespace
 {
 
-constexpr size_t kUniformBlockStreamingBufferMinSize = 256 * 128;
+constexpr size_t kUniformBlockDynamicBufferMinSize = 256 * 128;
 
 gl::Error InitDefaultUniformBlock(const gl::Context *context,
                                   gl::Shader *shader,
@@ -58,45 +56,64 @@ gl::Error InitDefaultUniformBlock(const gl::Context *context,
 
 template <typename T>
 void UpdateDefaultUniformBlock(GLsizei count,
+                               uint32_t arrayIndex,
                                int componentCount,
                                const T *v,
                                const sh::BlockMemberInfo &layoutInfo,
                                angle::MemoryBuffer *uniformData)
 {
-    int elementSize = sizeof(T) * componentCount;
+    const int elementSize = sizeof(T) * componentCount;
+
+    uint8_t *dst = uniformData->data() + layoutInfo.offset;
     if (layoutInfo.arrayStride == 0 || layoutInfo.arrayStride == elementSize)
     {
-        uint8_t *writePtr = uniformData->data() + layoutInfo.offset;
+        uint32_t arrayOffset = arrayIndex * layoutInfo.arrayStride;
+        uint8_t *writePtr    = dst + arrayOffset;
         memcpy(writePtr, v, elementSize * count);
     }
     else
     {
-        UNIMPLEMENTED();
+        // Have to respect the arrayStride between each element of the array.
+        int maxIndex = arrayIndex + count;
+        for (int writeIndex = arrayIndex, readIndex = 0; writeIndex < maxIndex;
+             writeIndex++, readIndex++)
+        {
+            const int arrayOffset = writeIndex * layoutInfo.arrayStride;
+            uint8_t *writePtr     = dst + arrayOffset;
+            const T *readPtr      = v + readIndex;
+            memcpy(writePtr, readPtr, elementSize);
+        }
     }
 }
 
 template <typename T>
 void ReadFromDefaultUniformBlock(int componentCount,
+                                 uint32_t arrayIndex,
                                  T *dst,
                                  const sh::BlockMemberInfo &layoutInfo,
                                  const angle::MemoryBuffer *uniformData)
 {
     ASSERT(layoutInfo.offset != -1);
 
-    int elementSize = sizeof(T) * componentCount;
+    const int elementSize = sizeof(T) * componentCount;
+    const uint8_t *source = uniformData->data() + layoutInfo.offset;
+
     if (layoutInfo.arrayStride == 0 || layoutInfo.arrayStride == elementSize)
     {
-        const uint8_t *readPtr = uniformData->data() + layoutInfo.offset;
+        const uint8_t *readPtr = source + arrayIndex * layoutInfo.arrayStride;
         memcpy(dst, readPtr, elementSize);
     }
     else
     {
-        UNIMPLEMENTED();
+        // Have to respect the arrayStride between each element of the array.
+        const int arrayOffset  = arrayIndex * layoutInfo.arrayStride;
+        const uint8_t *readPtr = source + arrayOffset;
+        memcpy(dst, readPtr, elementSize);
     }
 }
 
-vk::Error SyncDefaultUniformBlock(ContextVk *contextVk,
-                                  StreamingBuffer &streamingBuffer,
+vk::Error SyncDefaultUniformBlock(RendererVk *renderer,
+                                  vk::DynamicBuffer *dynamicBuffer,
                                   const angle::MemoryBuffer &bufferData,
                                   uint32_t *outOffset,
                                   bool *outBufferModified)
@@ -105,11 +122,11 @@ vk::Error SyncDefaultUniformBlock(ContextVk *contextVk,
     uint8_t *data       = nullptr;
     VkBuffer *outBuffer = nullptr;
     uint32_t offset;
-    ANGLE_TRY(streamingBuffer.allocate(contextVk, bufferData.size(), &data, outBuffer, &offset,
-                                       outBufferModified));
+    ANGLE_TRY(dynamicBuffer->allocate(renderer, bufferData.size(), &data, outBuffer, &offset,
+                                      outBufferModified));
     *outOffset = offset;
     memcpy(data, bufferData.data(), bufferData.size());
-    ANGLE_TRY(streamingBuffer.flush(contextVk));
+    ANGLE_TRY(dynamicBuffer->flush(renderer->getDevice()));
     return vk::NoError();
 }
 
@@ -140,7 +157,7 @@ gl::Shader *GetShader(const gl::ProgramState &programState, uint32_t shaderIndex
 
 ProgramVk::DefaultUniformBlock::DefaultUniformBlock()
     : storage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-              kUniformBlockStreamingBufferMinSize),
+              kUniformBlockDynamicBufferMinSize),
       uniformData(),
       uniformsDirty(false),
       uniformLayout()
@@ -314,7 +331,8 @@ gl::Error ProgramVk::initDefaultUniformBlocks(const gl::Context *glContext)
             std::string uniformName = uniform.name;
             if (uniform.isArray())
             {
-                uniformName += ArrayString(location.arrayIndex);
+                // Gets the uniform name without the [0] at the end.
+                uniformName = gl::ParseResourceName(uniformName, nullptr);
             }
 
             bool found = false;
@@ -417,7 +435,7 @@ void ProgramVk::setUniformImpl(GLint location, GLsizei count, const T *v, GLenum
         return;
     }
 
-    if (linkedUniform.type == entryPointType)
+    if (linkedUniform.typeInfo->type == entryPointType)
     {
         for (auto &uniformBlock : mDefaultUniformBlocks)
         {
@@ -429,16 +447,44 @@ void ProgramVk::setUniformImpl(GLint location, GLsizei count, const T *v, GLenum
                 continue;
             }
 
-            UpdateDefaultUniformBlock(count, linkedUniform.typeInfo->componentCount, v, layoutInfo,
+            const GLint componentCount = linkedUniform.typeInfo->componentCount;
+            UpdateDefaultUniformBlock(count, locationInfo.arrayIndex, componentCount, v, layoutInfo,
                                       &uniformBlock.uniformData);
-
             uniformBlock.uniformsDirty = true;
         }
     }
     else
     {
-        ASSERT(linkedUniform.type == gl::VariableBoolVectorType(entryPointType));
-        UNIMPLEMENTED();
+        for (auto &uniformBlock : mDefaultUniformBlocks)
+        {
+            const sh::BlockMemberInfo &layoutInfo = uniformBlock.uniformLayout[location];
+
+            // Assume an offset of -1 means the block is unused.
+            if (layoutInfo.offset == -1)
+            {
+                continue;
+            }
+
+            const GLint componentCount = linkedUniform.typeInfo->componentCount;
+
+            ASSERT(linkedUniform.typeInfo->type == gl::VariableBoolVectorType(entryPointType));
+
+            GLint initialArrayOffset =
+                locationInfo.arrayIndex * layoutInfo.arrayStride + layoutInfo.offset;
+            for (GLint i = 0; i < count; i++)
+            {
+                GLint elementOffset = i * layoutInfo.arrayStride + initialArrayOffset;
+                GLint *dest =
+                    reinterpret_cast<GLint *>(uniformBlock.uniformData.data() + elementOffset);
+                const T *source = v + i * componentCount;
+
+                for (int c = 0; c < componentCount; c++)
+                {
+                    dest[c] = (source[c] == static_cast<T>(0)) ? GL_FALSE : GL_TRUE;
+                }
+            }
+            uniformBlock.uniformsDirty = true;
+        }
     }
 }
 
@@ -454,15 +500,17 @@ void ProgramVk::getUniformImpl(GLint location, T *v, GLenum entryPointType) cons
         return;
     }
 
-    ASSERT(linkedUniform.typeInfo->componentType == entryPointType);
     const gl::ShaderType shaderType = linkedUniform.getFirstShaderTypeWhereActive();
     ASSERT(shaderType != gl::ShaderType::InvalidEnum);
 
     const DefaultUniformBlock &uniformBlock =
         mDefaultUniformBlocks[static_cast<GLuint>(shaderType)];
     const sh::BlockMemberInfo &layoutInfo   = uniformBlock.uniformLayout[location];
-    ReadFromDefaultUniformBlock(linkedUniform.typeInfo->componentCount, v, layoutInfo,
-                                &uniformBlock.uniformData);
+
+    ASSERT(linkedUniform.typeInfo->componentType == entryPointType ||
+           linkedUniform.typeInfo->componentType == gl::VariableBoolVectorType(entryPointType));
+    ReadFromDefaultUniformBlock(linkedUniform.typeInfo->componentCount, locationInfo.arrayIndex, v,
+                                layoutInfo, &uniformBlock.uniformData);
 }
 
 void ProgramVk::setUniform1fv(GLint location, GLsizei count, const GLfloat *v)
@@ -492,17 +540,17 @@ void ProgramVk::setUniform1iv(GLint location, GLsizei count, const GLint *v)
 
 void ProgramVk::setUniform2iv(GLint location, GLsizei count, const GLint *v)
 {
-    UNIMPLEMENTED();
+    setUniformImpl(location, count, v, GL_INT_VEC2);
 }
 
 void ProgramVk::setUniform3iv(GLint location, GLsizei count, const GLint *v)
 {
-    UNIMPLEMENTED();
+    setUniformImpl(location, count, v, GL_INT_VEC3);
 }
 
 void ProgramVk::setUniform4iv(GLint location, GLsizei count, const GLint *v)
 {
-    UNIMPLEMENTED();
+    setUniformImpl(location, count, v, GL_INT_VEC4);
 }
 
 void ProgramVk::setUniform1uiv(GLint location, GLsizei count, const GLuint *v)
@@ -654,7 +702,7 @@ vk::Error ProgramVk::allocateDescriptorSet(ContextVk *contextVk, uint32_t descri
     RendererVk *renderer = contextVk->getRenderer();
 
     // Write out to a new a descriptor set.
-    DynamicDescriptorPool *dynamicDescriptorPool = contextVk->getDynamicDescriptorPool();
+    vk::DynamicDescriptorPool *dynamicDescriptorPool = contextVk->getDynamicDescriptorPool();
     const auto &descriptorSetLayouts = renderer->getGraphicsDescriptorSetLayouts();
 
     uint32_t potentialNewCount = descriptorSetIndex + 1;
@@ -706,7 +754,7 @@ vk::Error ProgramVk::updateUniforms(ContextVk *contextVk)
         if (uniformBlock.uniformsDirty)
         {
             bool bufferModified = false;
-            ANGLE_TRY(SyncDefaultUniformBlock(contextVk, uniformBlock.storage,
+            ANGLE_TRY(SyncDefaultUniformBlock(contextVk->getRenderer(), &uniformBlock.storage,
                                               uniformBlock.uniformData,
                                               &mUniformBlocksOffsets[index], &bufferModified));
             uniformBlock.uniformsDirty = false;
@@ -722,7 +770,7 @@ vk::Error ProgramVk::updateUniforms(ContextVk *contextVk)
     {
         // We need to reinitialize the descriptor sets if we newly allocated buffers since we can't
         // modify the descriptor sets once initialized.
-        ANGLE_TRY(allocateDescriptorSet(contextVk, UniformBufferIndex));
+        ANGLE_TRY(allocateDescriptorSet(contextVk, vk::UniformBufferIndex));
         ANGLE_TRY(updateDefaultUniformsDescriptorSet(contextVk));
     }
 
@@ -808,7 +856,7 @@ vk::Error ProgramVk::updateTexturesDescriptorSet(ContextVk *contextVk)
         return vk::NoError();
     }
 
-    ANGLE_TRY(allocateDescriptorSet(contextVk, TextureIndex));
+    ANGLE_TRY(allocateDescriptorSet(contextVk, vk::TextureIndex));
 
     ASSERT(mUsedDescriptorSetRange.contains(1));
     VkDescriptorSet descriptorSet = mDescriptorSets[1];
@@ -821,7 +869,7 @@ vk::Error ProgramVk::updateTexturesDescriptorSet(ContextVk *contextVk)
     const gl::State &glState     = contextVk->getGLState();
     const auto &completeTextures = glState.getCompleteTextureCache();
 
-    for (const auto &samplerBinding : mState.getSamplerBindings())
+    for (const gl::SamplerBinding &samplerBinding : mState.getSamplerBindings())
     {
         ASSERT(!samplerBinding.unreferenced);
 
@@ -835,7 +883,7 @@ vk::Error ProgramVk::updateTexturesDescriptorSet(ContextVk *contextVk)
         ASSERT(texture);
 
         TextureVk *textureVk   = vk::GetImpl(texture);
-        const vk::Image &image = textureVk->getImage();
+        const vk::ImageHelper &image = textureVk->getImage();
 
         VkDescriptorImageInfo &imageInfo = descriptorImageInfo[imageCount];
 
@@ -877,7 +925,7 @@ void ProgramVk::setDefaultUniformBlocksMinSizeForTesting(size_t minSize)
 {
     for (DefaultUniformBlock &block : mDefaultUniformBlocks)
     {
-        block.storage.setMinimumSize(minSize);
+        block.storage.setMinimumSizeForTesting(minSize);
     }
 }
 }  // namespace rx

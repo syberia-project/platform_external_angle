@@ -15,6 +15,8 @@ namespace sh
 namespace
 {
 
+const int kMaxAllowedTraversalDepth = 256;
+
 class ValidateSwitch : public TIntermTraverser
 {
   public:
@@ -26,7 +28,7 @@ class ValidateSwitch : public TIntermTraverser
     void visitSymbol(TIntermSymbol *) override;
     void visitConstantUnion(TIntermConstantUnion *) override;
     bool visitDeclaration(Visit, TIntermDeclaration *) override;
-    bool visitBlock(Visit, TIntermBlock *) override;
+    bool visitBlock(Visit visit, TIntermBlock *) override;
     bool visitBinary(Visit, TIntermBinary *) override;
     bool visitUnary(Visit, TIntermUnary *) override;
     bool visitTernary(Visit, TIntermTernary *) override;
@@ -69,7 +71,7 @@ bool ValidateSwitch::validate(TBasicType switchType,
 }
 
 ValidateSwitch::ValidateSwitch(TBasicType switchType, TDiagnostics *diagnostics)
-    : TIntermTraverser(true, false, true),
+    : TIntermTraverser(true, false, true, nullptr),
       mSwitchType(switchType),
       mDiagnostics(diagnostics),
       mCaseTypeMismatch(false),
@@ -81,6 +83,7 @@ ValidateSwitch::ValidateSwitch(TBasicType switchType, TDiagnostics *diagnostics)
       mDefaultCount(0),
       mDuplicateCases(false)
 {
+    setMaxAllowedDepth(kMaxAllowedTraversalDepth);
 }
 
 void ValidateSwitch::visitSymbol(TIntermSymbol *)
@@ -107,13 +110,17 @@ bool ValidateSwitch::visitDeclaration(Visit, TIntermDeclaration *)
     return true;
 }
 
-bool ValidateSwitch::visitBlock(Visit, TIntermBlock *)
+bool ValidateSwitch::visitBlock(Visit visit, TIntermBlock *)
 {
     if (getParentNode() != nullptr)
     {
         if (!mFirstCaseFound)
             mStatementBeforeCase = true;
         mLastStatementWasCase    = false;
+        if (visit == PreVisit)
+            ++mControlFlowDepth;
+        if (visit == PostVisit)
+            --mControlFlowDepth;
     }
     return true;
 }
@@ -286,8 +293,13 @@ bool ValidateSwitch::validateInternal(const TSourceLoc &loc)
             loc, "no statement between the last label and the end of the switch statement",
             "switch");
     }
+    if (getMaxDepth() >= kMaxAllowedTraversalDepth)
+    {
+        mDiagnostics->error(loc, "too complex expressions inside a switch statement", "switch");
+    }
     return !mStatementBeforeCase && !mLastStatementWasCase && !mCaseInsideControlFlow &&
-           !mCaseTypeMismatch && mDefaultCount <= 1 && !mDuplicateCases;
+           !mCaseTypeMismatch && mDefaultCount <= 1 && !mDuplicateCases &&
+           getMaxDepth() < kMaxAllowedTraversalDepth;
 }
 
 }  // anonymous namespace

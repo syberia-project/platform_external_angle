@@ -19,6 +19,7 @@
 #include "libANGLE/Texture.h"
 #include "libANGLE/TransformFeedback.h"
 #include "libANGLE/VertexArray.h"
+#include "libANGLE/angletypes.h"
 #include "libANGLE/formatutils.h"
 #include "libANGLE/queryconversions.h"
 #include "libANGLE/validationES2.h"
@@ -89,8 +90,8 @@ bool ValidateDrawAttribs(Context *context, GLint primcount, GLint maxVertex, GLi
 
         // If we have no buffer, then we either get an error, or there are no more checks to be
         // done.
-        const VertexBinding &binding  = vertexBindings[attrib.bindingIndex];
-        gl::Buffer *buffer            = binding.getBuffer().get();
+        const VertexBinding &binding = vertexBindings[attrib.bindingIndex];
+        gl::Buffer *buffer           = binding.getBuffer().get();
         if (!buffer)
         {
             if (webglCompatibility || !state.areClientArraysEnabled())
@@ -476,7 +477,7 @@ bool ValidateFragmentShaderColorBufferTypeMatch(Context *context)
 
 bool ValidateVertexShaderAttributeTypeMatch(Context *context)
 {
-    const auto &glState       = context->getGLState();
+    const auto &glState    = context->getGLState();
     const Program *program = context->getGLState().getProgram();
     const VertexArray *vao = context->getGLState().getVertexArray();
 
@@ -522,6 +523,14 @@ bool IsCompatibleDrawModeWithGeometryShader(GLenum drawMode,
 }
 
 }  // anonymous namespace
+
+void SetRobustLengthParam(GLsizei *length, GLsizei value)
+{
+    if (length)
+    {
+        *length = value;
+    }
+}
 
 bool IsETC2EACFormat(const GLenum format)
 {
@@ -1324,7 +1333,7 @@ bool ValidateBlitFramebufferParameters(Context *context,
                     GLenum drawComponentType = drawFormat.info->componentType;
                     bool readFixedPoint      = (readComponentType == GL_UNSIGNED_NORMALIZED ||
                                            readComponentType == GL_SIGNED_NORMALIZED);
-                    bool drawFixedPoint = (drawComponentType == GL_UNSIGNED_NORMALIZED ||
+                    bool drawFixedPoint      = (drawComponentType == GL_UNSIGNED_NORMALIZED ||
                                            drawComponentType == GL_SIGNED_NORMALIZED);
 
                     if (extensions.colorBufferFloat)
@@ -1482,16 +1491,24 @@ bool ValidateReadPixelsRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateReadPixelsBase(context, x, y, width, height, format, type, bufSize, length,
-                                columns, rows, pixels))
+    GLsizei writeLength  = 0;
+    GLsizei writeColumns = 0;
+    GLsizei writeRows    = 0;
+
+    if (!ValidateReadPixelsBase(context, x, y, width, height, format, type, bufSize, &writeLength,
+                                &writeColumns, &writeRows, pixels))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
+    SetRobustLengthParam(columns, writeColumns);
+    SetRobustLengthParam(rows, writeRows);
 
     return true;
 }
@@ -1529,21 +1546,29 @@ bool ValidateReadnPixelsRobustANGLE(Context *context,
                                     GLsizei *rows,
                                     void *data)
 {
+    GLsizei writeLength  = 0;
+    GLsizei writeColumns = 0;
+    GLsizei writeRows    = 0;
+
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
         return false;
     }
 
-    if (!ValidateReadPixelsBase(context, x, y, width, height, format, type, bufSize, length,
-                                columns, rows, data))
+    if (!ValidateReadPixelsBase(context, x, y, width, height, format, type, bufSize, &writeLength,
+                                &writeColumns, &writeRows, data))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
+    SetRobustLengthParam(columns, writeColumns);
+    SetRobustLengthParam(rows, writeRows);
 
     return true;
 }
@@ -1780,15 +1805,19 @@ bool ValidateGetQueryivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetQueryivBase(context, target, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetQueryivBase(context, target, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -1861,15 +1890,19 @@ bool ValidateGetQueryObjectivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetQueryObjectValueBase(context, id, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetQueryObjectValueBase(context, id, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -1904,15 +1937,19 @@ bool ValidateGetQueryObjectuivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetQueryObjectValueBase(context, id, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetQueryObjectValueBase(context, id, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -1945,15 +1982,19 @@ bool ValidateGetQueryObjecti64vRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetQueryObjectValueBase(context, id, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetQueryObjectValueBase(context, id, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -1986,15 +2027,19 @@ bool ValidateGetQueryObjectui64vRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetQueryObjectValueBase(context, id, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetQueryObjectValueBase(context, id, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -2239,6 +2284,87 @@ bool ValidateStateQuery(Context *context, GLenum pname, GLenum *nativeType, unsi
         return false;
     }
 
+    return true;
+}
+
+bool ValidateGetBooleanvRobustANGLE(Context *context,
+                                    GLenum pname,
+                                    GLsizei bufSize,
+                                    GLsizei *length,
+                                    GLboolean *params)
+{
+    GLenum nativeType;
+    unsigned int numParams = 0;
+
+    if (!ValidateRobustStateQuery(context, pname, bufSize, &nativeType, &numParams))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, numParams);
+
+    return true;
+}
+
+bool ValidateGetFloatvRobustANGLE(Context *context,
+                                  GLenum pname,
+                                  GLsizei bufSize,
+                                  GLsizei *length,
+                                  GLfloat *params)
+{
+    GLenum nativeType;
+    unsigned int numParams = 0;
+
+    if (!ValidateRobustStateQuery(context, pname, bufSize, &nativeType, &numParams))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, numParams);
+
+    return true;
+}
+
+bool ValidateGetIntegervRobustANGLE(Context *context,
+                                    GLenum pname,
+                                    GLsizei bufSize,
+                                    GLsizei *length,
+                                    GLint *data)
+{
+    GLenum nativeType;
+    unsigned int numParams = 0;
+
+    if (!ValidateRobustStateQuery(context, pname, bufSize, &nativeType, &numParams))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, numParams);
+
+    return true;
+}
+
+bool ValidateGetInteger64vRobustANGLE(Context *context,
+                                      GLenum pname,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLint64 *data)
+{
+    GLenum nativeType;
+    unsigned int numParams = 0;
+
+    if (!ValidateRobustStateQuery(context, pname, bufSize, &nativeType, &numParams))
+    {
+        return false;
+    }
+
+    if (nativeType == GL_INT_64_ANGLEX)
+    {
+        CastStateValues(context, nativeType, pname, numParams, data);
+        return false;
+    }
+
+    SetRobustLengthParam(length, numParams);
     return true;
 }
 
@@ -2627,7 +2753,7 @@ bool ValidateDrawBase(Context *context, GLenum mode, GLsizei count)
          uniformBlockIndex < program->getActiveUniformBlockCount(); uniformBlockIndex++)
     {
         const gl::InterfaceBlock &uniformBlock = program->getUniformBlockByIndex(uniformBlockIndex);
-        GLuint blockBinding                  = program->getUniformBlockBinding(uniformBlockIndex);
+        GLuint blockBinding                    = program->getUniformBlockBinding(uniformBlockIndex);
         const OffsetBindingPointer<Buffer> &uniformBuffer =
             state.getIndexedUniformBuffer(blockBinding);
 
@@ -2640,13 +2766,7 @@ bool ValidateDrawBase(Context *context, GLenum mode, GLsizei count)
             return false;
         }
 
-        size_t uniformBufferSize = uniformBuffer.getSize();
-        if (uniformBufferSize == 0)
-        {
-            // Bind the whole buffer.
-            uniformBufferSize = static_cast<size_t>(uniformBuffer->getSize());
-        }
-
+        size_t uniformBufferSize = GetBoundBufferAvailableSize(uniformBuffer);
         if (uniformBufferSize < uniformBlock.dataSize)
         {
             // undefined behaviour
@@ -2713,14 +2833,23 @@ bool ValidateDrawArraysCommon(Context *context,
     const State &state                          = context->getGLState();
     gl::TransformFeedback *curTransformFeedback = state.getCurrentTransformFeedback();
     if (curTransformFeedback && curTransformFeedback->isActive() &&
-        !curTransformFeedback->isPaused() && curTransformFeedback->getPrimitiveMode() != mode)
+        !curTransformFeedback->isPaused())
     {
-        // It is an invalid operation to call DrawArrays or DrawArraysInstanced with a draw mode
-        // that does not match the current transform feedback object's draw mode (if transform
-        // feedback
-        // is active), (3.0.2, section 2.14, pg 86)
-        ANGLE_VALIDATION_ERR(context, InvalidOperation(), InvalidDrawModeTransformFeedback);
-        return false;
+        if (curTransformFeedback->getPrimitiveMode() != mode)
+        {
+            // It is an invalid operation to call DrawArrays or DrawArraysInstanced with a draw mode
+            // that does not match the current transform feedback object's draw mode (if transform
+            // feedback
+            // is active), (3.0.2, section 2.14, pg 86)
+            ANGLE_VALIDATION_ERR(context, InvalidOperation(), InvalidDrawModeTransformFeedback);
+            return false;
+        }
+
+        if (!curTransformFeedback->checkBufferSpaceForDraw(count, primcount))
+        {
+            ANGLE_VALIDATION_ERR(context, InvalidOperation(), TransformFeedbackBufferTooSmall);
+            return false;
+        }
     }
 
     if (!ValidateDrawBase(context, mode, count))
@@ -3137,6 +3266,17 @@ bool ValidateGetnUniformfvEXT(Context *context,
     return ValidateSizedGetUniform(context, program, location, bufSize, nullptr);
 }
 
+bool ValidateGetnUniformfvRobustANGLE(Context *context,
+                                      GLuint program,
+                                      GLint location,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLfloat *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
 bool ValidateGetnUniformivEXT(Context *context,
                               GLuint program,
                               GLint location,
@@ -3144,6 +3284,28 @@ bool ValidateGetnUniformivEXT(Context *context,
                               GLint *params)
 {
     return ValidateSizedGetUniform(context, program, location, bufSize, nullptr);
+}
+
+bool ValidateGetnUniformivRobustANGLE(Context *context,
+                                      GLuint program,
+                                      GLint location,
+                                      GLsizei bufSize,
+                                      GLsizei *length,
+                                      GLint *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
+bool ValidateGetnUniformuivRobustANGLE(Context *context,
+                                       GLuint program,
+                                       GLint location,
+                                       GLsizei bufSize,
+                                       GLsizei *length,
+                                       GLuint *params)
+{
+    UNIMPLEMENTED();
+    return false;
 }
 
 bool ValidateGetUniformfvRobustANGLE(Context *context,
@@ -3158,8 +3320,17 @@ bool ValidateGetUniformfvRobustANGLE(Context *context,
         return false;
     }
 
+    GLsizei writeLength = 0;
+
     // bufSize is validated in ValidateSizedGetUniform
-    return ValidateSizedGetUniform(context, program, location, bufSize, length);
+    if (!ValidateSizedGetUniform(context, program, location, bufSize, &writeLength))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, writeLength);
+
+    return true;
 }
 
 bool ValidateGetUniformivRobustANGLE(Context *context,
@@ -3174,8 +3345,17 @@ bool ValidateGetUniformivRobustANGLE(Context *context,
         return false;
     }
 
+    GLsizei writeLength = 0;
+
     // bufSize is validated in ValidateSizedGetUniform
-    return ValidateSizedGetUniform(context, program, location, bufSize, length);
+    if (!ValidateSizedGetUniform(context, program, location, bufSize, &writeLength))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, writeLength);
+
+    return true;
 }
 
 bool ValidateGetUniformuivRobustANGLE(Context *context,
@@ -3196,8 +3376,17 @@ bool ValidateGetUniformuivRobustANGLE(Context *context,
         return false;
     }
 
+    GLsizei writeLength = 0;
+
     // bufSize is validated in ValidateSizedGetUniform
-    return ValidateSizedGetUniform(context, program, location, bufSize, length);
+    if (!ValidateSizedGetUniform(context, program, location, bufSize, &writeLength))
+    {
+        return false;
+    }
+
+    SetRobustLengthParam(length, writeLength);
+
+    return true;
 }
 
 bool ValidateDiscardFramebufferBase(Context *context,
@@ -4090,23 +4279,27 @@ bool ValidateGetFramebufferAttachmentParameterivRobustANGLE(Context *context,
                                                             GLenum attachment,
                                                             GLenum pname,
                                                             GLsizei bufSize,
-                                                            GLsizei *numParams)
+                                                            GLsizei *length,
+                                                            GLint *params)
 {
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
         return false;
     }
 
+    GLsizei numParams = 0;
     if (!ValidateGetFramebufferAttachmentParameterivBase(context, target, attachment, pname,
-                                                         numParams))
+                                                         &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *numParams))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4123,16 +4316,19 @@ bool ValidateGetBufferParameterivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetBufferParameterBase(context, target, pname, false, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetBufferParameterBase(context, target, pname, false, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
 
+    SetRobustLengthParam(length, numParams);
     return true;
 }
 
@@ -4143,20 +4339,24 @@ bool ValidateGetBufferParameteri64vRobustANGLE(Context *context,
                                                GLsizei *length,
                                                GLint64 *params)
 {
+    GLsizei numParams = 0;
+
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
         return false;
     }
 
-    if (!ValidateGetBufferParameterBase(context, target, pname, false, length))
+    if (!ValidateGetBufferParameterBase(context, target, pname, false, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4282,22 +4482,27 @@ bool ValidateGetProgramivRobustANGLE(Context *context,
                                      GLuint program,
                                      GLenum pname,
                                      GLsizei bufSize,
-                                     GLsizei *numParams)
+                                     GLsizei *length,
+                                     GLint *params)
 {
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
         return false;
     }
 
-    if (!ValidateGetProgramivBase(context, program, pname, numParams))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetProgramivBase(context, program, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *numParams))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4314,15 +4519,19 @@ bool ValidateGetRenderbufferParameterivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetRenderbufferParameterivBase(context, target, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetRenderbufferParameterivBase(context, target, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4339,15 +4548,19 @@ bool ValidateGetShaderivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetShaderivBase(context, shader, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetShaderivBase(context, shader, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4364,15 +4577,19 @@ bool ValidateGetTexParameterfvRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetTexParameterBase(context, target, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetTexParameterBase(context, target, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -4384,22 +4601,46 @@ bool ValidateGetTexParameterivRobustANGLE(Context *context,
                                           GLsizei *length,
                                           GLint *params)
 {
+
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
         return false;
     }
-
-    if (!ValidateGetTexParameterBase(context, target, pname, length))
+    GLsizei numParams = 0;
+    if (!ValidateGetTexParameterBase(context, target, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
 
+    SetRobustLengthParam(length, numParams);
     return true;
+}
+
+bool ValidateGetTexParameterIivRobustANGLE(Context *context,
+                                           TextureType target,
+                                           GLenum pname,
+                                           GLsizei bufSize,
+                                           GLsizei *length,
+                                           GLint *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
+bool ValidateGetTexParameterIuivRobustANGLE(Context *context,
+                                            TextureType target,
+                                            GLenum pname,
+                                            GLsizei bufSize,
+                                            GLsizei *length,
+                                            GLuint *params)
+{
+    UNIMPLEMENTED();
+    return false;
 }
 
 bool ValidateTexParameterfvRobustANGLE(Context *context,
@@ -4430,6 +4671,26 @@ bool ValidateTexParameterivRobustANGLE(Context *context,
     return ValidateTexParameterBase(context, target, pname, bufSize, params);
 }
 
+bool ValidateTexParameterIivRobustANGLE(Context *context,
+                                        TextureType target,
+                                        GLenum pname,
+                                        GLsizei bufSize,
+                                        const GLint *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
+bool ValidateTexParameterIuivRobustANGLE(Context *context,
+                                         TextureType target,
+                                         GLenum pname,
+                                         GLsizei bufSize,
+                                         const GLuint *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
 bool ValidateGetSamplerParameterfvRobustANGLE(Context *context,
                                               GLuint sampler,
                                               GLenum pname,
@@ -4442,23 +4703,26 @@ bool ValidateGetSamplerParameterfvRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetSamplerParameterBase(context, sampler, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetSamplerParameterBase(context, sampler, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
 
+    SetRobustLengthParam(length, numParams);
     return true;
 }
 
 bool ValidateGetSamplerParameterivRobustANGLE(Context *context,
                                               GLuint sampler,
                                               GLenum pname,
-                                              GLuint bufSize,
+                                              GLsizei bufSize,
                                               GLsizei *length,
                                               GLint *params)
 {
@@ -4467,17 +4731,42 @@ bool ValidateGetSamplerParameterivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetSamplerParameterBase(context, sampler, pname, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetSamplerParameterBase(context, sampler, pname, &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
 
+    SetRobustLengthParam(length, numParams);
     return true;
+}
+
+bool ValidateGetSamplerParameterIivRobustANGLE(Context *context,
+                                               GLuint sampler,
+                                               GLenum pname,
+                                               GLsizei bufSize,
+                                               GLsizei *length,
+                                               GLint *params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
+bool ValidateGetSamplerParameterIuivRobustANGLE(Context *context,
+                                                GLuint sampler,
+                                                GLenum pname,
+                                                GLsizei bufSize,
+                                                GLsizei *length,
+                                                GLuint *params)
+{
+    UNIMPLEMENTED();
+    return false;
 }
 
 bool ValidateSamplerParameterfvRobustANGLE(Context *context,
@@ -4508,6 +4797,26 @@ bool ValidateSamplerParameterivRobustANGLE(Context *context,
     return ValidateSamplerParameterBase(context, sampler, pname, bufSize, params);
 }
 
+bool ValidateSamplerParameterIivRobustANGLE(Context *context,
+                                            GLuint sampler,
+                                            GLenum pname,
+                                            GLsizei bufSize,
+                                            const GLint *param)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
+bool ValidateSamplerParameterIuivRobustANGLE(Context *context,
+                                             GLuint sampler,
+                                             GLenum pname,
+                                             GLsizei bufSize,
+                                             const GLuint *param)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
 bool ValidateGetVertexAttribfvRobustANGLE(Context *context,
                                           GLuint index,
                                           GLenum pname,
@@ -4520,16 +4829,19 @@ bool ValidateGetVertexAttribfvRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetVertexAttribBase(context, index, pname, length, false, false))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetVertexAttribBase(context, index, pname, &writeLength, false, false))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
 
+    SetRobustLengthParam(length, writeLength);
     return true;
 }
 
@@ -4545,15 +4857,19 @@ bool ValidateGetVertexAttribivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetVertexAttribBase(context, index, pname, length, false, false))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetVertexAttribBase(context, index, pname, &writeLength, false, false))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
 
     return true;
 }
@@ -4570,15 +4886,19 @@ bool ValidateGetVertexAttribPointervRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetVertexAttribBase(context, index, pname, length, true, false))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetVertexAttribBase(context, index, pname, &writeLength, true, false))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
 
     return true;
 }
@@ -4595,15 +4915,19 @@ bool ValidateGetVertexAttribIivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetVertexAttribBase(context, index, pname, length, false, true))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetVertexAttribBase(context, index, pname, &writeLength, false, true))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
 
     return true;
 }
@@ -4620,15 +4944,19 @@ bool ValidateGetVertexAttribIuivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetVertexAttribBase(context, index, pname, length, false, true))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetVertexAttribBase(context, index, pname, &writeLength, false, true))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
 
     return true;
 }
@@ -4646,15 +4974,20 @@ bool ValidateGetActiveUniformBlockivRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetActiveUniformBlockivBase(context, program, uniformBlockIndex, pname, length))
+    GLsizei writeLength = 0;
+
+    if (!ValidateGetActiveUniformBlockivBase(context, program, uniformBlockIndex, pname,
+                                             &writeLength))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, writeLength))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, writeLength);
 
     return true;
 }
@@ -4672,15 +5005,20 @@ bool ValidateGetInternalFormativRobustANGLE(Context *context,
         return false;
     }
 
-    if (!ValidateGetInternalFormativBase(context, target, internalformat, pname, bufSize, length))
+    GLsizei numParams = 0;
+
+    if (!ValidateGetInternalFormativBase(context, target, internalformat, pname, bufSize,
+                                         &numParams))
     {
         return false;
     }
 
-    if (!ValidateRobustBufferSize(context, bufSize, *length))
+    if (!ValidateRobustBufferSize(context, bufSize, numParams))
     {
         return false;
     }
+
+    SetRobustLengthParam(length, numParams);
 
     return true;
 }
@@ -5522,26 +5860,26 @@ bool ValidateTexParameterBase(Context *context,
         case GL_TEXTURE_WRAP_S:
         case GL_TEXTURE_WRAP_T:
         case GL_TEXTURE_WRAP_R:
+        {
+            bool restrictedWrapModes =
+                target == TextureType::External || target == TextureType::Rectangle;
+            if (!ValidateTextureWrapModeValue(context, params, restrictedWrapModes))
             {
-                bool restrictedWrapModes =
-                    target == TextureType::External || target == TextureType::Rectangle;
-                if (!ValidateTextureWrapModeValue(context, params, restrictedWrapModes))
-                {
-                    return false;
-                }
+                return false;
             }
-            break;
+        }
+        break;
 
         case GL_TEXTURE_MIN_FILTER:
+        {
+            bool restrictedMinFilter =
+                target == TextureType::External || target == TextureType::Rectangle;
+            if (!ValidateTextureMinFilterValue(context, params, restrictedMinFilter))
             {
-                bool restrictedMinFilter =
-                    target == TextureType::External || target == TextureType::Rectangle;
-                if (!ValidateTextureMinFilterValue(context, params, restrictedMinFilter))
-                {
-                    return false;
-                }
+                return false;
             }
-            break;
+        }
+        break;
 
         case GL_TEXTURE_MAG_FILTER:
             if (!ValidateTextureMagFilterValue(context, params))
@@ -5570,15 +5908,15 @@ bool ValidateTexParameterBase(Context *context,
             break;
 
         case GL_TEXTURE_MAX_ANISOTROPY_EXT:
+        {
+            GLfloat paramValue = static_cast<GLfloat>(params[0]);
+            if (!ValidateTextureMaxAnisotropyValue(context, paramValue))
             {
-                GLfloat paramValue = static_cast<GLfloat>(params[0]);
-                if (!ValidateTextureMaxAnisotropyValue(context, paramValue))
-                {
-                    return false;
-                }
-                ASSERT(static_cast<ParamType>(paramValue) == params[0]);
+                return false;
             }
-            break;
+            ASSERT(static_cast<ParamType>(paramValue) == params[0]);
+        }
+        break;
 
         case GL_TEXTURE_MIN_LOD:
         case GL_TEXTURE_MAX_LOD:
@@ -6027,6 +6365,16 @@ bool ValidateFramebufferNotMultisampled(Context *context, Framebuffer *framebuff
     if (samples != 0)
     {
         context->handleError(InvalidOperation());
+        return false;
+    }
+    return true;
+}
+
+bool ValidateMultitextureUnit(Context *context, GLenum texture)
+{
+    if (texture < GL_TEXTURE0 || texture >= GL_TEXTURE0 + context->getCaps().maxMultitextureUnits)
+    {
+        ANGLE_VALIDATION_ERR(context, InvalidEnum(), InvalidMultitextureUnit);
         return false;
     }
     return true;

@@ -81,6 +81,7 @@ bool HasFullFormatSupport(VkPhysicalDevice physicalDevice, VkFormat vkFormat)
            HasFormatFeatureBits(kBitsDepth, formatProperties);
 }
 
+// Format implementation.
 Format::Format()
     : internalFormat(GL_NONE),
       textureFormatID(angle::Format::ID::NONE),
@@ -102,6 +103,17 @@ const angle::Format &Format::bufferFormat() const
     return angle::Format::Get(bufferFormatID);
 }
 
+bool operator==(const Format &lhs, const Format &rhs)
+{
+    return &lhs == &rhs;
+}
+
+bool operator!=(const Format &lhs, const Format &rhs)
+{
+    return &lhs != &rhs;
+}
+
+// FormatTable implementation.
 FormatTable::FormatTable()
 {
 }
@@ -125,8 +137,6 @@ void FormatTable::initialize(VkPhysicalDevice physicalDevice,
 
         if (!mFormatData[formatIndex].valid())
         {
-            // TODO(lucferron): Implement support for more OpenGL Texture formats
-            // http://anglebug.com/2358
             continue;
         }
 
@@ -140,9 +150,7 @@ void FormatTable::initialize(VkPhysicalDevice physicalDevice,
         FillTextureFormatCaps(formatProperties, &textureCaps);
         outTextureCapsMap->set(formatID, textureCaps);
 
-        // TODO(lucferron): Optimize this by including compressed bool in the FormatID
-        // http://anglebug.com/2358
-        if (gl::GetSizedInternalFormatInfo(internalFormat).compressed)
+        if (angleFormat.isBlock)
         {
             outCompressedTextureFormats->push_back(internalFormat);
         }

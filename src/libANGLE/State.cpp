@@ -246,7 +246,7 @@ void State::initialize(const Context *context,
     // applies
     if (clientVersion < Version(2, 0))
     {
-        mGLES1State.initialize(context);
+        mGLES1State.initialize(context, this);
     }
 }
 
@@ -1930,6 +1930,42 @@ void State::getFloatv(GLenum pname, GLfloat *params)
         case GL_ALPHA_TEST_REF:
             *params = mGLES1State.mAlphaTestRef;
             break;
+        case GL_CURRENT_COLOR:
+        {
+            const auto &color = mGLES1State.mCurrentColor;
+            params[0]         = color.red;
+            params[1]         = color.green;
+            params[2]         = color.blue;
+            params[3]         = color.alpha;
+            break;
+        }
+        case GL_CURRENT_NORMAL:
+        {
+            const auto &normal = mGLES1State.mCurrentNormal;
+            params[0]          = normal[0];
+            params[1]          = normal[1];
+            params[2]          = normal[2];
+            break;
+        }
+        case GL_CURRENT_TEXTURE_COORDS:
+        {
+            const auto &texcoord = mGLES1State.mCurrentTextureCoords[mActiveSampler];
+            params[0]            = texcoord.s;
+            params[1]            = texcoord.t;
+            params[2]            = texcoord.r;
+            params[3]            = texcoord.q;
+            break;
+        }
+        case GL_MODELVIEW_MATRIX:
+            memcpy(params, mGLES1State.mModelviewMatrices.back().data(), 16 * sizeof(GLfloat));
+            break;
+        case GL_PROJECTION_MATRIX:
+            memcpy(params, mGLES1State.mProjectionMatrices.back().data(), 16 * sizeof(GLfloat));
+            break;
+        case GL_TEXTURE_MATRIX:
+            memcpy(params, mGLES1State.mTextureMatrices[mActiveSampler].back().data(),
+                   16 * sizeof(GLfloat));
+            break;
         default:
             UNREACHABLE();
             break;
@@ -2304,6 +2340,12 @@ Error State::getIntegerv(const Context *context, GLenum pname, GLint *params)
         case GL_ALPHA_TEST_FUNC:
             *params = ToGLenum(mGLES1State.mAlphaTestFunc);
             break;
+        case GL_CLIENT_ACTIVE_TEXTURE:
+            *params = mGLES1State.mClientActiveTexture + GL_TEXTURE0;
+            break;
+        case GL_MATRIX_MODE:
+            *params = ToGLenum(mGLES1State.mMatrixMode);
+            break;
         default:
             UNREACHABLE();
             break;
@@ -2501,7 +2543,7 @@ Error State::syncDirtyObjects(const Context *context, const DirtyObjects &bitset
                 break;
             case DIRTY_OBJECT_VERTEX_ARRAY:
                 ASSERT(mVertexArray);
-                mVertexArray->syncState(context);
+                ANGLE_TRY(mVertexArray->syncState(context));
                 break;
             case DIRTY_OBJECT_PROGRAM_TEXTURES:
                 syncProgramTextures(context);
@@ -2656,6 +2698,14 @@ void State::setFramebufferDirty(const Framebuffer *framebuffer) const
     if (framebuffer == mDrawFramebuffer)
     {
         mDirtyObjects.set(DIRTY_OBJECT_DRAW_FRAMEBUFFER);
+    }
+}
+
+void State::setVertexArrayDirty(const VertexArray *vertexArray) const
+{
+    if (vertexArray == mVertexArray)
+    {
+        mDirtyObjects.set(DIRTY_OBJECT_VERTEX_ARRAY);
     }
 }
 

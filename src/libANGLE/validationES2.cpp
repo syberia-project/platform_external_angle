@@ -75,7 +75,7 @@ bool ValidatePathInstances(gl::Context *context,
     for (GLsizei i = 0; i < numPaths; ++i)
     {
         const GLuint pathName = array[i] + pathBase;
-        if (context->hasPath(pathName) && !context->hasPathData(pathName))
+        if (context->isPathGenerated(pathName) && !context->isPath(pathName))
         {
             ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
             return false;
@@ -2419,6 +2419,16 @@ bool ValidateGetPointervKHR(Context *context, GLenum pname, void **params)
     return true;
 }
 
+bool ValidateGetPointervRobustANGLERobustANGLE(Context *context,
+                                               GLenum pname,
+                                               GLsizei bufSize,
+                                               GLsizei *length,
+                                               void **params)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+
 bool ValidateBlitFramebufferANGLE(Context *context,
                                   GLint srcX0,
                                   GLint srcY0,
@@ -3181,7 +3191,7 @@ bool ValidatePathCommandsCHROMIUM(Context *context,
         context->handleError(InvalidOperation() << "GL_CHROMIUM_path_rendering is not available.");
         return false;
     }
-    if (!context->hasPath(path))
+    if (!context->isPathGenerated(path))
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
         return false;
@@ -3296,7 +3306,7 @@ bool ValidatePathParameterfCHROMIUM(Context *context, GLuint path, GLenum pname,
         context->handleError(InvalidOperation() << "GL_CHROMIUM_path_rendering is not available.");
         return false;
     }
-    if (!context->hasPath(path))
+    if (!context->isPathGenerated(path))
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
         return false;
@@ -3368,7 +3378,7 @@ bool ValidateGetPathParameterfvCHROMIUM(Context *context, GLuint path, GLenum pn
         return false;
     }
 
-    if (!context->hasPath(path))
+    if (!context->isPathGenerated(path))
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
         return false;
@@ -3442,7 +3452,7 @@ bool ValidateStencilFillPathCHROMIUM(Context *context, GLuint path, GLenum fillM
         context->handleError(InvalidOperation() << "GL_CHROMIUM_path_rendering is not available.");
         return false;
     }
-    if (context->hasPath(path) && !context->hasPathData(path))
+    if (context->isPathGenerated(path) && !context->isPath(path))
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
         return false;
@@ -3474,13 +3484,23 @@ bool ValidateStencilStrokePathCHROMIUM(Context *context, GLuint path, GLint refe
         context->handleError(InvalidOperation() << "GL_CHROMIUM_path_rendering is not available.");
         return false;
     }
-    if (context->hasPath(path) && !context->hasPathData(path))
+    if (context->isPathGenerated(path) && !context->isPath(path))
     {
         context->handleError(InvalidOperation() << "No such path or path has no data.");
         return false;
     }
 
     return true;
+}
+
+bool ValidateCoverFillPathCHROMIUM(Context *context, GLuint path, GLenum coverMode)
+{
+    return ValidateCoverPathCHROMIUM(context, path, coverMode);
+}
+
+bool ValidateCoverStrokePathCHROMIUM(Context *context, GLuint path, GLenum coverMode)
+{
+    return ValidateCoverPathCHROMIUM(context, path, coverMode);
 }
 
 bool ValidateCoverPathCHROMIUM(Context *context, GLuint path, GLenum coverMode)
@@ -3490,7 +3510,7 @@ bool ValidateCoverPathCHROMIUM(Context *context, GLuint path, GLenum coverMode)
         context->handleError(InvalidOperation() << "GL_CHROMIUM_path_rendering is not available.");
         return false;
     }
-    if (context->hasPath(path) && !context->hasPathData(path))
+    if (context->isPathGenerated(path) && !context->isPath(path))
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), NoSuchPath);
         return false;
@@ -3528,7 +3548,7 @@ bool ValidateStencilThenCoverStrokePathCHROMIUM(Context *context,
            ValidateCoverPathCHROMIUM(context, path, coverMode);
 }
 
-bool ValidateIsPathCHROMIUM(Context *context)
+bool ValidateIsPathCHROMIUM(Context *context, GLuint path)
 {
     if (!context->getExtensions().pathRendering)
     {
@@ -4337,10 +4357,15 @@ bool ValidateRequestExtensionANGLE(Context *context, const GLchar *name)
 
 bool ValidateActiveTexture(Context *context, GLenum texture)
 {
+    if (context->getClientMajorVersion() < 2)
+    {
+        return ValidateMultitextureUnit(context, texture);
+    }
+
     if (texture < GL_TEXTURE0 ||
         texture > GL_TEXTURE0 + context->getCaps().maxCombinedTextureImageUnits - 1)
     {
-        context->handleError(InvalidEnum());
+        ANGLE_VALIDATION_ERR(context, InvalidEnum(), InvalidCombinedImageUnit);
         return false;
     }
 

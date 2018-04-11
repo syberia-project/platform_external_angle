@@ -19,6 +19,8 @@ namespace rx
 
 namespace vk
 {
+class ImageHelper;
+
 // Packed Vk resource descriptions.
 // Most Vk types use many more bits than required to represent the underlying data.
 // Since ANGLE wants cache things like RenderPasses and Pipeline State Objects using
@@ -54,8 +56,8 @@ class RenderPassDesc final
     RenderPassDesc &operator=(const RenderPassDesc &other);
 
     // Depth stencil attachments must be packed after color attachments.
-    void packColorAttachment(const Format &format, GLsizei samples);
-    void packDepthStencilAttachment(const Format &format, GLsizei samples);
+    void packColorAttachment(const ImageHelper &imageHelper);
+    void packDepthStencilAttachment(const ImageHelper &imageHelper);
 
     size_t hash() const;
 
@@ -65,7 +67,7 @@ class RenderPassDesc final
     const PackedAttachmentDesc &operator[](size_t index) const;
 
   private:
-    void packAttachment(uint32_t index, const vk::Format &format, GLsizei samples);
+    void packAttachment(uint32_t index, const ImageHelper &imageHelper);
 
     uint32_t mColorAttachmentCount;
     uint32_t mDepthStencilAttachmentCount;
@@ -290,17 +292,26 @@ class PipelineDesc final
 
     // Scissor support
     const VkRect2D &getScissor() const { return mScissor; }
-    void updateScissor(const gl::Rectangle &rect);
+    void updateScissor(const gl::Rectangle &rect, gl::Box surfaceDimensions);
 
     // Blend states
     void updateBlendEnabled(bool isBlendEnabled);
     void updateBlendColor(const gl::ColorF &color);
     void updateBlendFuncs(const gl::BlendState &blend_state);
     void updateBlendEquations(const gl::BlendState &blend_state);
+    void updateColorWriteMask(const gl::BlendState &blendState);
 
     // Depth/stencil states.
     void updateDepthTestEnabled(const gl::DepthStencilState &depthStencilState);
     void updateDepthFunc(const gl::DepthStencilState &depthStencilState);
+    void updateDepthWriteEnabled(const gl::DepthStencilState &depthStencilState);
+    void updateStencilTestEnabled(const gl::DepthStencilState &depthStencilState);
+    void updateStencilFrontFuncs(GLint ref, const gl::DepthStencilState &depthStencilState);
+    void updateStencilBackFuncs(GLint ref, const gl::DepthStencilState &depthStencilState);
+    void updateStencilFrontOps(const gl::DepthStencilState &depthStencilState);
+    void updateStencilBackOps(const gl::DepthStencilState &depthStencilState);
+    void updateStencilFrontWriteMask(const gl::DepthStencilState &depthStencilState);
+    void updateStencilBackWriteMask(const gl::DepthStencilState &depthStencilState);
 
   private:
     // TODO(jmadill): Handle Geometry/Compute shaders when necessary.

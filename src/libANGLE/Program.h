@@ -277,8 +277,6 @@ struct ImageBinding
     std::vector<GLuint> boundImageUnits;
 };
 
-using ShaderStagesMask = angle::PackedEnumBitSet<ShaderType>;
-
 class ProgramState final : angle::NonCopyable
 {
   public:
@@ -352,11 +350,13 @@ class ProgramState final : angle::NonCopyable
     int getNumViews() const { return mNumViews; }
     bool usesMultiview() const { return mNumViews != -1; }
 
-    const ShaderStagesMask &getLinkedShaderStages() const { return mLinkedShaderStages; }
+    const ShaderBitSet &getLinkedShaderStages() const { return mLinkedShaderStages; }
 
   private:
     friend class MemoryProgramCache;
     friend class Program;
+
+    void updateTransformFeedbackStrides();
 
     std::string mLabel;
 
@@ -421,7 +421,7 @@ class ProgramState final : angle::NonCopyable
 
     bool mBinaryRetrieveableHint;
     bool mSeparable;
-    ShaderStagesMask mLinkedShaderStages;
+    ShaderBitSet mLinkedShaderStages;
 
     // ANGLE_multiview.
     int mNumViews;
@@ -431,6 +431,9 @@ class ProgramState final : angle::NonCopyable
     GLenum mGeometryShaderOutputPrimitiveType;
     int mGeometryShaderInvocations;
     int mGeometryShaderMaxVertices;
+
+    // The size of the data written to each transform feedback buffer per vertex.
+    std::vector<GLsizei> mTransformFeedbackStrides;
 };
 
 class ProgramBindings final : angle::NonCopyable
@@ -689,6 +692,11 @@ class Program final : angle::NonCopyable, public LabeledObject
     ComponentTypeMask getDrawBufferTypeMask() const { return mState.mDrawBufferTypeMask; }
     ComponentTypeMask getAttributesTypeMask() const { return mState.mAttributesTypeMask; }
     AttributesMask getAttributesMask() const { return mState.mAttributesMask; }
+
+    const std::vector<GLsizei> &getTransformFeedbackStrides() const
+    {
+        return mState.mTransformFeedbackStrides;
+    }
 
   private:
     ~Program() override;

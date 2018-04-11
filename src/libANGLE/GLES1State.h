@@ -12,9 +12,11 @@
 
 #include <unordered_set>
 
+#include "common/FixedVector.h"
 #include "common/angleutils.h"
 #include "common/matrix_utils.h"
 #include "common/vector_utils.h"
+#include "libANGLE/Caps.h"
 #include "libANGLE/angletypes.h"
 
 namespace gl
@@ -23,6 +25,10 @@ namespace gl
 // State types specific to GLES1 contexts, from the OpenGL ES 1.1 spec "State Tables" section
 struct TextureCoordF
 {
+    TextureCoordF();
+    TextureCoordF(float _s, float _t, float _r, float _q);
+    bool operator==(const TextureCoordF &other) const;
+
     GLfloat s = 0.0f;
     GLfloat t = 0.0f;
     GLfloat r = 0.0f;
@@ -116,12 +122,39 @@ class GLES1State final : angle::NonCopyable
     GLES1State();
     ~GLES1State();
 
-    void initialize(const Context *context);
+    void initialize(const Context *context, const State *state);
 
     void setAlphaFunc(AlphaTestFunc func, GLfloat ref);
+    void setClientTextureUnit(unsigned int unit);
+    unsigned int getClientTextureUnit() const;
+
+    void setCurrentColor(const ColorF &color);
+    const ColorF &getCurrentColor() const;
+
+    void setCurrentNormal(const angle::Vector3 &normal);
+    const angle::Vector3 &getCurrentNormal() const;
+
+    void setCurrentTextureCoords(unsigned int unit, const TextureCoordF &coords);
+    const TextureCoordF &getCurrentTextureCoords(unsigned int unit) const;
+
+    void setMatrixMode(MatrixType mode);
+    MatrixType getMatrixMode() const;
+
+    void pushMatrix();
+    void popMatrix();
+
+    using MatrixStack = angle::FixedVector<angle::Mat4, Caps::GlobalMatrixStackDepth>;
+    MatrixStack &currentMatrixStack();
+    const MatrixStack &currentMatrixStack() const;
+
+    void loadMatrix(const angle::Mat4 &m);
+    void multMatrix(const angle::Mat4 &m);
 
   private:
     friend class State;
+
+    // Back pointer for reading from State.
+    const State *mGLState;
 
     // All initial state values come from the
     // OpenGL ES 1.1 spec.
@@ -156,12 +189,15 @@ class GLES1State final : angle::NonCopyable
     // Table 6.3
     ColorF mCurrentColor;
     angle::Vector3 mCurrentNormal;
+    // Invariant: mCurrentTextureCoords size is == GL_MAX_TEXTURE_UNITS.
     std::vector<TextureCoordF> mCurrentTextureCoords;
 
+    // Table 6.4
+    unsigned int mClientActiveTexture;
+
     // Table 6.7
-    using MatrixStack = std::vector<angle::Mat4>;
-    MatrixType mCurrMatrixMode;
-    MatrixStack mProjMatrices;
+    MatrixType mMatrixMode;
+    MatrixStack mProjectionMatrices;
     MatrixStack mModelviewMatrices;
     std::vector<MatrixStack> mTextureMatrices;
 

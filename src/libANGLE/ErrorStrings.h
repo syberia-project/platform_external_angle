@@ -64,6 +64,8 @@ ERRMSG(InvalidBorder, "Border must be 0.");
 ERRMSG(InvalidBufferTypes, "Invalid buffer target enum.");
 ERRMSG(InvalidBufferUsage, "Invalid buffer usage enum.");
 ERRMSG(InvalidClearMask, "Invalid mask bits.");
+ERRMSG(InvalidCombinedImageUnit,
+       "Specified unit must be in [GL_TEXTURE0, GL_TEXTURE0 + GL_MAX_COMBINED_IMAGE_UNITS)");
 ERRMSG(InvalidConstantColor,
        "CONSTANT_COLOR (or ONE_MINUS_CONSTANT_COLOR) and CONSTANT_ALPHA (or "
        "ONE_MINUS_CONSTANT_ALPHA) cannot be used together as source and destination factors in the "
@@ -91,6 +93,8 @@ ERRMSG(InvalidInternalFormat, "Invalid internal format.");
 ERRMSG(InvalidMatrixMode, "Invalid matrix mode.");
 ERRMSG(InvalidMemoryBarrierBit, "Invalid memory barrier bit.");
 ERRMSG(InvalidMipLevel, "Level of detail outside of range.");
+ERRMSG(InvalidMultitextureUnit,
+       "Specified unit must be in [GL_TEXTURE0, GL_TEXTURE0 + GL_MAX_TEXTURE_UNITS)");
 ERRMSG(InvalidName, "Invalid name.");
 ERRMSG(InvalidNameCharacters, "Name contains invalid characters.");
 ERRMSG(InvalidPname, "Invalid pname.");
@@ -124,6 +128,8 @@ ERRMSG(InvalidVertexAttrSize, "Vertex attribute size must be 1, 2, 3, or 4.");
 ERRMSG(InvalidWidth, "Invalid width.");
 ERRMSG(InvalidWrapModeTexture, "Invalid wrap mode for texture type.");
 ERRMSG(LevelNotZero, "Texture level must be zero.");
+ERRMSG(MatrixStackOverflow, "Current matrix stack is full.");
+ERRMSG(MatrixStackUnderflow, "Current matrix stack has only a single matrix.");
 ERRMSG(MismatchedByteCountType, "Buffer size does not align with data type.");
 ERRMSG(MismatchedFormat, "Format must match internal format.");
 ERRMSG(MismatchedTargetAndFormat, "Invalid texture target and format combination.");
@@ -185,6 +191,7 @@ ERRMSG(TextureNotPow2, "The texture is a non-power-of-two texture.");
 ERRMSG(TransformFeedbackBufferDoubleBound,
        "A transform feedback buffer that would be written to is also bound to a "
        "non-transform-feedback target, which would cause undefined behavior.");
+ERRMSG(TransformFeedbackBufferTooSmall, "Not enough space in bound transform feedback buffers.");
 ERRMSG(TransformFeedbackDoesNotExist, "Transform feedback object that does not exist.");
 ERRMSG(TypeMismatch,
        "Passed in texture target and format must match the one originally used to define the "

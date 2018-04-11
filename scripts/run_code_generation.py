@@ -156,6 +156,15 @@ generators = {
         ],
         'script': 'src/libANGLE/renderer/vulkan/gen_vk_mandatory_format_support_table.py',
     },
+    'Emulated HLSL functions': {
+        'inputs': [
+            'src/compiler/translator/emulated_builtin_function_data_hlsl.json'
+        ],
+        'outputs': [
+            'src/compiler/translator/emulated_builtin_functions_hlsl_autogen.cpp'
+        ],
+        'script': 'src/compiler/translator/gen_emulated_builtin_function_tables.py'
+    },
     'ESSL static builtins': {
         'inputs': [
             'src/compiler/translator/builtin_function_declarations.txt',
@@ -163,6 +172,7 @@ generators = {
         ],
         'outputs': [
             'src/compiler/translator/tree_util/BuiltIn_autogen.h',
+            'src/compiler/translator/builtin_symbols_hash_autogen.txt',
             'src/compiler/translator/ParseContext_autogen.h',
             'src/compiler/translator/SymbolTable_autogen.cpp',
             'src/compiler/translator/SymbolTable_autogen.h',

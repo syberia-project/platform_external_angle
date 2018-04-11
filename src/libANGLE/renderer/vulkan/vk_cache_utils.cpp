@@ -16,6 +16,7 @@
 #include "libANGLE/renderer/vulkan/ProgramVk.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "libANGLE/renderer/vulkan/vk_format_utils.h"
+#include "libANGLE/renderer/vulkan/vk_helpers.h"
 
 namespace rx
 {
@@ -81,6 +82,32 @@ uint8_t PackGLBlendFactor(GLenum blendFactor)
     }
 }
 
+uint8_t PackGLStencilOp(GLenum compareOp)
+{
+    switch (compareOp)
+    {
+        case GL_KEEP:
+            return VK_STENCIL_OP_KEEP;
+        case GL_ZERO:
+            return VK_STENCIL_OP_ZERO;
+        case GL_REPLACE:
+            return VK_STENCIL_OP_REPLACE;
+        case GL_INCR:
+            return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+        case GL_DECR:
+            return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+        case GL_INCR_WRAP:
+            return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+        case GL_DECR_WRAP:
+            return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+        case GL_INVERT:
+            return VK_STENCIL_OP_INVERT;
+        default:
+            UNREACHABLE();
+            return 0;
+    }
+}
+
 uint8_t PackGLCompareFunc(GLenum compareFunc)
 {
     switch (compareFunc)
@@ -107,36 +134,13 @@ uint8_t PackGLCompareFunc(GLenum compareFunc)
     }
 }
 
-VkSampleCountFlagBits ConvertSamples(GLint sampleCount)
-{
-    switch (sampleCount)
-    {
-        case 0:
-        case 1:
-            return VK_SAMPLE_COUNT_1_BIT;
-        case 2:
-            return VK_SAMPLE_COUNT_2_BIT;
-        case 4:
-            return VK_SAMPLE_COUNT_4_BIT;
-        case 8:
-            return VK_SAMPLE_COUNT_8_BIT;
-        case 16:
-            return VK_SAMPLE_COUNT_16_BIT;
-        case 32:
-            return VK_SAMPLE_COUNT_32_BIT;
-        default:
-            UNREACHABLE();
-            return VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
-    }
-}
-
 void UnpackAttachmentDesc(VkAttachmentDescription *desc,
                           const vk::PackedAttachmentDesc &packedDesc,
                           const vk::PackedAttachmentOpsDesc &ops)
 {
     desc->flags          = static_cast<VkAttachmentDescriptionFlags>(packedDesc.flags);
     desc->format         = static_cast<VkFormat>(packedDesc.format);
-    desc->samples        = ConvertSamples(packedDesc.samples);
+    desc->samples        = gl_vk::GetSamples(packedDesc.samples);
     desc->loadOp         = static_cast<VkAttachmentLoadOp>(ops.loadOp);
     desc->storeOp        = static_cast<VkAttachmentStoreOp>(ops.storeOp);
     desc->stencilLoadOp  = static_cast<VkAttachmentLoadOp>(ops.stencilLoadOp);
@@ -255,29 +259,30 @@ RenderPassDesc::RenderPassDesc(const RenderPassDesc &other)
     memcpy(this, &other, sizeof(RenderPassDesc));
 }
 
-void RenderPassDesc::packAttachment(uint32_t index, const vk::Format &format, GLsizei samples)
+void RenderPassDesc::packAttachment(uint32_t index, const ImageHelper &imageHelper)
 {
     PackedAttachmentDesc &desc = mAttachmentDescs[index];
 
     // TODO(jmadill): We would only need this flag for duplicated attachments.
     desc.flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
-    ASSERT(desc.samples < std::numeric_limits<uint8_t>::max());
-    desc.samples = static_cast<uint8_t>(samples);
+    ASSERT(imageHelper.getSamples() < std::numeric_limits<uint8_t>::max());
+    desc.samples         = static_cast<uint8_t>(imageHelper.getSamples());
+    const Format &format = imageHelper.getFormat();
     ASSERT(format.vkTextureFormat < std::numeric_limits<uint16_t>::max());
     desc.format = static_cast<uint16_t>(format.vkTextureFormat);
 }
 
-void RenderPassDesc::packColorAttachment(const vk::Format &format, GLsizei samples)
+void RenderPassDesc::packColorAttachment(const ImageHelper &imageHelper)
 {
     ASSERT(mDepthStencilAttachmentCount == 0);
     ASSERT(mColorAttachmentCount < gl::IMPLEMENTATION_MAX_DRAW_BUFFERS);
-    packAttachment(mColorAttachmentCount++, format, samples);
+    packAttachment(mColorAttachmentCount++, imageHelper);
 }
 
-void RenderPassDesc::packDepthStencilAttachment(const vk::Format &format, GLsizei samples)
+void RenderPassDesc::packDepthStencilAttachment(const ImageHelper &imageHelper)
 {
     ASSERT(mDepthStencilAttachmentCount == 0);
-    packAttachment(mColorAttachmentCount + mDepthStencilAttachmentCount++, format, samples);
+    packAttachment(mColorAttachmentCount + mDepthStencilAttachmentCount++, imageHelper);
 }
 
 RenderPassDesc &RenderPassDesc::operator=(const RenderPassDesc &other)
@@ -545,7 +550,7 @@ Error PipelineDesc::initializePipeline(VkDevice device,
     multisampleState.pNext = nullptr;
     multisampleState.flags = 0;
     multisampleState.rasterizationSamples =
-        ConvertSamples(mMultisampleStateInfo.rasterizationSamples);
+        gl_vk::GetSamples(mMultisampleStateInfo.rasterizationSamples);
     multisampleState.sampleShadingEnable =
         static_cast<VkBool32>(mMultisampleStateInfo.sampleShadingEnable);
     multisampleState.minSampleShading = mMultisampleStateInfo.minSampleShading;
@@ -720,6 +725,19 @@ void PipelineDesc::updateBlendFuncs(const gl::BlendState &blendState)
     }
 }
 
+void PipelineDesc::updateColorWriteMask(const gl::BlendState &blendState)
+{
+    for (auto &blendAttachmentState : mColorBlendStateInfo.attachments)
+    {
+        int colorMask = blendState.colorMaskRed ? VK_COLOR_COMPONENT_R_BIT : 0;
+        colorMask |= blendState.colorMaskGreen ? VK_COLOR_COMPONENT_G_BIT : 0;
+        colorMask |= blendState.colorMaskBlue ? VK_COLOR_COMPONENT_B_BIT : 0;
+        colorMask |= blendState.colorMaskAlpha ? VK_COLOR_COMPONENT_A_BIT : 0;
+
+        blendAttachmentState.colorWriteMask = static_cast<uint8_t>(colorMask);
+    }
+}
+
 void PipelineDesc::updateDepthTestEnabled(const gl::DepthStencilState &depthStencilState)
 {
     mDepthStencilStateInfo.depthTestEnable = static_cast<uint8_t>(depthStencilState.depthTest);
@@ -730,26 +748,81 @@ void PipelineDesc::updateDepthFunc(const gl::DepthStencilState &depthStencilStat
     mDepthStencilStateInfo.depthCompareOp = PackGLCompareFunc(depthStencilState.depthFunc);
 }
 
+void PipelineDesc::updateDepthWriteEnabled(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.depthWriteEnable = (depthStencilState.depthMask == GL_FALSE ? 0 : 1);
+}
+
+void PipelineDesc::updateStencilTestEnabled(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.stencilTestEnable = static_cast<uint8_t>(depthStencilState.stencilTest);
+}
+
+void PipelineDesc::updateStencilFrontFuncs(GLint ref,
+                                           const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.front.reference   = ref;
+    mDepthStencilStateInfo.front.compareOp   = PackGLCompareFunc(depthStencilState.stencilFunc);
+    mDepthStencilStateInfo.front.compareMask = static_cast<uint32_t>(depthStencilState.stencilMask);
+}
+
+void PipelineDesc::updateStencilBackFuncs(GLint ref, const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.back.reference = ref;
+    mDepthStencilStateInfo.back.compareOp = PackGLCompareFunc(depthStencilState.stencilBackFunc);
+    mDepthStencilStateInfo.back.compareMask =
+        static_cast<uint32_t>(depthStencilState.stencilBackMask);
+}
+
+void PipelineDesc::updateStencilFrontOps(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.front.passOp = PackGLStencilOp(depthStencilState.stencilPassDepthPass);
+    mDepthStencilStateInfo.front.failOp = PackGLStencilOp(depthStencilState.stencilFail);
+    mDepthStencilStateInfo.front.depthFailOp =
+        PackGLStencilOp(depthStencilState.stencilPassDepthFail);
+}
+
+void PipelineDesc::updateStencilBackOps(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.back.passOp =
+        PackGLStencilOp(depthStencilState.stencilBackPassDepthPass);
+    mDepthStencilStateInfo.back.failOp = PackGLStencilOp(depthStencilState.stencilBackFail);
+    mDepthStencilStateInfo.back.depthFailOp =
+        PackGLStencilOp(depthStencilState.stencilBackPassDepthFail);
+}
+
+void PipelineDesc::updateStencilFrontWriteMask(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.front.writeMask =
+        static_cast<uint32_t>(depthStencilState.stencilWritemask);
+}
+
+void PipelineDesc::updateStencilBackWriteMask(const gl::DepthStencilState &depthStencilState)
+{
+    mDepthStencilStateInfo.back.writeMask =
+        static_cast<uint32_t>(depthStencilState.stencilBackWritemask);
+}
+
 void PipelineDesc::updateRenderPassDesc(const RenderPassDesc &renderPassDesc)
 {
     mRenderPassDesc = renderPassDesc;
 }
 
-void PipelineDesc::updateScissor(const gl::Rectangle &rect)
+void PipelineDesc::updateScissor(const gl::Rectangle &rect, gl::Box framebufferDimensions)
 {
     gl::Rectangle intersection;
-    gl::Rectangle clipRect(static_cast<GLuint>(mViewport.x), static_cast<GLuint>(mViewport.y),
-                           static_cast<GLuint>(mViewport.width),
-                           static_cast<GLuint>(mViewport.height));
-    // Coordinates outside surface aren't valid in Vulkan but not error is returned, the scissor is
-    // just ignored.
+    gl::Rectangle clipRect(static_cast<GLuint>(0), static_cast<GLuint>(0),
+                           static_cast<GLuint>(framebufferDimensions.width),
+                           static_cast<GLuint>(framebufferDimensions.height));
+    // Coordinates outside the framebuffer aren't valid in Vulkan but not error is returned, the
+    // scissor is just ignored.
     if (ClipRectangle(rect, clipRect, &intersection))
     {
-        mScissor = ConvertGlRectToVkRect(intersection);
+        mScissor = gl_vk::GetRect(intersection);
     }
     else
     {
-        mScissor = ConvertGlRectToVkRect(rect);
+        mScissor = gl_vk::GetRect(rect);
     }
 }
 

@@ -11,6 +11,24 @@
 #include "common/mathutil.h"
 #include "common/utilities.h"
 
+namespace
+{
+
+angle::Mat4 FixedMatrixToMat4(const GLfixed *m)
+{
+    angle::Mat4 matrixAsFloat;
+    GLfloat *floatData = matrixAsFloat.data();
+
+    for (int i = 0; i < 16; i++)
+    {
+        floatData[i] = gl::FixedToFloat(m[i]);
+    }
+
+    return matrixAsFloat;
+}
+
+}  // namespace
+
 namespace gl
 {
 
@@ -36,7 +54,7 @@ void Context::clearDepthx(GLfixed depth)
 
 void Context::clientActiveTexture(GLenum texture)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setClientTextureUnit(texture - GL_TEXTURE0);
 }
 
 void Context::clipPlanef(GLenum p, const GLfloat *eqn)
@@ -51,17 +69,20 @@ void Context::clipPlanex(GLenum plane, const GLfixed *equation)
 
 void Context::color4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setCurrentColor({red, green, blue, alpha});
 }
 
 void Context::color4ub(GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setCurrentColor(
+        {normalizedToFloat<uint8_t>(red), normalizedToFloat<uint8_t>(green),
+         normalizedToFloat<uint8_t>(blue), normalizedToFloat<uint8_t>(alpha)});
 }
 
 void Context::color4x(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setCurrentColor(
+        {FixedToFloat(red), FixedToFloat(green), FixedToFloat(blue), FixedToFloat(alpha)});
 }
 
 void Context::colorPointer(GLint size, GLenum type, GLsizei stride, const void *ptr)
@@ -221,17 +242,17 @@ void Context::lineWidthx(GLfixed width)
 
 void Context::loadIdentity()
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().loadMatrix(angle::Mat4());
 }
 
 void Context::loadMatrixf(const GLfloat *m)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().loadMatrix(angle::Mat4(m));
 }
 
 void Context::loadMatrixx(const GLfixed *m)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().loadMatrix(FixedMatrixToMat4(m));
 }
 
 void Context::logicOp(GLenum opcode)
@@ -259,39 +280,44 @@ void Context::materialxv(GLenum face, GLenum pname, const GLfixed *param)
     UNIMPLEMENTED();
 }
 
-void Context::matrixMode(GLenum mode)
+void Context::matrixMode(MatrixType mode)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setMatrixMode(mode);
 }
 
 void Context::multMatrixf(const GLfloat *m)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4(m));
 }
 
 void Context::multMatrixx(const GLfixed *m)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(FixedMatrixToMat4(m));
 }
 
 void Context::multiTexCoord4f(GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q)
 {
-    UNIMPLEMENTED();
+    unsigned int unit = target - GL_TEXTURE0;
+    ASSERT(target >= GL_TEXTURE0 && unit < getCaps().maxMultitextureUnits);
+    mGLState.gles1().setCurrentTextureCoords(unit, {s, t, r, q});
 }
 
-void Context::multiTexCoord4x(GLenum texture, GLfixed s, GLfixed t, GLfixed r, GLfixed q)
+void Context::multiTexCoord4x(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q)
 {
-    UNIMPLEMENTED();
+    unsigned int unit = target - GL_TEXTURE0;
+    ASSERT(target >= GL_TEXTURE0 && unit < getCaps().maxMultitextureUnits);
+    mGLState.gles1().setCurrentTextureCoords(
+        unit, {FixedToFloat(s), FixedToFloat(t), FixedToFloat(r), FixedToFloat(q)});
 }
 
 void Context::normal3f(GLfloat nx, GLfloat ny, GLfloat nz)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setCurrentNormal({nx, ny, nz});
 }
 
 void Context::normal3x(GLfixed nx, GLfixed ny, GLfixed nz)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setCurrentNormal({FixedToFloat(nx), FixedToFloat(ny), FixedToFloat(nz)});
 }
 
 void Context::normalPointer(GLenum type, GLsizei stride, const void *ptr)
@@ -351,12 +377,12 @@ void Context::polygonOffsetx(GLfixed factor, GLfixed units)
 
 void Context::popMatrix()
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().popMatrix();
 }
 
 void Context::pushMatrix()
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().pushMatrix();
 }
 
 void Context::rotatef(float angle, float x, float y, float z)

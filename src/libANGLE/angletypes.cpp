@@ -311,7 +311,7 @@ unsigned long ComponentTypeMask::to_ulong() const
 
 void ComponentTypeMask::from_ulong(unsigned long mask)
 {
-    mTypeMask = mask;
+    mTypeMask = angle::BitSet<MAX_COMPONENT_TYPE_MASK_INDEX * 2>(mask);
 }
 
 bool ComponentTypeMask::Validate(unsigned long outputTypes,
@@ -340,6 +340,35 @@ bool ComponentTypeMask::Validate(unsigned long outputTypes,
     // 2. Remove any indexes that exist in output, but not in input (& outputMask)
     // 3. Use == to verify equality
     return (outputTypes & inputMask) == ((inputTypes & outputMask) & inputMask);
+}
+
+GLsizeiptr GetBoundBufferAvailableSize(const OffsetBindingPointer<Buffer> &binding)
+{
+    Buffer *buffer = binding.get();
+    if (buffer)
+    {
+        if (binding.getSize() == 0)
+            return static_cast<GLsizeiptr>(buffer->getSize());
+        angle::CheckedNumeric<GLintptr> offset       = binding.getOffset();
+        angle::CheckedNumeric<GLsizeiptr> size       = binding.getSize();
+        angle::CheckedNumeric<GLsizeiptr> bufferSize = buffer->getSize();
+        auto end                                     = offset + size;
+        auto clampedSize                             = size;
+        auto difference                              = end - bufferSize;
+        if (!difference.IsValid())
+        {
+            return 0;
+        }
+        if (difference.ValueOrDie() > 0)
+        {
+            clampedSize = size - difference;
+        }
+        return clampedSize.ValueOrDefault(0);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 }  // namespace gl

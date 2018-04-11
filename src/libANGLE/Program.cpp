@@ -1049,9 +1049,16 @@ Error Program::link(const gl::Context *context)
     double startTime = platform->currentTime(platform);
 
     unlink();
+    mInfoLog.reset();
+
+    // Validate we have properly attached shaders before checking the cache.
+    if (!linkValidateShaders(context, mInfoLog))
+    {
+        return NoError();
+    }
 
     ProgramHash programHash;
-    auto *cache = context->getMemoryProgramCache();
+    MemoryProgramCache *cache = context->getMemoryProgramCache();
     if (cache)
     {
         ANGLE_TRY_RESULT(cache->getProgram(context, this, &mState, &programHash), mLinked);
@@ -1068,12 +1075,9 @@ Error Program::link(const gl::Context *context)
 
     // Cache load failed, fall through to normal linking.
     unlink();
-    mInfoLog.reset();
 
-    if (!linkValidateShaders(context, mInfoLog))
-    {
-        return NoError();
-    }
+    // Re-link shaders after the unlink call.
+    ASSERT(linkValidateShaders(context, mInfoLog));
 
     if (mState.mAttachedComputeShader)
     {
@@ -1229,6 +1233,30 @@ void Program::updateLinkedShaderStages()
     }
 }
 
+void ProgramState::updateTransformFeedbackStrides()
+{
+    if (mTransformFeedbackBufferMode == GL_INTERLEAVED_ATTRIBS)
+    {
+        mTransformFeedbackStrides.resize(1);
+        size_t totalSize = 0;
+        for (auto &varying : mLinkedTransformFeedbackVaryings)
+        {
+            totalSize += varying.size() * VariableExternalSize(varying.type);
+        }
+        mTransformFeedbackStrides[0] = static_cast<GLsizei>(totalSize);
+    }
+    else
+    {
+        mTransformFeedbackStrides.resize(mLinkedTransformFeedbackVaryings.size());
+        for (size_t i = 0; i < mLinkedTransformFeedbackVaryings.size(); i++)
+        {
+            auto &varying = mLinkedTransformFeedbackVaryings[i];
+            mTransformFeedbackStrides[i] =
+                static_cast<GLsizei>(varying.size() * VariableExternalSize(varying.type));
+        }
+    }
+}
+
 // Returns the program object to an unlinked state, before re-linking, or at destruction
 void Program::unlink()
 {
@@ -1260,6 +1288,7 @@ void Program::unlink()
     mValidated = false;
 
     mLinked = false;
+    mInfoLog.reset();
 }
 
 bool Program::isLinked() const
@@ -2633,8 +2662,20 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
     const ContextState &data = context->getContextState();
     Shader *vertexShader     = mState.getAttachedShader(ShaderType::Vertex);
 
+    int shaderVersion = vertexShader->getShaderVersion(context);
+
     unsigned int usedLocations = 0;
-    mState.mAttributes         = vertexShader->getActiveAttributes(context);
+    if (shaderVersion >= 300)
+    {
+        // In GLSL ES 3.00.6, aliasing checks should be done with all declared attributes - see GLSL
+        // ES 3.00.6 section 12.46. Inactive attributes will be pruned after aliasing checks.
+        mState.mAttributes = vertexShader->getAllAttributes(context);
+    }
+    else
+    {
+        // In GLSL ES 1.00.17 we only do aliasing checks for active attributes.
+        mState.mAttributes = vertexShader->getActiveAttributes(context);
+    }
     GLuint maxAttribs          = data.getCaps().maxVertexAttributes;
 
     // TODO(jmadill): handle aliasing robustly
@@ -2646,7 +2687,7 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
 
     std::vector<sh::Attribute *> usedAttribMap(maxAttribs, nullptr);
 
-    // Link attributes that have a binding location
+    // Assign locations to attributes that have a binding location and check for attribute aliasing.
     for (sh::Attribute &attribute : mState.mAttributes)
     {
         // GLSL ES 3.10 January 2016 section 4.3.4: Vertex shader inputs can't be arrays or
@@ -2667,8 +2708,8 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
 
             if (static_cast<GLuint>(regs + attribute.location) > maxAttribs)
             {
-                infoLog << "Active attribute (" << attribute.name << ") at location "
-                        << attribute.location << " is too big to fit";
+                infoLog << "Attribute (" << attribute.name << ") at location " << attribute.location
+                        << " is too big to fit";
 
                 return false;
             }
@@ -2678,12 +2719,13 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
                 const int regLocation               = attribute.location + reg;
                 sh::ShaderVariable *linkedAttribute = usedAttribMap[regLocation];
 
-                // In GLSL 3.00, attribute aliasing produces a link error
-                // In GLSL 1.00, attribute aliasing is allowed, but ANGLE currently has a bug
+                // In GLSL ES 3.00.6 and in WebGL, attribute aliasing produces a link error.
+                // In non-WebGL GLSL ES 1.00.17, attribute aliasing is allowed with some
+                // restrictions - see GLSL ES 1.00.17 section 2.10.4, but ANGLE currently has a bug.
                 if (linkedAttribute)
                 {
                     // TODO(jmadill): fix aliasing on ES2
-                    // if (mProgram->getShaderVersion() >= 300)
+                    // if (shaderVersion >= 300 && !webgl)
                     {
                         infoLog << "Attribute '" << attribute.name << "' aliases attribute '"
                                 << linkedAttribute->name << "' at location " << regLocation;
@@ -2700,7 +2742,7 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
         }
     }
 
-    // Link attributes that don't have a binding location
+    // Assign locations to attributes that don't have a binding location.
     for (sh::Attribute &attribute : mState.mAttributes)
     {
         // Not set by glBindAttribLocation or by location layout qualifier
@@ -2711,7 +2753,7 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
 
             if (availableIndex == -1 || static_cast<GLuint>(availableIndex + regs) > maxAttribs)
             {
-                infoLog << "Too many active attributes (" << attribute.name << ")";
+                infoLog << "Too many attributes (" << attribute.name << ")";
                 return false;
             }
 
@@ -2722,8 +2764,27 @@ bool Program::linkAttributes(const Context *context, InfoLog &infoLog)
     ASSERT(mState.mAttributesTypeMask.none());
     ASSERT(mState.mAttributesMask.none());
 
+    // Prune inactive attributes. This step is only needed on shaderVersion >= 300 since on earlier
+    // shader versions we're only processing active attributes to begin with.
+    if (shaderVersion >= 300)
+    {
+        for (auto attributeIter = mState.mAttributes.begin();
+             attributeIter != mState.mAttributes.end();)
+        {
+            if (attributeIter->active)
+            {
+                ++attributeIter;
+            }
+            else
+            {
+                attributeIter = mState.mAttributes.erase(attributeIter);
+            }
+        }
+    }
+
     for (const sh::Attribute &attribute : mState.mAttributes)
     {
+        ASSERT(attribute.active);
         ASSERT(attribute.location != -1);
         unsigned int regs = static_cast<unsigned int>(VariableRegisterCount(attribute.type));
 
@@ -3229,6 +3290,7 @@ void Program::gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyi
             }
         }
     }
+    mState.updateTransformFeedbackStrides();
 }
 
 ProgramMergedVaryings Program::getMergedVaryings(const Context *context) const
