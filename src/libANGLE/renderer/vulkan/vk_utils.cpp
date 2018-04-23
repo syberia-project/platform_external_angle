@@ -1139,6 +1139,43 @@ void GarbageObject::destroy(VkDevice device)
 
 namespace gl_vk
 {
+
+VkFilter GetFilter(const GLenum filter)
+{
+    switch (filter)
+    {
+        case GL_LINEAR_MIPMAP_LINEAR:
+        case GL_LINEAR_MIPMAP_NEAREST:
+        case GL_LINEAR:
+            return VK_FILTER_LINEAR;
+        case GL_NEAREST_MIPMAP_LINEAR:
+        case GL_NEAREST_MIPMAP_NEAREST:
+        case GL_NEAREST:
+            return VK_FILTER_NEAREST;
+        default:
+            UNIMPLEMENTED();
+            return VK_FILTER_MAX_ENUM;
+    }
+}
+
+VkSamplerAddressMode GetSamplerAddressMode(const GLenum wrap)
+{
+    switch (wrap)
+    {
+        case GL_REPEAT:
+            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        case GL_MIRRORED_REPEAT:
+            return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        case GL_CLAMP_TO_BORDER:
+            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        case GL_CLAMP_TO_EDGE:
+            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        default:
+            UNIMPLEMENTED();
+            return VK_SAMPLER_ADDRESS_MODE_MAX_ENUM;
+    }
+}
+
 VkRect2D GetRect(const gl::Rectangle &source)
 {
     return {{source.x, source.y},
@@ -1277,6 +1314,36 @@ void GetExtent(const gl::Extents &glExtent, VkExtent3D *vkExtent)
     vkExtent->width  = glExtent.width;
     vkExtent->height = glExtent.height;
     vkExtent->depth  = glExtent.depth;
+}
+
+VkImageType GetImageType(gl::TextureType textureType)
+{
+    switch (textureType)
+    {
+        case gl::TextureType::_2D:
+            return VK_IMAGE_TYPE_2D;
+        case gl::TextureType::CubeMap:
+            return VK_IMAGE_TYPE_2D;
+        default:
+            // We will need to implement all the texture types for ES3+.
+            UNIMPLEMENTED();
+            return VK_IMAGE_TYPE_MAX_ENUM;
+    }
+}
+
+VkImageViewType GetImageViewType(gl::TextureType textureType)
+{
+    switch (textureType)
+    {
+        case gl::TextureType::_2D:
+            return VK_IMAGE_VIEW_TYPE_2D;
+        case gl::TextureType::CubeMap:
+            return VK_IMAGE_VIEW_TYPE_CUBE;
+        default:
+            // We will need to implement all the texture types for ES3+.
+            UNIMPLEMENTED();
+            return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    }
 }
 }  // namespace gl_vk
 }  // namespace rx

@@ -18,15 +18,16 @@
 namespace rx
 {
 
-class StagingStorage final : angle::NonCopyable
+class PixelBuffer final : angle::NonCopyable
 {
   public:
-    StagingStorage();
-    ~StagingStorage();
+    PixelBuffer();
+    ~PixelBuffer();
 
     void release(RendererVk *renderer);
 
     gl::Error stageSubresourceUpdate(ContextVk *contextVk,
+                                     const gl::ImageIndex &index,
                                      const gl::Extents &extents,
                                      const gl::InternalFormat &formatInfo,
                                      const gl::PixelUnpackState &unpack,
@@ -38,9 +39,18 @@ class StagingStorage final : angle::NonCopyable
                                   vk::CommandBuffer *commandBuffer);
 
   private:
+    struct SubresourceUpdate
+    {
+        SubresourceUpdate();
+        SubresourceUpdate(VkBuffer bufferHandle, const VkBufferImageCopy &copyRegion);
+        SubresourceUpdate(const SubresourceUpdate &other);
+
+        VkBuffer bufferHandle;
+        VkBufferImageCopy copyRegion;
+    };
+
     vk::DynamicBuffer mStagingBuffer;
-    VkBuffer mCurrentBufferHandle;
-    VkBufferImageCopy mCurrentCopyRegion;
+    std::vector<SubresourceUpdate> mSubresourceUpdates;
 };
 
 class TextureVk : public TextureImpl, public vk::CommandGraphResource
@@ -119,7 +129,8 @@ class TextureVk : public TextureImpl, public vk::CommandGraphResource
                                         const gl::ImageIndex &imageIndex,
                                         FramebufferAttachmentRenderTarget **rtOut) override;
 
-    void syncState(const gl::Texture::DirtyBits &dirtyBits) override;
+    gl::Error syncState(const gl::Context *context,
+                        const gl::Texture::DirtyBits &dirtyBits) override;
 
     gl::Error setStorageMultisample(const gl::Context *context,
                                     gl::TextureType type,
@@ -146,7 +157,7 @@ class TextureVk : public TextureImpl, public vk::CommandGraphResource
 
     RenderTargetVk mRenderTarget;
 
-    StagingStorage mStagingStorage;
+    PixelBuffer mPixelBuffer;
 };
 
 }  // namespace rx

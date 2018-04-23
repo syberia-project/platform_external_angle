@@ -633,8 +633,16 @@ gl::Error BlitGL::copySubTextureCPUReadback(const gl::Context *context,
                                             bool unpackPremultiplyAlpha,
                                             bool unpackUnmultiplyAlpha)
 {
+    ANGLE_TRY(initializeResources());
+
     ASSERT(source->getType() == gl::TextureType::_2D);
     const auto &destInternalFormatInfo = gl::GetInternalFormatInfo(destFormat, destType);
+
+    mStateManager->bindFramebuffer(GL_FRAMEBUFFER, mScratchFBO);
+    mFunctions->framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                     source->getTextureID(), static_cast<GLint>(sourceLevel));
+    GLenum status = mFunctions->checkFramebufferStatus(GL_FRAMEBUFFER);
+    ASSERT(status == GL_FRAMEBUFFER_COMPLETE);
 
     // Create a buffer for holding the source and destination memory
     const size_t sourcePixelSize = 4;
@@ -646,9 +654,6 @@ gl::Error BlitGL::copySubTextureCPUReadback(const gl::Context *context,
     uint8_t *sourceMemory = buffer->data();
     uint8_t *destMemory   = buffer->data() + sourceBufferSize;
 
-    mStateManager->bindFramebuffer(GL_FRAMEBUFFER, mScratchFBO);
-    mFunctions->framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                     source->getTextureID(), static_cast<GLint>(sourceLevel));
 
     GLenum readPixelsFormat        = GL_NONE;
     ColorReadFunction readFunction = nullptr;
@@ -689,6 +694,7 @@ gl::Error BlitGL::copySubTextureCPUReadback(const gl::Context *context,
     nativegl::TexSubImageFormat texSubImageFormat =
         nativegl::GetTexSubImageFormat(mFunctions, mWorkarounds, destFormat, destType);
 
+    mStateManager->bindTexture(dest->getType(), dest->getTextureID());
     mFunctions->texSubImage2D(ToGLenum(destTarget), static_cast<GLint>(destLevel), destOffset.x,
                               destOffset.y, sourceArea.width, sourceArea.height,
                               texSubImageFormat.format, texSubImageFormat.type, destMemory);
@@ -744,8 +750,8 @@ gl::ErrorOrResult<bool> BlitGL::clearRenderableTexture(TextureGL *source,
         for (GLenum bindTarget : bindTargets)
         {
             mFunctions->framebufferTexture2D(GL_FRAMEBUFFER, bindTarget,
-                                             ToGLenum(imageIndex.target), source->getTextureID(),
-                                             imageIndex.mipIndex);
+                                             ToGLenum(imageIndex.getTarget()),
+                                             source->getTextureID(), imageIndex.getLevelIndex());
         }
 
         GLenum status = mFunctions->checkFramebufferStatus(GL_FRAMEBUFFER);
@@ -769,7 +775,7 @@ gl::ErrorOrResult<bool> BlitGL::clearRenderableTexture(TextureGL *source,
             for (GLenum bindTarget : bindTargets)
             {
                 mFunctions->framebufferTexture(GL_FRAMEBUFFER, bindTarget, source->getTextureID(),
-                                               imageIndex.mipIndex);
+                                               imageIndex.getLevelIndex());
             }
 
             GLenum status = mFunctions->checkFramebufferStatus(GL_FRAMEBUFFER);
@@ -789,17 +795,17 @@ gl::ErrorOrResult<bool> BlitGL::clearRenderableTexture(TextureGL *source,
             GLint layerCount = numTextureLayers;
             if (imageIndex.hasLayer())
             {
-                firstLayer = imageIndex.layerIndex;
-                layerCount = imageIndex.numLayers;
+                firstLayer = imageIndex.getLayerIndex();
+                layerCount = imageIndex.getLayerCount();
             }
 
             for (GLint layer = 0; layer < layerCount; layer++)
             {
                 for (GLenum bindTarget : bindTargets)
                 {
-                    mFunctions->framebufferTextureLayer(GL_FRAMEBUFFER, bindTarget,
-                                                        source->getTextureID(), imageIndex.mipIndex,
-                                                        layer + firstLayer);
+                    mFunctions->framebufferTextureLayer(
+                        GL_FRAMEBUFFER, bindTarget, source->getTextureID(),
+                        imageIndex.getLevelIndex(), layer + firstLayer);
                 }
 
                 GLenum status = mFunctions->checkFramebufferStatus(GL_FRAMEBUFFER);

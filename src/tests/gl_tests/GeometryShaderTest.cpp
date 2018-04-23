@@ -45,22 +45,6 @@ class GeometryShaderTest : public ANGLETest
                    "}";
         return ostream.str();
     }
-
-    const std::string kDefaultVertexShader =
-        R"(#version 310 es
-        void main()
-        {
-            gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
-        })";
-
-    const std::string kDefaultFragmentShader =
-        R"(#version 310 es
-        precision mediump float;
-        layout (location = 0) out vec4 frag_out;
-        void main()
-        {
-            frag_out = vec4(1.0, 0.0, 0.0, 1.0);
-        })";
 };
 
 class GeometryShaderTestES3 : public ANGLETest
@@ -174,12 +158,12 @@ TEST_P(GeometryShaderTest, CombinedResourceLimits)
 }
 
 // Verify that linking a program with an uncompiled geometry shader causes a link failure.
-TEST_P(GeometryShaderTest, LinkWithUncompiledGeoemtryShader)
+TEST_P(GeometryShaderTest, LinkWithUncompiledGeometryShader)
 {
     ANGLE_SKIP_TEST_IF(!extensionEnabled("GL_EXT_geometry_shader"));
 
-    GLuint vertexShader   = CompileShader(GL_VERTEX_SHADER, kDefaultVertexShader);
-    GLuint fragmentShader = CompileShader(GL_FRAGMENT_SHADER, kDefaultFragmentShader);
+    GLuint vertexShader   = CompileShader(GL_VERTEX_SHADER, essl31_shaders::vs::Simple());
+    GLuint fragmentShader = CompileShader(GL_FRAGMENT_SHADER, essl31_shaders::fs::Red());
     ASSERT_NE(0u, vertexShader);
     ASSERT_NE(0u, fragmentShader);
 
@@ -209,26 +193,10 @@ TEST_P(GeometryShaderTest, LinkWhenShaderVersionMismatch)
 {
     ANGLE_SKIP_TEST_IF(!extensionEnabled("GL_EXT_geometry_shader"));
 
-    const std::string &kDefaultVertexShaderVersion300 =
-        R"(#version 300 es
-        void main()
-        {
-            gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
-        })";
-
-    const std::string kDefaultFragmentShaderVersion300 =
-        R"(#version 300 es
-        precision mediump float;
-        layout (location = 0) out vec4 frag_out;
-        void main()
-        {
-            frag_out = vec4(1.0, 0.0, 0.0, 1.0);
-        })";
-
     const std::string &emptyGeometryShader = CreateEmptyGeometryShader("points", "points", 2, 1);
 
-    GLuint program = CompileProgramWithGS(kDefaultVertexShaderVersion300, emptyGeometryShader,
-                                          kDefaultFragmentShaderVersion300);
+    GLuint program = CompileProgramWithGS(essl3_shaders::vs::Simple(), emptyGeometryShader,
+                                          essl3_shaders::fs::Red());
     EXPECT_EQ(0u, program);
 }
 
@@ -245,24 +213,24 @@ TEST_P(GeometryShaderTest, LinkValidationOnGeometryShaderLayouts)
 
     // Linking a program with a geometry shader that only lacks 'invocations' should not cause a
     // link failure.
-    GLuint program =
-        CompileProgramWithGS(kDefaultVertexShader, gsWithoutInvocations, kDefaultFragmentShader);
+    GLuint program = CompileProgramWithGS(essl31_shaders::vs::Simple(), gsWithoutInvocations,
+                                          essl31_shaders::fs::Red());
     EXPECT_NE(0u, program);
 
     glDeleteProgram(program);
 
     // Linking a program with a geometry shader that lacks input primitive, output primitive or
     // 'max_vertices' causes a link failure.
-    program =
-        CompileProgramWithGS(kDefaultVertexShader, gsWithoutInputPrimitive, kDefaultFragmentShader);
+    program = CompileProgramWithGS(essl31_shaders::vs::Simple(), gsWithoutInputPrimitive,
+                                   essl31_shaders::fs::Red());
     EXPECT_EQ(0u, program);
 
-    program = CompileProgramWithGS(kDefaultVertexShader, gsWithoutOutputPrimitive,
-                                   kDefaultFragmentShader);
+    program = CompileProgramWithGS(essl31_shaders::vs::Simple(), gsWithoutOutputPrimitive,
+                                   essl31_shaders::fs::Red());
     EXPECT_EQ(0u, program);
 
-    program =
-        CompileProgramWithGS(kDefaultVertexShader, gsWithoutMaxVertices, kDefaultFragmentShader);
+    program = CompileProgramWithGS(essl31_shaders::vs::Simple(), gsWithoutMaxVertices,
+                                   essl31_shaders::fs::Red());
     EXPECT_EQ(0u, program);
 
     ASSERT_GL_NO_ERROR();
@@ -398,7 +366,7 @@ TEST_P(GeometryShaderTest, TooManyUniformBlocks)
               "}\n";
 
     GLuint program =
-        CompileProgramWithGS(kDefaultVertexShader, stream.str(), kDefaultFragmentShader);
+        CompileProgramWithGS(essl31_shaders::vs::Simple(), stream.str(), essl31_shaders::fs::Red());
     EXPECT_EQ(0u, program);
 
     EXPECT_GL_NO_ERROR();
@@ -437,7 +405,105 @@ TEST_P(GeometryShaderTest, TooManyShaderStorageBlocks)
               "}\n";
 
     GLuint program =
-        CompileProgramWithGS(kDefaultVertexShader, stream.str(), kDefaultFragmentShader);
+        CompileProgramWithGS(essl31_shaders::vs::Simple(), stream.str(), essl31_shaders::fs::Red());
+    EXPECT_EQ(0u, program);
+
+    EXPECT_GL_NO_ERROR();
+}
+
+// Verify that an link error occurs when the definition of a unform block in the vertex shader is
+// different from that in a geometry shader.
+TEST_P(GeometryShaderTest, UniformBlockMismatchBetweenVertexAndGeometryShader)
+{
+    ANGLE_SKIP_TEST_IF(!extensionEnabled("GL_EXT_geometry_shader"));
+
+    const std::string &vertexShader =
+        R"(#version 310 es
+        uniform ubo
+        {
+            vec4 uniform_value_vert;
+        } block0;
+        in vec4 vertex_in;
+        out vec4 vertex_out;
+        void main()
+        {
+            gl_Position = vertex_in;
+            vertex_out = block0.uniform_value_vert;
+        })";
+
+    const std::string &geometryShader =
+        R"(#version 310 es
+        #extension GL_EXT_geometry_shader : require
+        uniform ubo
+        {
+            vec4 uniform_value_geom;
+        } block0;
+        layout (triangles) in;
+        layout (points, max_vertices = 1) out;
+        in vec4 vertex_out[];
+        void main()
+        {
+            gl_Position = gl_in[0].gl_Position + vertex_out[0];
+            gl_Position += block0.uniform_value_geom;
+            EmitVertex();
+        })";
+
+    GLuint program = CompileProgramWithGS(vertexShader, geometryShader, essl31_shaders::fs::Red());
+    EXPECT_EQ(0u, program);
+
+    EXPECT_GL_NO_ERROR();
+}
+
+// Verify that an link error occurs when the definition of a shader storage block in the geometry
+// shader is different from that in a fragment shader.
+TEST_P(GeometryShaderTest, ShaderStorageBlockMismatchBetweenGeometryAndFragmentShader)
+{
+    ANGLE_SKIP_TEST_IF(!extensionEnabled("GL_EXT_geometry_shader"));
+
+    GLint maxGeometryShaderStorageBlocks = 0;
+    glGetIntegerv(GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS_EXT, &maxGeometryShaderStorageBlocks);
+
+    // The minimun value of MAX_GEOMETRY_SHADER_STORAGE_BLOCKS_EXT can be 0.
+    // [EXT_geometry_shader] Table 20.43gs
+    ANGLE_SKIP_TEST_IF(maxGeometryShaderStorageBlocks == 0);
+
+    GLint maxFragmentShaderStorageBlocks = 0;
+    glGetIntegerv(GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS, &maxFragmentShaderStorageBlocks);
+
+    // The minimun value of MAX_FRAGMENT_SHADER_STORAGE_BLOCKS can be 0.
+    // [OpenGL ES 3.1] Table 20.44
+    ANGLE_SKIP_TEST_IF(maxFragmentShaderStorageBlocks == 0);
+
+    const std::string &geometryShader =
+        R"(#version 310 es
+        #extension GL_EXT_geometry_shader : require
+        buffer ssbo
+        {
+            vec4 ssbo_value;
+        } block0;
+        layout (triangles) in;
+        layout (points, max_vertices = 1) out;
+        void main()
+        {
+            gl_Position = gl_in[0].gl_Position + block0.ssbo_value;
+            EmitVertex();
+        })";
+
+    const std::string &fragmentShader =
+        R"(#version 310 es
+        precision highp float;
+        buffer ssbo
+        {
+            vec3 ssbo_value;
+        } block0;
+        layout (location = 0) out vec4 output_color;
+        void main()
+        {
+            output_color = vec4(block0.ssbo_value, 1);
+        })";
+
+    GLuint program =
+        CompileProgramWithGS(essl31_shaders::vs::Simple(), geometryShader, fragmentShader);
     EXPECT_EQ(0u, program);
 
     EXPECT_GL_NO_ERROR();

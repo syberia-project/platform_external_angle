@@ -6,12 +6,14 @@
 // found in the LICENSE file.
 //
 // PackedGLEnums_autogen.h:
-//   Declares ANGLE-specific enums classes for GLEnum and functions operating
+//   Declares ANGLE-specific enums classes for GLenums and functions operating
 //   on them.
 
 #ifndef LIBANGLE_PACKEDGLENUMS_AUTOGEN_H_
 #define LIBANGLE_PACKEDGLENUMS_AUTOGEN_H_
 
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <angle_gl.h>
 
 #include <cstdint>
@@ -83,6 +85,22 @@ enum class BufferUsage : uint8_t
 template <>
 BufferUsage FromGLenum<BufferUsage>(GLenum from);
 GLenum ToGLenum(BufferUsage from);
+
+enum class ClientVertexArrayType : uint8_t
+{
+    Color        = 0,
+    Normal       = 1,
+    PointSize    = 2,
+    TextureCoord = 3,
+    Vertex       = 4,
+
+    InvalidEnum = 5,
+    EnumCount   = 5,
+};
+
+template <>
+ClientVertexArrayType FromGLenum<ClientVertexArrayType>(GLenum from);
+GLenum ToGLenum(ClientVertexArrayType from);
 
 enum class CullFaceMode : uint8_t
 {

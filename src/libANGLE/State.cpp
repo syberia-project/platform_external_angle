@@ -23,6 +23,7 @@
 #include "libANGLE/VertexArray.h"
 #include "libANGLE/formatutils.h"
 #include "libANGLE/queryconversions.h"
+#include "libANGLE/queryutils.h"
 #include "libANGLE/renderer/ContextImpl.h"
 
 namespace
@@ -827,6 +828,16 @@ bool State::getEnableFeature(GLenum feature) const
         // GLES1 emulation
         case GL_ALPHA_TEST:
             return mGLES1State.mAlphaTestEnabled;
+        case GL_VERTEX_ARRAY:
+            return mGLES1State.mVertexArrayEnabled;
+        case GL_NORMAL_ARRAY:
+            return mGLES1State.mNormalArrayEnabled;
+        case GL_COLOR_ARRAY:
+            return mGLES1State.mColorArrayEnabled;
+        case GL_POINT_SIZE_ARRAY_OES:
+            return mGLES1State.mPointSizeArrayEnabled;
+        case GL_TEXTURE_COORD_ARRAY:
+            return mGLES1State.mTexCoordArrayEnabled[mGLES1State.mClientActiveTexture];
 
         default:
             UNREACHABLE();
@@ -2138,12 +2149,9 @@ Error State::getIntegerv(const Context *context, GLenum pname, GLint *params)
         case GL_SAMPLES:
         {
             Framebuffer *framebuffer = mDrawFramebuffer;
-            bool complete            = false;
-            ANGLE_TRY(framebuffer->isComplete(context, &complete));
-            if (complete)
+            if (framebuffer->isComplete(context))
             {
-                GLint samples = 0;
-                ANGLE_TRY(framebuffer->getSamples(context, &samples));
+                GLint samples = framebuffer->getSamples(context);
                 switch (pname)
                 {
                     case GL_SAMPLE_BUFFERS:
@@ -2354,7 +2362,7 @@ Error State::getIntegerv(const Context *context, GLenum pname, GLint *params)
     return NoError();
 }
 
-void State::getPointerv(GLenum pname, void **params) const
+void State::getPointerv(const Context *context, GLenum pname, void **params) const
 {
     switch (pname)
     {
@@ -2364,6 +2372,15 @@ void State::getPointerv(GLenum pname, void **params) const
         case GL_DEBUG_CALLBACK_USER_PARAM:
             *params = const_cast<void *>(mDebug.getUserParam());
             break;
+        case GL_VERTEX_ARRAY_POINTER:
+        case GL_NORMAL_ARRAY_POINTER:
+        case GL_COLOR_ARRAY_POINTER:
+        case GL_TEXTURE_COORD_ARRAY_POINTER:
+        case GL_POINT_SIZE_ARRAY_POINTER_OES:
+            QueryVertexAttribPointerv(getVertexArray()->getVertexAttribute(
+                                          context->vertexArrayIndex(ParamToVertexArrayType(pname))),
+                                      GL_VERTEX_ATTRIB_ARRAY_POINTER, params);
+            return;
         default:
             UNREACHABLE();
             break;
@@ -2546,7 +2563,7 @@ Error State::syncDirtyObjects(const Context *context, const DirtyObjects &bitset
                 ANGLE_TRY(mVertexArray->syncState(context));
                 break;
             case DIRTY_OBJECT_PROGRAM_TEXTURES:
-                syncProgramTextures(context);
+                ANGLE_TRY(syncProgramTextures(context));
                 break;
 
             default:
@@ -2559,12 +2576,12 @@ Error State::syncDirtyObjects(const Context *context, const DirtyObjects &bitset
     return NoError();
 }
 
-void State::syncProgramTextures(const Context *context)
+Error State::syncProgramTextures(const Context *context)
 {
     // TODO(jmadill): Fine-grained updates.
     if (!mProgram)
     {
-        return;
+        return NoError();
     }
 
     ASSERT(mDirtyObjects[DIRTY_OBJECT_PROGRAM_TEXTURES]);
@@ -2596,7 +2613,7 @@ void State::syncProgramTextures(const Context *context)
             if (texture->isSamplerComplete(context, sampler) &&
                 !mDrawFramebuffer->hasTextureAttachment(texture))
             {
-                texture->syncState();
+                ANGLE_TRY(texture->syncState(context));
                 mCompleteTextureCache[textureUnitIndex] = texture;
             }
             else
@@ -2632,6 +2649,8 @@ void State::syncProgramTextures(const Context *context)
             mActiveTexturesMask.reset(textureIndex);
         }
     }
+
+    return NoError();
 }
 
 Error State::syncDirtyObject(const Context *context, GLenum target)

@@ -226,7 +226,8 @@ Extensions::Extensions()
       robustResourceInitialization(false),
       programCacheControl(false),
       textureRectangle(false),
-      geometryShader(false)
+      geometryShader(false),
+      pointSizeArray(false)
 {
 }
 
@@ -641,7 +642,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_EXT_sRGB"] = enableableExtension(&Extensions::sRGB);
         map["GL_ANGLE_depth_texture"] = esOnlyExtension(&Extensions::depthTextures);
         map["GL_OES_depth32"] = esOnlyExtension(&Extensions::depth32);
-        map["GL_EXT_texture_storage"] = esOnlyExtension(&Extensions::textureStorage);
+        map["GL_EXT_texture_storage"] = enableableExtension(&Extensions::textureStorage);
         map["GL_OES_texture_npot"] = enableableExtension(&Extensions::textureNPOT);
         map["GL_EXT_draw_buffers"] = enableableExtension(&Extensions::drawBuffers);
         map["GL_EXT_texture_filter_anisotropic"] = enableableExtension(&Extensions::textureFilterAnisotropic);
@@ -664,14 +665,14 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_OES_fbo_render_mipmap"] = enableableExtension(&Extensions::fboRenderMipmap);
         map["GL_EXT_discard_framebuffer"] = esOnlyExtension(&Extensions::discardFramebuffer);
         map["GL_EXT_debug_marker"] = esOnlyExtension(&Extensions::debugMarker);
-        map["GL_OES_EGL_image"] = esOnlyExtension(&Extensions::eglImage);
-        map["GL_OES_EGL_image_external"] = esOnlyExtension(&Extensions::eglImageExternal);
-        map["GL_OES_EGL_image_external_essl3"] = esOnlyExtension(&Extensions::eglImageExternalEssl3);
-        map["GL_NV_EGL_stream_consumer_external"] = esOnlyExtension(&Extensions::eglStreamConsumerExternal);
+        map["GL_OES_EGL_image"] = enableableExtension(&Extensions::eglImage);
+        map["GL_OES_EGL_image_external"] = enableableExtension(&Extensions::eglImageExternal);
+        map["GL_OES_EGL_image_external_essl3"] = enableableExtension(&Extensions::eglImageExternalEssl3);
+        map["GL_NV_EGL_stream_consumer_external"] = enableableExtension(&Extensions::eglStreamConsumerExternal);
         map["GL_EXT_unpack_subimage"] = enableableExtension(&Extensions::unpackSubimage);
         map["GL_NV_pack_subimage"] = enableableExtension(&Extensions::packSubimage);
         map["GL_EXT_color_buffer_float"] = enableableExtension(&Extensions::colorBufferFloat);
-        map["GL_OES_vertex_array_object"] = esOnlyExtension(&Extensions::vertexArrayObject);
+        map["GL_OES_vertex_array_object"] = enableableExtension(&Extensions::vertexArrayObject);
         map["GL_KHR_debug"] = esOnlyExtension(&Extensions::debug);
         // TODO(jmadill): Enable this when complete.
         //map["GL_KHR_no_error"] = esOnlyExtension(&Extensions::noError);
@@ -698,6 +699,8 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_ANGLE_program_cache_control"] = esOnlyExtension(&Extensions::programCacheControl);
         map["GL_ANGLE_texture_rectangle"] = enableableExtension(&Extensions::textureRectangle);
         map["GL_EXT_geometry_shader"] = enableableExtension(&Extensions::geometryShader);
+        // GLES1 extensinos
+        map["GL_OES_point_size_array"] = enableableExtension(&Extensions::pointSizeArray);
         // clang-format on
 
         return map;

@@ -794,7 +794,14 @@ bool ValidCap(const Context *context, GLenum cap, bool queryOnly)
 
         // GLES1 emulation: GLES1-specific caps
         case GL_ALPHA_TEST:
+        case GL_VERTEX_ARRAY:
+        case GL_NORMAL_ARRAY:
+        case GL_COLOR_ARRAY:
+        case GL_TEXTURE_COORD_ARRAY:
             return context->getClientVersion() < Version(2, 0);
+        case GL_POINT_SIZE_ARRAY_OES:
+            return context->getClientVersion() < Version(2, 0) &&
+                   context->getExtensions().pointSizeArray;
 
         default:
             return false;
@@ -2473,7 +2480,7 @@ bool ValidateBlitFramebufferANGLE(Context *context,
         if (readColorAttachment && drawColorAttachment)
         {
             if (!(readColorAttachment->type() == GL_TEXTURE &&
-                  readColorAttachment->getTextureImageIndex().type == TextureType::_2D) &&
+                  readColorAttachment->getTextureImageIndex().getType() == TextureType::_2D) &&
                 readColorAttachment->type() != GL_RENDERBUFFER &&
                 readColorAttachment->type() != GL_FRAMEBUFFER_DEFAULT)
             {
@@ -2489,7 +2496,7 @@ bool ValidateBlitFramebufferANGLE(Context *context,
                 if (attachment)
                 {
                     if (!(attachment->type() == GL_TEXTURE &&
-                          attachment->getTextureImageIndex().type == TextureType::_2D) &&
+                          attachment->getTextureImageIndex().getType() == TextureType::_2D) &&
                         attachment->type() != GL_RENDERBUFFER &&
                         attachment->type() != GL_FRAMEBUFFER_DEFAULT)
                     {
@@ -2507,8 +2514,7 @@ bool ValidateBlitFramebufferANGLE(Context *context,
                 }
             }
 
-            GLint samples = 0;
-            ANGLE_VALIDATION_TRY(readFramebuffer->getSamples(context, &samples));
+            GLint samples = readFramebuffer->getSamples(context);
             if (samples != 0 &&
                 IsPartialBlit(context, readColorAttachment, drawColorAttachment, srcX0, srcY0,
                               srcX1, srcY1, dstX0, dstY0, dstX1, dstY1))
@@ -2559,7 +2565,7 @@ bool ValidateClear(Context *context, GLbitfield mask)
 {
     Framebuffer *fbo = context->getGLState().getDrawFramebuffer();
 
-    if (!ValidateFramebufferComplete(context, fbo, true))
+    if (!ValidateFramebufferComplete(context, fbo))
     {
         return false;
     }
@@ -2623,17 +2629,17 @@ bool ValidateTexImage2D(Context *context,
                                            pixels);
 }
 
-bool ValidateTexImage2DRobust(Context *context,
-                              TextureTarget target,
-                              GLint level,
-                              GLint internalformat,
-                              GLsizei width,
-                              GLsizei height,
-                              GLint border,
-                              GLenum format,
-                              GLenum type,
-                              GLsizei bufSize,
-                              const void *pixels)
+bool ValidateTexImage2DRobustANGLE(Context *context,
+                                   TextureTarget target,
+                                   GLint level,
+                                   GLint internalformat,
+                                   GLsizei width,
+                                   GLsizei height,
+                                   GLint border,
+                                   GLenum format,
+                                   GLenum type,
+                                   GLsizei bufSize,
+                                   const void *pixels)
 {
     if (!ValidateRobustEntryPoint(context, bufSize))
     {
@@ -6133,10 +6139,10 @@ bool ValidateGenerateMipmap(Context *context, TextureType target)
     }
 
     // ES3 and WebGL grant mipmap generation for sRGBA (with alpha) textures but GL_EXT_sRGB does
-    // not.
-    bool supportsSRGBMipmapGeneration =
-        context->getClientVersion() >= ES_3_0 || context->getExtensions().webglCompatibility;
-    if (!supportsSRGBMipmapGeneration && format.colorEncoding == GL_SRGB)
+    // not.  Differentiate the ES3 format from the extension format by checking if the format is
+    // sized, GL_EXT_sRGB does not add any sized formats.
+    bool supportsSRGBMipmapGeneration = context->getExtensions().webglCompatibility;
+    if (!supportsSRGBMipmapGeneration && !format.sized && format.colorEncoding == GL_SRGB)
     {
         ANGLE_VALIDATION_ERR(context, InvalidOperation(), GenerateMipmapNotAllowed);
         return false;

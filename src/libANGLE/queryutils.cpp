@@ -1688,6 +1688,49 @@ void QueryProgramInterfaceiv(const Program *program,
     }
 }
 
+ClientVertexArrayType ParamToVertexArrayType(GLenum param)
+{
+    switch (param)
+    {
+        case GL_VERTEX_ARRAY:
+        case GL_VERTEX_ARRAY_BUFFER_BINDING:
+        case GL_VERTEX_ARRAY_STRIDE:
+        case GL_VERTEX_ARRAY_SIZE:
+        case GL_VERTEX_ARRAY_TYPE:
+        case GL_VERTEX_ARRAY_POINTER:
+            return ClientVertexArrayType::Vertex;
+        case GL_NORMAL_ARRAY:
+        case GL_NORMAL_ARRAY_BUFFER_BINDING:
+        case GL_NORMAL_ARRAY_STRIDE:
+        case GL_NORMAL_ARRAY_TYPE:
+        case GL_NORMAL_ARRAY_POINTER:
+            return ClientVertexArrayType::Normal;
+        case GL_COLOR_ARRAY:
+        case GL_COLOR_ARRAY_BUFFER_BINDING:
+        case GL_COLOR_ARRAY_STRIDE:
+        case GL_COLOR_ARRAY_SIZE:
+        case GL_COLOR_ARRAY_TYPE:
+        case GL_COLOR_ARRAY_POINTER:
+            return ClientVertexArrayType::Color;
+        case GL_POINT_SIZE_ARRAY_OES:
+        case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_OES:
+        case GL_POINT_SIZE_ARRAY_STRIDE_OES:
+        case GL_POINT_SIZE_ARRAY_TYPE_OES:
+        case GL_POINT_SIZE_ARRAY_POINTER_OES:
+            return ClientVertexArrayType::PointSize;
+        case GL_TEXTURE_COORD_ARRAY:
+        case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING:
+        case GL_TEXTURE_COORD_ARRAY_STRIDE:
+        case GL_TEXTURE_COORD_ARRAY_SIZE:
+        case GL_TEXTURE_COORD_ARRAY_TYPE:
+        case GL_TEXTURE_COORD_ARRAY_POINTER:
+            return ClientVertexArrayType::TextureCoord;
+        default:
+            UNREACHABLE();
+            return ClientVertexArrayType::InvalidEnum;
+    }
+}
+
 }  // namespace gl
 
 namespace egl
@@ -1894,7 +1937,7 @@ void QuerySurfaceAttrib(const Surface *surface, EGLint attribute, EGLint *value)
             // The EGL spec states that value is not written if the surface is not a pbuffer
             if (surface->getType() == EGL_PBUFFER_BIT)
             {
-                *value = surface->getTextureFormat();
+                *value = ToEGLenum(surface->getTextureFormat());
             }
             break;
         case EGL_TEXTURE_TARGET:

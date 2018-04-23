@@ -22,7 +22,7 @@
 #include "libANGLE/Context_gles_1_0_autogen.h"
 #include "libANGLE/Error.h"
 #include "libANGLE/HandleAllocator.h"
-#include "libANGLE/PackedGLEnums.h"
+#include "libANGLE/PackedEnums.h"
 #include "libANGLE/RefCountObject.h"
 #include "libANGLE/ResourceMap.h"
 #include "libANGLE/VertexAttribute.h"
@@ -1374,11 +1374,11 @@ class Context final : angle::NonCopyable
     void memoryBarrierByRegion(GLbitfield barriers);
 
     // Consumes the error.
-    void handleError(const Error &error);
+    void handleError(const Error &error) const;
 
     GLenum getError();
-    void markContextLost();
-    bool isContextLost();
+    void markContextLost() const;
+    bool isContextLost() const;
     GLenum getGraphicsResetStatus();
     bool isResetNotificationEnabled();
 
@@ -1457,6 +1457,9 @@ class Context final : angle::NonCopyable
 
     bool isValidBufferBinding(BufferBinding binding) const { return mValidBufferBindings[binding]; }
 
+    // GLES1 emulation: Renderer level (for validation)
+    int vertexArrayIndex(ClientVertexArrayType type) const;
+
   private:
     Error prepareForDraw();
     Error prepareForClear(GLbitfield mask);
@@ -1487,6 +1490,8 @@ class Context final : angle::NonCopyable
     void initVersionStrings();
     void initExtensionStrings();
 
+    Extensions generateSupportedExtensions(const egl::DisplayExtensions &displayExtensions,
+                                           bool robustResourceInit) const;
     void initCaps(const egl::DisplayExtensions &displayExtensions, bool robustResourceInit);
     void updateCaps();
     void initWorkarounds();
@@ -1513,6 +1518,10 @@ class Context final : angle::NonCopyable
     TextureCapsMap mTextureCaps;
     Extensions mExtensions;
     Limitations mLimitations;
+
+    // Extensions supported by the implementation plus extensions that are implemented entirely
+    // within the frontend.
+    Extensions mSupportedExtensions;
 
     // Shader compiler. Lazily initialized hence the mutable value.
     mutable BindingPointer<Compiler> mCompiler;
@@ -1546,13 +1555,13 @@ class Context final : angle::NonCopyable
 
     // Recorded errors
     typedef std::set<GLenum> ErrorSet;
-    ErrorSet mErrors;
+    mutable ErrorSet mErrors;
 
     // Current/lost context flags
     bool mHasBeenCurrent;
-    bool mContextLost;
-    GLenum mResetStatus;
-    bool mContextLostForced;
+    mutable bool mContextLost;
+    mutable GLenum mResetStatus;
+    mutable bool mContextLostForced;
     GLenum mResetStrategy;
     bool mRobustAccess;
     egl::Surface *mCurrentSurface;

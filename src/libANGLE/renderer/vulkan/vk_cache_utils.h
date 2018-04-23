@@ -269,6 +269,7 @@ class PipelineDesc final
                              Pipeline *pipelineOut) const;
 
     void updateViewport(const gl::Rectangle &viewport, float nearPlane, float farPlane);
+    void updateDepthRange(float nearPlane, float farPlane);
 
     // Shader stage info
     const ShaderStageInfo &getShaderStageInfo() const;
@@ -292,7 +293,7 @@ class PipelineDesc final
 
     // Scissor support
     const VkRect2D &getScissor() const { return mScissor; }
-    void updateScissor(const gl::Rectangle &rect, gl::Box surfaceDimensions);
+    void updateScissor(const gl::Rectangle &rect);
 
     // Blend states
     void updateBlendEnabled(bool isBlendEnabled);

@@ -12,6 +12,11 @@
 #include "libANGLE/renderer/vulkan/CommandGraph.h"
 #include "libANGLE/renderer/vulkan/vk_utils.h"
 
+namespace gl
+{
+class ImageIndex;
+}  // namespace gl;
+
 namespace rx
 {
 namespace vk
@@ -96,9 +101,13 @@ class DynamicDescriptorPool final : angle::NonCopyable
                                  uint32_t descriptorSetCount,
                                  VkDescriptorSet *descriptorSetsOut);
 
+    // For testing only!
+    void setMaxSetsPerPoolForTesting(uint32_t maxSetsPerPool);
+
   private:
     Error allocateNewPool(const VkDevice &device);
 
+    uint32_t mMaxSetsPerPool;
     DescriptorPool mCurrentDescriptorSetPool;
     size_t mCurrentAllocatedDescriptorSetCount;
     uint32_t mUniformBufferDescriptorsPerSet;
@@ -126,8 +135,16 @@ class LineLoopHelper final : public vk::CommandGraphResource
                                                   BufferVk *elementArrayBufferVk,
                                                   VkIndexType indexType,
                                                   int indexCount,
+                                                  intptr_t elementArrayOffset,
                                                   VkBuffer *bufferHandleOut,
                                                   VkDeviceSize *bufferOffsetOut);
+    gl::Error getIndexBufferForClientElementArray(RendererVk *renderer,
+                                                  const void *indicesInput,
+                                                  VkIndexType indexType,
+                                                  int indexCount,
+                                                  VkBuffer *bufferHandleOut,
+                                                  VkDeviceSize *bufferOffsetOut);
+
     void destroy(VkDevice device);
 
     static void Draw(int count, CommandBuffer *commandBuffer);
@@ -145,15 +162,17 @@ class ImageHelper final : angle::NonCopyable
 
     bool valid() const;
 
-    Error init2D(VkDevice device,
-                 const gl::Extents &extents,
-                 const Format &format,
-                 GLint samples,
-                 VkImageUsageFlags usage);
+    Error init(VkDevice device,
+               gl::TextureType textureType,
+               const gl::Extents &extents,
+               const Format &format,
+               GLint samples,
+               VkImageUsageFlags usage);
     Error initMemory(VkDevice device,
                      const MemoryProperties &memoryProperties,
                      VkMemoryPropertyFlags flags);
     Error initImageView(VkDevice device,
+                        gl::TextureType textureType,
                         VkImageAspectFlags aspectMask,
                         const gl::SwizzleState &swizzleMap,
                         ImageView *imageViewOut);
@@ -217,6 +236,9 @@ class ImageHelper final : angle::NonCopyable
 
     // Current state.
     VkImageLayout mCurrentLayout;
+
+    // Cached properties.
+    uint32_t mLayerCount;
 };
 
 }  // namespace vk

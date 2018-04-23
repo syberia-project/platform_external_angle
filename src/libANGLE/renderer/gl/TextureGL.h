@@ -129,8 +129,7 @@ class TextureGL : public TextureImpl
                                    const gl::Offset &destOffset,
                                    size_t sourceLevel,
                                    const gl::Rectangle &sourceArea,
-                                   GLenum destFormat,
-                                   GLenum destType,
+                                   const gl::InternalFormat &destFormat,
                                    bool unpackFlipY,
                                    bool unpackPremultiplyAlpha,
                                    bool unpackUnmultiplyAlpha,
@@ -166,7 +165,8 @@ class TextureGL : public TextureImpl
     GLuint getTextureID() const;
     gl::TextureType getType() const;
 
-    void syncState(const gl::Texture::DirtyBits &dirtyBits) override;
+    gl::Error syncState(const gl::Context *context,
+                        const gl::Texture::DirtyBits &dirtyBits) override;
     bool hasAnyDirtyBit() const;
 
     gl::Error setBaseLevel(const gl::Context *context, GLuint baseLevel) override;

@@ -87,7 +87,8 @@ void Context::color4x(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 
 void Context::colorPointer(GLint size, GLenum type, GLsizei stride, const void *ptr)
 {
-    UNIMPLEMENTED();
+    vertexAttribPointer(vertexArrayIndex(ClientVertexArrayType::Color), size, type, GL_FALSE,
+                        stride, ptr);
 }
 
 void Context::depthRangex(GLfixed n, GLfixed f)
@@ -95,14 +96,16 @@ void Context::depthRangex(GLfixed n, GLfixed f)
     UNIMPLEMENTED();
 }
 
-void Context::disableClientState(GLenum clientState)
+void Context::disableClientState(ClientVertexArrayType clientState)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setClientStateEnabled(clientState, false);
+    disableVertexAttribArray(vertexArrayIndex(clientState));
 }
 
-void Context::enableClientState(GLenum clientState)
+void Context::enableClientState(ClientVertexArrayType clientState)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().setClientStateEnabled(clientState, true);
+    enableVertexAttribArray(vertexArrayIndex(clientState));
 }
 
 void Context::fogf(GLenum pname, GLfloat param)
@@ -125,19 +128,16 @@ void Context::fogxv(GLenum pname, const GLfixed *param)
     UNIMPLEMENTED();
 }
 
-void Context::frustumf(GLfloat left,
-                       GLfloat right,
-                       GLfloat bottom,
-                       GLfloat top,
-                       GLfloat zNear,
-                       GLfloat zFar)
+void Context::frustumf(GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, GLfloat f)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Frustum(l, r, b, t, n, f));
 }
 
 void Context::frustumx(GLfixed l, GLfixed r, GLfixed b, GLfixed t, GLfixed n, GLfixed f)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Frustum(FixedToFloat(l), FixedToFloat(r),
+                                                     FixedToFloat(b), FixedToFloat(t),
+                                                     FixedToFloat(n), FixedToFloat(f)));
 }
 
 void Context::getClipPlanef(GLenum plane, GLfloat *equation)
@@ -322,7 +322,8 @@ void Context::normal3x(GLfixed nx, GLfixed ny, GLfixed nz)
 
 void Context::normalPointer(GLenum type, GLsizei stride, const void *ptr)
 {
-    UNIMPLEMENTED();
+    vertexAttribPointer(vertexArrayIndex(ClientVertexArrayType::Normal), 3, type, GL_FALSE, stride,
+                        ptr);
 }
 
 void Context::orthof(GLfloat left,
@@ -332,12 +333,14 @@ void Context::orthof(GLfloat left,
                      GLfloat zNear,
                      GLfloat zFar)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Ortho(left, right, bottom, top, zNear, zFar));
 }
 
 void Context::orthox(GLfixed l, GLfixed r, GLfixed b, GLfixed t, GLfixed n, GLfixed f)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Ortho(FixedToFloat(l), FixedToFloat(r),
+                                                   FixedToFloat(b), FixedToFloat(t),
+                                                   FixedToFloat(n), FixedToFloat(f)));
 }
 
 void Context::pointParameterf(GLenum pname, GLfloat param)
@@ -387,12 +390,13 @@ void Context::pushMatrix()
 
 void Context::rotatef(float angle, float x, float y, float z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Rotate(angle, angle::Vector3(x, y, z)));
 }
 
 void Context::rotatex(GLfixed angle, GLfixed x, GLfixed y, GLfixed z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Rotate(
+        FixedToFloat(angle), angle::Vector3(FixedToFloat(x), FixedToFloat(y), FixedToFloat(z))));
 }
 
 void Context::sampleCoveragex(GLclampx value, GLboolean invert)
@@ -402,12 +406,13 @@ void Context::sampleCoveragex(GLclampx value, GLboolean invert)
 
 void Context::scalef(float x, float y, float z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Scale(angle::Vector3(x, y, z)));
 }
 
 void Context::scalex(GLfixed x, GLfixed y, GLfixed z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(
+        angle::Mat4::Scale(angle::Vector3(FixedToFloat(x), FixedToFloat(y), FixedToFloat(z))));
 }
 
 void Context::shadeModel(GLenum mode)
@@ -417,7 +422,8 @@ void Context::shadeModel(GLenum mode)
 
 void Context::texCoordPointer(GLint size, GLenum type, GLsizei stride, const void *ptr)
 {
-    UNIMPLEMENTED();
+    vertexAttribPointer(vertexArrayIndex(ClientVertexArrayType::TextureCoord), size, type, GL_FALSE,
+                        stride, ptr);
 }
 
 void Context::texEnvf(GLenum target, GLenum pname, GLfloat param)
@@ -462,17 +468,19 @@ void Context::texParameterxv(TextureType target, GLenum pname, const GLfixed *pa
 
 void Context::translatef(float x, float y, float z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(angle::Mat4::Translate(angle::Vector3(x, y, z)));
 }
 
 void Context::translatex(GLfixed x, GLfixed y, GLfixed z)
 {
-    UNIMPLEMENTED();
+    mGLState.gles1().multMatrix(
+        angle::Mat4::Translate(angle::Vector3(FixedToFloat(x), FixedToFloat(y), FixedToFloat(z))));
 }
 
 void Context::vertexPointer(GLint size, GLenum type, GLsizei stride, const void *ptr)
 {
-    UNIMPLEMENTED();
+    vertexAttribPointer(vertexArrayIndex(ClientVertexArrayType::Vertex), size, type, GL_FALSE,
+                        stride, ptr);
 }
 
 // GL_OES_draw_texture
@@ -540,7 +548,8 @@ void Context::weightPointer(GLint size, GLenum type, GLsizei stride, const void 
 // GL_OES_point_size_array
 void Context::pointSizePointer(GLenum type, GLsizei stride, const void *ptr)
 {
-    UNIMPLEMENTED();
+    vertexAttribPointer(vertexArrayIndex(ClientVertexArrayType::PointSize), 1, type, GL_FALSE,
+                        stride, ptr);
 }
 
 // GL_OES_query_matrix
@@ -596,4 +605,25 @@ void Context::texGenxv(GLenum coord, GLenum pname, const GLint *params)
     UNIMPLEMENTED();
 }
 
+int Context::vertexArrayIndex(ClientVertexArrayType type) const
+{
+    switch (type)
+    {
+        case ClientVertexArrayType::Vertex:
+            return 0;
+        case ClientVertexArrayType::Normal:
+            return 1;
+        case ClientVertexArrayType::Color:
+            return 2;
+        case ClientVertexArrayType::PointSize:
+            return 3;
+        case ClientVertexArrayType::TextureCoord:
+            return 4 + mGLState.gles1().getClientTextureUnit();
+        default:
+            UNREACHABLE();
+            return 0;
+    }
+}
+
+// static
 }  // namespace gl

@@ -647,13 +647,15 @@ void PipelineDesc::updateViewport(const gl::Rectangle &viewport, float nearPlane
     mViewport.y        = static_cast<float>(viewport.y);
     mViewport.width    = static_cast<float>(viewport.width);
     mViewport.height   = static_cast<float>(viewport.height);
-    mViewport.minDepth = nearPlane;
-    mViewport.maxDepth = farPlane;
+    updateDepthRange(nearPlane, farPlane);
+}
 
-    mScissor.offset.x      = viewport.x;
-    mScissor.offset.y      = viewport.y;
-    mScissor.extent.width  = viewport.width;
-    mScissor.extent.height = viewport.height;
+void PipelineDesc::updateDepthRange(float nearPlane, float farPlane)
+{
+    // GLES2.0 Section 2.12.1: Each of n and f are clamped to lie within [0, 1], as are all
+    // arguments of type clampf.
+    mViewport.minDepth = gl::clamp01(nearPlane);
+    mViewport.maxDepth = gl::clamp01(farPlane);
 }
 
 void PipelineDesc::updateVertexInputInfo(const VertexInputBindings &bindings,
@@ -808,22 +810,9 @@ void PipelineDesc::updateRenderPassDesc(const RenderPassDesc &renderPassDesc)
     mRenderPassDesc = renderPassDesc;
 }
 
-void PipelineDesc::updateScissor(const gl::Rectangle &rect, gl::Box framebufferDimensions)
+void PipelineDesc::updateScissor(const gl::Rectangle &rect)
 {
-    gl::Rectangle intersection;
-    gl::Rectangle clipRect(static_cast<GLuint>(0), static_cast<GLuint>(0),
-                           static_cast<GLuint>(framebufferDimensions.width),
-                           static_cast<GLuint>(framebufferDimensions.height));
-    // Coordinates outside the framebuffer aren't valid in Vulkan but not error is returned, the
-    // scissor is just ignored.
-    if (ClipRectangle(rect, clipRect, &intersection))
-    {
-        mScissor = gl_vk::GetRect(intersection);
-    }
-    else
-    {
-        mScissor = gl_vk::GetRect(rect);
-    }
+    mScissor = gl_vk::GetRect(rect);
 }
 
 // AttachmentOpsArray implementation.

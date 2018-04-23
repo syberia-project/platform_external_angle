@@ -63,6 +63,12 @@ class VertexArrayState final : angle::NonCopyable
         return mVertexAttributes[attribIndex].bindingIndex;
     }
 
+    // Combines mClientMemoryAttribsMask with mEnabledAttributesMask.
+    gl::AttributesMask getEnabledClientMemoryAttribsMask() const;
+
+    // Extra validation performed on the Vertex Array.
+    bool hasEnabledNullPointerClientArray() const;
+
   private:
     friend class VertexArray;
     std::string mLabel;
@@ -71,6 +77,13 @@ class VertexArrayState final : angle::NonCopyable
     std::vector<VertexBinding> mVertexBindings;
     AttributesMask mEnabledAttributesMask;
     ComponentTypeMask mVertexAttributesTypeMask;
+
+    // From the GLES 3.1 spec:
+    // When a generic attribute array is sourced from client memory, the vertex attribute binding
+    // state is ignored. Thus we don't have to worry about binding state when using client memory
+    // attribs.
+    gl::AttributesMask mClientMemoryAttribsMask;
+    gl::AttributesMask mNullPointerClientMemoryAttribsMask;
 };
 
 class VertexArray final : public angle::ObserverInterface, public LabeledObject
@@ -154,6 +167,16 @@ class VertexArray final : public angle::ObserverInterface, public LabeledObject
         return mState.getEnabledAttributesMask();
     }
 
+    gl::AttributesMask getEnabledClientMemoryAttribsMask() const
+    {
+        return mState.getEnabledClientMemoryAttribsMask();
+    }
+
+    bool hasEnabledNullPointerClientArray() const
+    {
+        return mState.hasEnabledNullPointerClientArray();
+    }
+
     // Observer implementation
     void onSubjectStateChange(const gl::Context *context,
                               angle::SubjectIndex index,
@@ -231,6 +254,10 @@ class VertexArray final : public angle::ObserverInterface, public LabeledObject
 
     void updateObserverBinding(size_t bindingIndex);
     DirtyBitType getDirtyBitFromIndex(bool contentsChanged, angle::SubjectIndex index) const;
+
+    // These are used to optimize draw call validation.
+    void updateCachedVertexAttributeSize(size_t attribIndex);
+    void updateCachedBufferBindingSize(size_t bindingIndex);
 
     GLuint mId;
 

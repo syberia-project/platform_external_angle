@@ -75,65 +75,52 @@ bool ValidateDrawAttribs(Context *context, GLint primcount, GLint maxVertex, GLi
 
     bool webglCompatibility = context->getExtensions().webglCompatibility;
 
-    const VertexArray *vao     = state.getVertexArray();
+    const VertexArray *vao              = state.getVertexArray();
+    const AttributesMask &clientAttribs = vao->getEnabledClientMemoryAttribsMask();
+
+    if (clientAttribs.any())
+    {
+        if (webglCompatibility || !state.areClientArraysEnabled())
+        {
+            // [WebGL 1.0] Section 6.5 Enabled Vertex Attributes and Range Checking
+            // If a vertex attribute is enabled as an array via enableVertexAttribArray but no
+            // buffer is bound to that attribute via bindBuffer and vertexAttribPointer, then calls
+            // to drawArrays or drawElements will generate an INVALID_OPERATION error.
+            ANGLE_VALIDATION_ERR(context, InvalidOperation(), VertexArrayNoBuffer);
+            return false;
+        }
+        else if (vao->hasEnabledNullPointerClientArray())
+        {
+            // This is an application error that would normally result in a crash, but we catch it
+            // and return an error
+            ANGLE_VALIDATION_ERR(context, InvalidOperation(), VertexArrayNoBufferPointer);
+            return false;
+        }
+    }
+
+    // If we're drawing zero vertices, we have enough data.
+    if (vertexCount <= 0 || primcount <= 0)
+    {
+        return true;
+    }
+
     const auto &vertexAttribs  = vao->getVertexAttributes();
     const auto &vertexBindings = vao->getVertexBindings();
-    for (size_t attributeIndex : vao->getEnabledAttributesMask())
+
+    const AttributesMask &activeAttribs = (program->getActiveAttribLocationsMask() &
+                                           vao->getEnabledAttributesMask() & ~clientAttribs);
+
+    for (size_t attributeIndex : activeAttribs)
     {
         const VertexAttribute &attrib = vertexAttribs[attributeIndex];
+        ASSERT(attrib.enabled);
 
-        // No need to range check for disabled attribs.
-        if (!attrib.enabled)
-        {
-            continue;
-        }
-
-        // If we have no buffer, then we either get an error, or there are no more checks to be
-        // done.
         const VertexBinding &binding = vertexBindings[attrib.bindingIndex];
-        gl::Buffer *buffer           = binding.getBuffer().get();
-        if (!buffer)
-        {
-            if (webglCompatibility || !state.areClientArraysEnabled())
-            {
-                // [WebGL 1.0] Section 6.5 Enabled Vertex Attributes and Range Checking
-                // If a vertex attribute is enabled as an array via enableVertexAttribArray but
-                // no buffer is bound to that attribute via bindBuffer and vertexAttribPointer,
-                // then calls to drawArrays or drawElements will generate an INVALID_OPERATION
-                // error.
-                ANGLE_VALIDATION_ERR(context, InvalidOperation(), VertexArrayNoBuffer);
-                return false;
-            }
-            else if (attrib.pointer == nullptr)
-            {
-                // This is an application error that would normally result in a crash,
-                // but we catch it and return an error
-                ANGLE_VALIDATION_ERR(context, InvalidOperation(), VertexArrayNoBufferPointer);
-                return false;
-            }
-            continue;
-        }
+        ASSERT(program->isAttribLocationActive(attributeIndex));
 
-        // This needs to come after the check for client arrays as even unused attributes cannot use
-        // client-side arrays
-        if (!program->isAttribLocationActive(attributeIndex))
-        {
-            continue;
-        }
-
-        // If we're drawing zero vertices, we have enough data.
-        if (vertexCount <= 0 || primcount <= 0)
-        {
-            continue;
-        }
-
-        GLint maxVertexElement = 0;
+        GLint maxVertexElement = maxVertex;
         GLuint divisor         = binding.getDivisor();
-        if (divisor == 0)
-        {
-            maxVertexElement = maxVertex;
-        }
-        else
+        if (divisor != 0)
         {
             maxVertexElement = (primcount - 1) / divisor;
         }
@@ -149,39 +136,49 @@ bool ValidateDrawAttribs(Context *context, GLint primcount, GLint maxVertex, GLi
 
         // We know attribStride is given as a GLsizei which is typedefed to int.
         // We also know an upper bound for attribSize.
-        static_assert(std::is_same<int, GLsizei>::value, "");
-        uint64_t attribStride = ComputeVertexAttributeStride(attrib, binding);
-        uint64_t attribSize   = ComputeVertexAttributeTypeSize(attrib);
-        ASSERT(attribStride <= kIntMax && attribSize <= kMaxAttribSize);
+        static_assert(std::is_same<int, GLsizei>::value, "Unexpected type");
+        ASSERT(ComputeVertexAttributeStride(attrib, binding) == binding.getStride());
+        uint64_t attribStride = binding.getStride();
+        ASSERT(attribStride <= kIntMax && ComputeVertexAttributeTypeSize(attrib) <= kMaxAttribSize);
 
-        // Computing the max offset using uint64_t without attrib.offset is overflow
-        // safe. Note: Last vertex element does not take the full stride!
-        static_assert(kIntMax * kIntMax < kUint64Max - kMaxAttribSize, "");
-        uint64_t attribDataSizeNoOffset = maxVertexElement * attribStride + attribSize;
+        // Computing the product of two 32-bit ints will fit in 64 bits without overflow.
+        static_assert(kIntMax * kIntMax < kUint64Max, "Unexpected overflow");
+        uint64_t attribDataSizeMinusAttribSize = maxVertexElement * attribStride;
 
         // An overflow can happen when adding the offset, check for it.
-        uint64_t attribOffset = ComputeVertexAttributeOffset(attrib, binding);
-        if (attribDataSizeNoOffset > kUint64Max - attribOffset)
+        if (attribDataSizeMinusAttribSize > kUint64Max - attrib.cachedSizePlusRelativeOffset)
         {
             ANGLE_VALIDATION_ERR(context, InvalidOperation(), IntegerOverflow);
             return false;
         }
-        uint64_t attribDataSizeWithOffset = attribDataSizeNoOffset + attribOffset;
 
         // [OpenGL ES 3.0.2] section 2.9.4 page 40:
-        // We can return INVALID_OPERATION if our vertex attribute does not have
-        // enough backing data.
-        if (attribDataSizeWithOffset > static_cast<uint64_t>(buffer->getSize()))
+        // We can return INVALID_OPERATION if our array buffer does not have enough backing data.
+        if (attribDataSizeMinusAttribSize + attrib.cachedSizePlusRelativeOffset >
+            binding.getCachedBufferSizeMinusOffset())
         {
             ANGLE_VALIDATION_ERR(context, InvalidOperation(), InsufficientVertexBufferSize);
             return false;
         }
+    }
 
-        if (webglCompatibility && buffer->isBoundForTransformFeedbackAndOtherUse())
+    // TODO(jmadill): Cache this. http://anglebug.com/1391
+    if (webglCompatibility)
+    {
+        for (size_t attributeIndex : activeAttribs)
         {
-            ANGLE_VALIDATION_ERR(context, InvalidOperation(),
-                                 VertexBufferBoundForTransformFeedback);
-            return false;
+            const VertexAttribute &attrib = vertexAttribs[attributeIndex];
+            ASSERT(attrib.enabled);
+
+            const VertexBinding &binding = vertexBindings[attrib.bindingIndex];
+
+            gl::Buffer *buffer = binding.getBuffer().get();
+            if (buffer && buffer->isBoundForTransformFeedbackAndOtherUse())
+            {
+                ANGLE_VALIDATION_ERR(context, InvalidOperation(),
+                                     VertexBufferBoundForTransformFeedback);
+                return false;
+            }
         }
     }
 
@@ -1280,12 +1277,12 @@ bool ValidateBlitFramebufferParameters(Context *context,
         return false;
     }
 
-    if (!ValidateFramebufferComplete(context, readFramebuffer, true))
+    if (!ValidateFramebufferComplete(context, readFramebuffer))
     {
         return false;
     }
 
-    if (!ValidateFramebufferComplete(context, drawFramebuffer, true))
+    if (!ValidateFramebufferComplete(context, drawFramebuffer))
     {
         return false;
     }
@@ -2254,7 +2251,7 @@ bool ValidateStateQuery(Context *context, GLenum pname, GLenum *nativeType, unsi
             Framebuffer *readFramebuffer = context->getGLState().getReadFramebuffer();
             ASSERT(readFramebuffer);
 
-            if (!ValidateFramebufferComplete(context, readFramebuffer, false))
+            if (!ValidateFramebufferComplete<InvalidOperation>(context, readFramebuffer))
             {
                 return false;
             }
@@ -2442,7 +2439,7 @@ bool ValidateCopyTexImageParametersBase(Context *context,
 
     const gl::State &state       = context->getGLState();
     Framebuffer *readFramebuffer = state.getReadFramebuffer();
-    if (!ValidateFramebufferComplete(context, readFramebuffer, true))
+    if (!ValidateFramebufferComplete(context, readFramebuffer))
     {
         return false;
     }
@@ -2673,7 +2670,7 @@ bool ValidateDrawBase(Context *context, GLenum mode, GLsizei count)
         }
     }
 
-    if (!ValidateFramebufferComplete(context, framebuffer, true))
+    if (!ValidateFramebufferComplete(context, framebuffer))
     {
         return false;
     }
@@ -4992,7 +4989,7 @@ bool ValidateGetActiveUniformBlockivRobustANGLE(Context *context,
     return true;
 }
 
-bool ValidateGetInternalFormativRobustANGLE(Context *context,
+bool ValidateGetInternalformativRobustANGLE(Context *context,
                                             GLenum target,
                                             GLenum internalformat,
                                             GLenum pname,
@@ -5579,7 +5576,7 @@ bool ValidateReadPixelsBase(Context *context,
 
     Framebuffer *readFramebuffer = context->getGLState().getReadFramebuffer();
 
-    if (!ValidateFramebufferComplete(context, readFramebuffer, true))
+    if (!ValidateFramebufferComplete(context, readFramebuffer))
     {
         return false;
     }
@@ -6336,33 +6333,9 @@ bool ValidateGetInternalFormativBase(Context *context,
     return true;
 }
 
-// We should check with Khronos if returning INVALID_FRAMEBUFFER_OPERATION is OK when querying
-// implementation format info for incomplete framebuffers. It seems like these queries are
-// incongruent with the other errors.
-bool ValidateFramebufferComplete(Context *context, Framebuffer *framebuffer, bool isFramebufferOp)
-{
-    bool complete = false;
-    ANGLE_VALIDATION_TRY(framebuffer->isComplete(context, &complete));
-    if (!complete)
-    {
-        if (isFramebufferOp)
-        {
-            context->handleError(InvalidFramebufferOperation());
-        }
-        else
-        {
-            context->handleError(InvalidOperation());
-        }
-        return false;
-    }
-    return true;
-}
-
 bool ValidateFramebufferNotMultisampled(Context *context, Framebuffer *framebuffer)
 {
-    GLint samples = 0;
-    ANGLE_VALIDATION_TRY(framebuffer->getSamples(context, &samples));
-    if (samples != 0)
+    if (framebuffer->getSamples(context) != 0)
     {
         context->handleError(InvalidOperation());
         return false;

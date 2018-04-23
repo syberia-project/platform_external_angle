@@ -19,7 +19,7 @@ namespace vk
 namespace
 {
 // TODO(jmadill): Pick non-arbitrary max.
-constexpr uint32_t kDynamicDescriptorPoolMaxSets = 2048;
+constexpr uint32_t kDefaultDynamicDescriptorPoolMaxSets = 2048;
 
 constexpr VkBufferUsageFlags kLineLoopDynamicBufferUsage =
     (VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -64,6 +64,30 @@ VkAccessFlags GetBasicLayoutAccessFlags(VkImageLayout layout)
             // TODO(jmadill): Investigate other flags.
             UNREACHABLE();
             return 0;
+    }
+}
+
+VkImageCreateFlags GetImageCreateFlags(gl::TextureType textureType)
+{
+    if (textureType == gl::TextureType::CubeMap)
+    {
+        return VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+uint32_t GetImageLayerCount(gl::TextureType textureType)
+{
+    if (textureType == gl::TextureType::CubeMap)
+    {
+        return gl::CUBE_FACE_COUNT;
+    }
+    else
+    {
+        return 1;
     }
 }
 }  // anonymous namespace
@@ -215,7 +239,8 @@ void DynamicBuffer::setMinimumSizeForTesting(size_t minSize)
 
 // DynamicDescriptorPool implementation.
 DynamicDescriptorPool::DynamicDescriptorPool()
-    : mCurrentAllocatedDescriptorSetCount(0),
+    : mMaxSetsPerPool(kDefaultDynamicDescriptorPoolMaxSets),
+      mCurrentAllocatedDescriptorSetCount(0),
       mUniformBufferDescriptorsPerSet(0),
       mCombinedImageSamplerDescriptorsPerSet(0)
 {
@@ -250,7 +275,7 @@ Error DynamicDescriptorPool::allocateDescriptorSets(
     uint32_t descriptorSetCount,
     VkDescriptorSet *descriptorSetsOut)
 {
-    if (descriptorSetCount + mCurrentAllocatedDescriptorSetCount > kDynamicDescriptorPoolMaxSets)
+    if (descriptorSetCount + mCurrentAllocatedDescriptorSetCount > mMaxSetsPerPool)
     {
         RendererVk *renderer = contextVk->getRenderer();
         Serial currentSerial = renderer->getCurrentQueueSerial();
@@ -279,17 +304,16 @@ Error DynamicDescriptorPool::allocateNewPool(const VkDevice &device)
     VkDescriptorPoolSize poolSizes[DescriptorPoolIndexCount];
     poolSizes[UniformBufferIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     poolSizes[UniformBufferIndex].descriptorCount =
-        mUniformBufferDescriptorsPerSet * kDynamicDescriptorPoolMaxSets / DescriptorPoolIndexCount;
+        mUniformBufferDescriptorsPerSet * mMaxSetsPerPool;
     poolSizes[TextureIndex].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[TextureIndex].descriptorCount = mCombinedImageSamplerDescriptorsPerSet *
-                                              kDynamicDescriptorPoolMaxSets /
-                                              DescriptorPoolIndexCount;
+    poolSizes[TextureIndex].descriptorCount =
+        mCombinedImageSamplerDescriptorsPerSet * mMaxSetsPerPool;
 
     VkDescriptorPoolCreateInfo descriptorPoolInfo;
     descriptorPoolInfo.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descriptorPoolInfo.pNext   = nullptr;
     descriptorPoolInfo.flags   = 0;
-    descriptorPoolInfo.maxSets = kDynamicDescriptorPoolMaxSets;
+    descriptorPoolInfo.maxSets = mMaxSetsPerPool;
 
     // Reserve pools for uniform blocks and textures.
     descriptorPoolInfo.poolSizeCount = DescriptorPoolIndexCount;
@@ -300,10 +324,21 @@ Error DynamicDescriptorPool::allocateNewPool(const VkDevice &device)
     return NoError();
 }
 
+void DynamicDescriptorPool::setMaxSetsPerPoolForTesting(uint32_t maxSetsPerPool)
+{
+    mMaxSetsPerPool = maxSetsPerPool;
+}
+
+// LineLoopHelper implementation.
 LineLoopHelper::LineLoopHelper()
     : mDynamicIndexBuffer(kLineLoopDynamicBufferUsage, kLineLoopDynamicBufferMinSize)
 {
-    mDynamicIndexBuffer.init(1);
+    // We need to use an alignment of the maximum size we're going to allocate, which is
+    // VK_INDEX_TYPE_UINT32. When we switch from a drawElement to a drawArray call, the allocations
+    // can vary in size. According to the Vulkan spec, when calling vkCmdBindIndexBuffer: 'The
+    // sum of offset and the address of the range of VkDeviceMemory object that is backing buffer,
+    // must be a multiple of the type indicated by indexType'.
+    mDynamicIndexBuffer.init(sizeof(uint32_t));
 }
 
 LineLoopHelper::~LineLoopHelper() = default;
@@ -341,23 +376,26 @@ gl::Error LineLoopHelper::getIndexBufferForElementArrayBuffer(RendererVk *render
                                                               BufferVk *elementArrayBufferVk,
                                                               VkIndexType indexType,
                                                               int indexCount,
+                                                              intptr_t elementArrayOffset,
                                                               VkBuffer *bufferHandleOut,
                                                               VkDeviceSize *bufferOffsetOut)
 {
     ASSERT(indexType == VK_INDEX_TYPE_UINT16 || indexType == VK_INDEX_TYPE_UINT32);
 
     uint32_t *indices = nullptr;
-    uint32_t offset   = 0;
+    uint32_t destinationOffset = 0;
 
     auto unitSize = (indexType == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
     size_t allocateBytes = unitSize * (indexCount + 1);
     ANGLE_TRY(mDynamicIndexBuffer.allocate(renderer, allocateBytes,
                                            reinterpret_cast<uint8_t **>(&indices), bufferHandleOut,
-                                           &offset, nullptr));
-    *bufferOffsetOut = static_cast<VkDeviceSize>(offset);
+                                           &destinationOffset, nullptr));
+    *bufferOffsetOut = static_cast<VkDeviceSize>(destinationOffset);
 
-    VkBufferCopy copy1 = {0, offset, static_cast<VkDeviceSize>(indexCount) * unitSize};
-    VkBufferCopy copy2 = {0, offset + static_cast<VkDeviceSize>(indexCount) * unitSize, unitSize};
+    VkDeviceSize sourceOffset = static_cast<VkDeviceSize>(elementArrayOffset);
+    uint64_t unitCount        = static_cast<VkDeviceSize>(indexCount);
+    VkBufferCopy copy1        = {sourceOffset, destinationOffset, unitCount * unitSize};
+    VkBufferCopy copy2        = {sourceOffset, destinationOffset + unitCount * unitSize, unitSize};
     std::array<VkBufferCopy, 2> copies = {{copy1, copy2}};
 
     vk::CommandBuffer *commandBuffer;
@@ -367,6 +405,34 @@ gl::Error LineLoopHelper::getIndexBufferForElementArrayBuffer(RendererVk *render
     elementArrayBufferVk->onReadResource(getCurrentWritingNode(), currentSerial);
     commandBuffer->copyBuffer(elementArrayBufferVk->getVkBuffer().getHandle(), *bufferHandleOut, 2,
                               copies.data());
+
+    ANGLE_TRY(mDynamicIndexBuffer.flush(renderer->getDevice()));
+    return gl::NoError();
+}
+
+gl::Error LineLoopHelper::getIndexBufferForClientElementArray(RendererVk *renderer,
+                                                              const void *indicesInput,
+                                                              VkIndexType indexType,
+                                                              int indexCount,
+                                                              VkBuffer *bufferHandleOut,
+                                                              VkDeviceSize *bufferOffsetOut)
+{
+    // TODO(lucferron): we'll eventually need to support uint8, emulated on 16 since Vulkan only
+    // supports 16 / 32.
+    ASSERT(indexType == VK_INDEX_TYPE_UINT16 || indexType == VK_INDEX_TYPE_UINT32);
+
+    uint8_t *indices = nullptr;
+    uint32_t offset  = 0;
+
+    auto unitSize = (indexType == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+    size_t allocateBytes = unitSize * (indexCount + 1);
+    ANGLE_TRY(mDynamicIndexBuffer.allocate(renderer, allocateBytes,
+                                           reinterpret_cast<uint8_t **>(&indices), bufferHandleOut,
+                                           &offset, nullptr));
+    *bufferOffsetOut = static_cast<VkDeviceSize>(offset);
+
+    memcpy(indices, indicesInput, unitSize * indexCount);
+    memcpy(indices + unitSize * indexCount, indicesInput, unitSize);
 
     ANGLE_TRY(mDynamicIndexBuffer.flush(renderer->getDevice()));
     return gl::NoError();
@@ -389,7 +455,8 @@ ImageHelper::ImageHelper()
     : mFormat(nullptr),
       mSamples(0),
       mAllocatedMemorySize(0),
-      mCurrentLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+      mCurrentLayout(VK_IMAGE_LAYOUT_UNDEFINED),
+      mLayerCount(0)
 {
 }
 
@@ -400,8 +467,11 @@ ImageHelper::ImageHelper(ImageHelper &&other)
       mFormat(other.mFormat),
       mSamples(other.mSamples),
       mAllocatedMemorySize(other.mAllocatedMemorySize),
-      mCurrentLayout(other.mCurrentLayout)
+      mCurrentLayout(other.mCurrentLayout),
+      mLayerCount(other.mLayerCount)
 {
+    other.mCurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    other.mLayerCount    = 0;
 }
 
 ImageHelper::~ImageHelper()
@@ -414,29 +484,31 @@ bool ImageHelper::valid() const
     return mImage.valid();
 }
 
-Error ImageHelper::init2D(VkDevice device,
-                          const gl::Extents &extents,
-                          const Format &format,
-                          GLint samples,
-                          VkImageUsageFlags usage)
+Error ImageHelper::init(VkDevice device,
+                        gl::TextureType textureType,
+                        const gl::Extents &extents,
+                        const Format &format,
+                        GLint samples,
+                        VkImageUsageFlags usage)
 {
     ASSERT(!valid());
 
-    mExtents = extents;
-    mFormat  = &format;
-    mSamples = samples;
+    mExtents    = extents;
+    mFormat     = &format;
+    mSamples    = samples;
+    mLayerCount = GetImageLayerCount(textureType);
 
     VkImageCreateInfo imageInfo;
     imageInfo.sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.pNext                 = nullptr;
-    imageInfo.flags                 = 0;
-    imageInfo.imageType             = VK_IMAGE_TYPE_2D;
+    imageInfo.flags                 = GetImageCreateFlags(textureType);
+    imageInfo.imageType             = gl_vk::GetImageType(textureType);
     imageInfo.format                = format.vkTextureFormat;
     imageInfo.extent.width          = static_cast<uint32_t>(extents.width);
     imageInfo.extent.height         = static_cast<uint32_t>(extents.height);
     imageInfo.extent.depth          = 1;
     imageInfo.mipLevels             = 1;
-    imageInfo.arrayLayers           = 1;
+    imageInfo.arrayLayers           = mLayerCount;
     imageInfo.samples               = gl_vk::GetSamples(samples);
     imageInfo.tiling                = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage                 = usage;
@@ -473,6 +545,7 @@ Error ImageHelper::initMemory(VkDevice device,
 }
 
 Error ImageHelper::initImageView(VkDevice device,
+                                 gl::TextureType textureType,
                                  VkImageAspectFlags aspectMask,
                                  const gl::SwizzleState &swizzleMap,
                                  ImageView *imageViewOut)
@@ -482,7 +555,7 @@ Error ImageHelper::initImageView(VkDevice device,
     viewInfo.pNext                           = nullptr;
     viewInfo.flags                           = 0;
     viewInfo.image                           = mImage.getHandle();
-    viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType                        = gl_vk::GetImageViewType(textureType);
     viewInfo.format                          = mFormat->vkTextureFormat;
     viewInfo.components.r                    = gl_vk::GetSwizzle(swizzleMap.swizzleRed);
     viewInfo.components.g                    = gl_vk::GetSwizzle(swizzleMap.swizzleGreen);
@@ -492,7 +565,7 @@ Error ImageHelper::initImageView(VkDevice device,
     viewInfo.subresourceRange.baseMipLevel   = 0;
     viewInfo.subresourceRange.levelCount     = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount     = 1;
+    viewInfo.subresourceRange.layerCount     = mLayerCount;
 
     ANGLE_TRY(imageViewOut->init(device, viewInfo));
     return NoError();
@@ -502,6 +575,8 @@ void ImageHelper::destroy(VkDevice device)
 {
     mImage.destroy(device);
     mDeviceMemory.destroy(device);
+    mCurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    mLayerCount    = 0;
 }
 
 void ImageHelper::init2DWeakReference(VkImage handle,
@@ -511,9 +586,10 @@ void ImageHelper::init2DWeakReference(VkImage handle,
 {
     ASSERT(!valid());
 
-    mExtents = extents;
-    mFormat  = &format;
-    mSamples = samples;
+    mExtents    = extents;
+    mFormat     = &format;
+    mSamples    = samples;
+    mLayerCount = 1;
 
     mImage.setHandle(handle);
 }
@@ -526,9 +602,10 @@ Error ImageHelper::init2DStaging(VkDevice device,
 {
     ASSERT(!valid());
 
-    mExtents = extents;
-    mFormat  = &format;
-    mSamples = 1;
+    mExtents    = extents;
+    mFormat     = &format;
+    mSamples    = 1;
+    mLayerCount = 1;
 
     // Use Preinitialized for writable staging images - in these cases we want to map the memory
     // before we do a copy. For readback images, use an undefined layout.
@@ -626,7 +703,7 @@ void ImageHelper::changeLayoutWithStages(VkImageAspectFlags aspectMask,
     imageMemoryBarrier.subresourceRange.baseMipLevel   = 0;
     imageMemoryBarrier.subresourceRange.levelCount     = 1;
     imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-    imageMemoryBarrier.subresourceRange.layerCount     = 1;
+    imageMemoryBarrier.subresourceRange.layerCount     = mLayerCount;
 
     // TODO(jmadill): Test all the permutations of the access flags.
     imageMemoryBarrier.srcAccessMask = GetBasicLayoutAccessFlags(mCurrentLayout);
@@ -668,7 +745,7 @@ void ImageHelper::clearColor(const VkClearColorValue &color, CommandBuffer *comm
     range.baseMipLevel   = 0;
     range.levelCount     = 1;
     range.baseArrayLayer = 0;
-    range.layerCount     = 1;
+    range.layerCount     = mLayerCount;
 
     commandBuffer->clearColorImage(mImage, mCurrentLayout, color, 1, &range);
 }
