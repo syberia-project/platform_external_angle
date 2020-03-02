@@ -318,15 +318,33 @@ std::string ContextNULL::getRendererDescription() const
     return "NULL";
 }
 
-void ContextNULL::insertEventMarker(GLsizei length, const char *marker) {}
+angle::Result ContextNULL::insertEventMarker(GLsizei length, const char *marker)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::pushGroupMarker(GLsizei length, const char *marker) {}
+angle::Result ContextNULL::pushGroupMarker(GLsizei length, const char *marker)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::popGroupMarker() {}
+angle::Result ContextNULL::popGroupMarker()
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::pushDebugGroup(GLenum source, GLuint id, const std::string &message) {}
+angle::Result ContextNULL::pushDebugGroup(const gl::Context *context,
+                                          GLenum source,
+                                          GLuint id,
+                                          const std::string &message)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::popDebugGroup() {}
+angle::Result ContextNULL::popDebugGroup(const gl::Context *context)
+{
+    return angle::Result::Continue;
+}
 
 angle::Result ContextNULL::syncState(const gl::Context *context,
                                      const gl::State::DirtyBits &dirtyBits,
