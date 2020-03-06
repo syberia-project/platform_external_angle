@@ -46,18 +46,16 @@ class MemoryProgramCache final : angle::NonCopyable
     void remove(const egl::BlobCache::Key &programHash);
 
     // Helper method that serializes a program.
-    angle::Result putProgram(const egl::BlobCache::Key &programHash,
-                             const Context *context,
-                             const Program *program);
+    void putProgram(const egl::BlobCache::Key &programHash,
+                    const Context *context,
+                    const Program *program);
 
     // Same as putProgram but computes the hash.
-    angle::Result updateProgram(const Context *context, const Program *program);
+    void updateProgram(const Context *context, const Program *program);
 
     // Store a binary directly.  TODO(syoussefi): deprecated.  Will be removed once Chrome supports
     // EGL_ANDROID_blob_cache. http://anglebug.com/2516
-    ANGLE_NO_DISCARD bool putBinary(const egl::BlobCache::Key &programHash,
-                                    const uint8_t *binary,
-                                    size_t length);
+    void putBinary(const egl::BlobCache::Key &programHash, const uint8_t *binary, size_t length);
 
     // Check the cache, and deserialize and load the program if found. Evict existing hash if load
     // fails.

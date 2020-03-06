@@ -49,11 +49,15 @@ class CoreWindowNativeWindow : public InspectableNativeWindow,
     ComPtr<IMap<HSTRING, IInspectable *>> mPropertyMap;
 };
 
-__declspec(uuid("7F924F66-EBAE-40E5-A10B-B8F35E245190")) class CoreWindowSizeChangedHandler
+// clang format would break the uuid below
+// clang-format off
+[uuid(7F924F66-EBAE-40E5-A10B-B8F35E245190)] class CoreWindowSizeChangedHandler
     : public Microsoft::WRL::RuntimeClass<
           Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
           IWindowSizeChangedEventHandler>
 {
+    // clang-format on
+
   public:
     CoreWindowSizeChangedHandler() {}
     HRESULT RuntimeClassInitialize(std::shared_ptr<InspectableNativeWindow> host)
@@ -93,6 +97,6 @@ __declspec(uuid("7F924F66-EBAE-40E5-A10B-B8F35E245190")) class CoreWindowSizeCha
 
 HRESULT GetCoreWindowSizeInPixels(const ComPtr<ABI::Windows::UI::Core::ICoreWindow> &coreWindow,
                                   Size *windowSize);
-}  // namespace rx
+}
 
 #endif  // LIBANGLE_RENDERER_D3D_D3D11_WINRT_COREWINDOWNATIVEWINDOW_H_

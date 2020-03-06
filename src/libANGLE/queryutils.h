@@ -130,8 +130,6 @@ void SetTexParameteri(Context *context, Texture *texture, GLenum pname, GLint pa
 void SetTexParameteriv(Context *context, Texture *texture, GLenum pname, const GLint *params);
 void SetTexParameterIiv(Context *context, Texture *texture, GLenum pname, const GLint *params);
 void SetTexParameterIuiv(Context *context, Texture *texture, GLenum pname, const GLuint *params);
-void SetTexParameterx(Context *context, Texture *texture, GLenum pname, GLfixed param);
-void SetTexParameterxv(Context *context, Texture *texture, GLenum pname, const GLfixed *params);
 
 void SetSamplerParameterf(Context *context, Sampler *sampler, GLenum pname, GLfloat param);
 void SetSamplerParameterfv(Context *context, Sampler *sampler, GLenum pname, const GLfloat *params);
@@ -237,7 +235,7 @@ void SetPointParameter(GLES1State *state, PointParameter pname, const GLfloat *p
 void GetPointParameter(const GLES1State *state, PointParameter pname, GLfloat *params);
 
 void SetPointSize(GLES1State *state, GLfloat size);
-void GetPointSize(const GLES1State *state, GLfloat *sizeOut);
+void GetPointSize(GLES1State *state, GLfloat *sizeOut);
 
 unsigned int GetTexParameterCount(GLenum pname);
 

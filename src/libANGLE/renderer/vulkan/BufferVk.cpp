@@ -208,9 +208,31 @@ angle::Result BufferVk::copySubData(const gl::Context *context,
 
     vk::CommandBuffer *commandBuffer = nullptr;
 
-    ANGLE_TRY(contextVk->onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, &sourceBuffer->getBuffer()));
-    ANGLE_TRY(contextVk->onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, &mBuffer));
-    ANGLE_TRY(contextVk->endRenderPassAndGetCommandBuffer(&commandBuffer));
+    if (contextVk->commandGraphEnabled())
+    {
+        // Handle self-dependency especially.
+        if (sourceBuffer->mBuffer.getBuffer().getHandle() == mBuffer.getBuffer().getHandle())
+        {
+            // We set the TRANSFER_READ_BIT to be conservative.
+            mBuffer.onSelfReadWrite(contextVk,
+                                    VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+
+            ANGLE_TRY(mBuffer.recordCommands(contextVk, &commandBuffer));
+        }
+        else
+        {
+            ANGLE_TRY(mBuffer.recordCommands(contextVk, &commandBuffer));
+
+            sourceBuffer->mBuffer.onReadByBuffer(contextVk, &mBuffer, VK_ACCESS_TRANSFER_READ_BIT,
+                                                 VK_ACCESS_TRANSFER_WRITE_BIT);
+        }
+    }
+    else
+    {
+        contextVk->onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, &sourceBuffer->getBuffer());
+        contextVk->onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, &mBuffer);
+        ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(&commandBuffer));
+    }
 
     // Enqueue a copy command on the GPU.
     const VkBufferCopy copyRegion = {static_cast<VkDeviceSize>(sourceOffset),
@@ -258,13 +280,13 @@ angle::Result BufferVk::mapRangeImpl(ContextVk *contextVk,
     if ((access & GL_MAP_UNSYNCHRONIZED_BIT) == 0)
     {
         // If there are pending commands for the buffer, flush them.
-        if (mBuffer.usedInRecordedCommands())
+        if (mBuffer.hasRecordedCommands())
         {
             ANGLE_TRY(contextVk->flushImpl(nullptr));
         }
 
         // Make sure the driver is done with the buffer.
-        if (mBuffer.usedInRunningCommands(contextVk->getLastCompletedQueueSerial()))
+        if (mBuffer.hasRunningCommands(contextVk->getLastCompletedQueueSerial()))
         {
             ANGLE_TRY(mBuffer.finishRunningCommands(contextVk));
         }
@@ -364,9 +386,9 @@ angle::Result BufferVk::setDataImpl(ContextVk *contextVk,
 
         // Enqueue a copy command on the GPU.
         VkBufferCopy copyRegion = {stagingBufferOffset, offset, size};
-        ANGLE_TRY(mBuffer.copyFromBuffer(contextVk, mStagingBuffer.getCurrentBuffer(),
+        ANGLE_TRY(mBuffer.copyFromBuffer(contextVk, mStagingBuffer.getCurrentBuffer()->getBuffer(),
                                          VK_ACCESS_HOST_WRITE_BIT, copyRegion));
-        mStagingBuffer.getCurrentBuffer()->retain(&contextVk->getResourceUseList());
+        mStagingBuffer.getCurrentBuffer()->onResourceAccess(&contextVk->getResourceUseList());
     }
     else
     {
@@ -393,12 +415,24 @@ angle::Result BufferVk::copyToBuffer(ContextVk *contextVk,
                                      const VkBufferCopy *copies)
 {
     vk::CommandBuffer *commandBuffer;
-    ANGLE_TRY(contextVk->onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, destBuffer));
-    ANGLE_TRY(contextVk->onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, &mBuffer));
-    ANGLE_TRY(contextVk->endRenderPassAndGetCommandBuffer(&commandBuffer));
+    if (contextVk->commandGraphEnabled())
+    {
+        ANGLE_TRY(destBuffer->recordCommands(contextVk, &commandBuffer));
+    }
+    else
+    {
+        contextVk->onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, destBuffer);
+        contextVk->onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, &mBuffer);
+        ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(&commandBuffer));
+    }
 
     commandBuffer->copyBuffer(mBuffer.getBuffer(), destBuffer->getBuffer(), copyCount, copies);
 
+    if (contextVk->commandGraphEnabled())
+    {
+        mBuffer.onReadByBuffer(contextVk, destBuffer, VK_ACCESS_TRANSFER_READ_BIT,
+                               VK_ACCESS_TRANSFER_WRITE_BIT);
+    }
     return angle::Result::Continue;
 }
 

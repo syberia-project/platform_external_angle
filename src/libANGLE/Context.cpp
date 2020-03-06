@@ -347,6 +347,8 @@ Context::Context(egl::Display *display,
       mVertexArrayObserverBinding(this, kVertexArraySubjectIndex),
       mDrawFramebufferObserverBinding(this, kDrawFramebufferSubjectIndex),
       mReadFramebufferObserverBinding(this, kReadFramebufferSubjectIndex),
+      mScratchBuffer(1000u),
+      mZeroFilledBuffer(1000u),
       mThreadPool(nullptr),
       mFrameCapture(new angle::FrameCapture),
       mOverlay(mImplementation.get())
@@ -704,20 +706,7 @@ egl::Error Context::unMakeCurrent(const egl::Display *display)
 {
     ANGLE_TRY(unsetDefaultFramebuffer());
 
-    ANGLE_TRY(angle::ResultToEGL(mImplementation->onUnMakeCurrent(this)));
-
-    // Return the scratch buffers to the display so they can be shared with other contexts while
-    // this one is not current.
-    if (mScratchBuffer.valid())
-    {
-        mDisplay->returnScratchBuffer(mScratchBuffer.release());
-    }
-    if (mZeroFilledBuffer.valid())
-    {
-        mDisplay->returnZeroFilledBuffer(mZeroFilledBuffer.release());
-    }
-
-    return egl::NoError();
+    return angle::ResultToEGL(mImplementation->onUnMakeCurrent(this));
 }
 
 BufferID Context::createBuffer()
@@ -871,7 +860,7 @@ void Context::deletePaths(PathID first, GLsizei range)
     mState.mPathManager->deletePaths(first, range);
 }
 
-GLboolean Context::isPath(PathID path) const
+GLboolean Context::isPath(PathID path)
 {
     const auto *pathObj = mState.mPathManager->getPath(path);
     if (pathObj == nullptr)
@@ -1126,7 +1115,7 @@ void Context::getObjectPtrLabel(const void *ptr, GLsizei bufSize, GLsizei *lengt
     GetObjectLabelBase(objectLabel, bufSize, length, label);
 }
 
-GLboolean Context::isSampler(SamplerID samplerName) const
+GLboolean Context::isSampler(SamplerID samplerName)
 {
     return mState.mSamplerManager->isSampler(samplerName);
 }
@@ -1239,7 +1228,7 @@ void Context::bindProgramPipeline(ProgramPipelineID pipelineHandle)
 
 void Context::beginQuery(QueryType target, QueryID query)
 {
-    Query *queryObject = getOrCreateQuery(query, target);
+    Query *queryObject = getQuery(query, true, target);
     ASSERT(queryObject);
 
     // begin query
@@ -1267,7 +1256,7 @@ void Context::queryCounter(QueryID id, QueryType target)
 {
     ASSERT(target == QueryType::Timestamp);
 
-    Query *queryObject = getOrCreateQuery(id, target);
+    Query *queryObject = getQuery(id, true, target);
     ASSERT(queryObject);
 
     ANGLE_CONTEXT_TRY(queryObject->queryCounter(this));
@@ -1381,12 +1370,12 @@ Framebuffer *Context::getFramebuffer(FramebufferID handle) const
     return mState.mFramebufferManager->getFramebuffer(handle);
 }
 
-FenceNV *Context::getFenceNV(FenceNVID handle) const
+FenceNV *Context::getFenceNV(FenceNVID handle)
 {
     return mFenceNVMap.query(handle);
 }
 
-Query *Context::getOrCreateQuery(QueryID handle, QueryType type)
+Query *Context::getQuery(QueryID handle, bool create, QueryType type)
 {
     if (!mQueryMap.contains(handle))
     {
@@ -1394,7 +1383,7 @@ Query *Context::getOrCreateQuery(QueryID handle, QueryType type)
     }
 
     Query *query = mQueryMap.query(handle);
-    if (!query)
+    if (!query && create)
     {
         ASSERT(type != QueryType::InvalidEnum);
         query = new Query(mImplementation.get(), type, handle);
@@ -1434,7 +1423,7 @@ Compiler *Context::getCompiler() const
     return mCompiler.get();
 }
 
-void Context::getBooleanvImpl(GLenum pname, GLboolean *params) const
+void Context::getBooleanvImpl(GLenum pname, GLboolean *params)
 {
     switch (pname)
     {
@@ -1451,7 +1440,7 @@ void Context::getBooleanvImpl(GLenum pname, GLboolean *params) const
     }
 }
 
-void Context::getFloatvImpl(GLenum pname, GLfloat *params) const
+void Context::getFloatvImpl(GLenum pname, GLfloat *params)
 {
     // Queries about context capabilities and maximums are answered by Context.
     // Queries about current GL state values are answered by State.
@@ -1505,7 +1494,7 @@ void Context::getFloatvImpl(GLenum pname, GLfloat *params) const
     }
 }
 
-void Context::getIntegervImpl(GLenum pname, GLint *params) const
+void Context::getIntegervImpl(GLenum pname, GLint *params)
 {
     // Queries about context capabilities and maximums are answered by Context.
     // Queries about current GL state values are answered by State.
@@ -1889,26 +1878,30 @@ void Context::getIntegervImpl(GLenum pname, GLint *params) const
         case GL_COLOR_ARRAY_BUFFER_BINDING:
         case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_OES:
         case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING:
-            getIntegerVertexAttribImpl(pname, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, params);
+            getVertexAttribiv(static_cast<GLuint>(vertexArrayIndex(ParamToVertexArrayType(pname))),
+                              GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, params);
             break;
         case GL_VERTEX_ARRAY_STRIDE:
         case GL_NORMAL_ARRAY_STRIDE:
         case GL_COLOR_ARRAY_STRIDE:
         case GL_POINT_SIZE_ARRAY_STRIDE_OES:
         case GL_TEXTURE_COORD_ARRAY_STRIDE:
-            getIntegerVertexAttribImpl(pname, GL_VERTEX_ATTRIB_ARRAY_STRIDE, params);
+            getVertexAttribiv(static_cast<GLuint>(vertexArrayIndex(ParamToVertexArrayType(pname))),
+                              GL_VERTEX_ATTRIB_ARRAY_STRIDE, params);
             break;
         case GL_VERTEX_ARRAY_SIZE:
         case GL_COLOR_ARRAY_SIZE:
         case GL_TEXTURE_COORD_ARRAY_SIZE:
-            getIntegerVertexAttribImpl(pname, GL_VERTEX_ATTRIB_ARRAY_SIZE, params);
+            getVertexAttribiv(static_cast<GLuint>(vertexArrayIndex(ParamToVertexArrayType(pname))),
+                              GL_VERTEX_ATTRIB_ARRAY_SIZE, params);
             break;
         case GL_VERTEX_ARRAY_TYPE:
         case GL_COLOR_ARRAY_TYPE:
         case GL_NORMAL_ARRAY_TYPE:
         case GL_POINT_SIZE_ARRAY_TYPE_OES:
         case GL_TEXTURE_COORD_ARRAY_TYPE:
-            getIntegerVertexAttribImpl(pname, GL_VERTEX_ATTRIB_ARRAY_TYPE, params);
+            getVertexAttribiv(static_cast<GLuint>(vertexArrayIndex(ParamToVertexArrayType(pname))),
+                              GL_VERTEX_ATTRIB_ARRAY_TYPE, params);
             break;
 
         // GL_KHR_parallel_shader_compile
@@ -1927,13 +1920,7 @@ void Context::getIntegervImpl(GLenum pname, GLint *params) const
     }
 }
 
-void Context::getIntegerVertexAttribImpl(GLenum pname, GLenum attribpname, GLint *params) const
-{
-    getVertexAttribivImpl(static_cast<GLuint>(vertexArrayIndex(ParamToVertexArrayType(pname))),
-                          attribpname, params);
-}
-
-void Context::getInteger64vImpl(GLenum pname, GLint64 *params) const
+void Context::getInteger64vImpl(GLenum pname, GLint64 *params)
 {
     // Queries about context capabilities and maximums are answered by Context.
     // Queries about current GL state values are answered by State.
@@ -2446,7 +2433,7 @@ void Context::finish()
 void Context::insertEventMarker(GLsizei length, const char *marker)
 {
     ASSERT(mImplementation);
-    ANGLE_CONTEXT_TRY(mImplementation->insertEventMarker(length, marker));
+    mImplementation->insertEventMarker(length, marker);
 }
 
 void Context::pushGroupMarker(GLsizei length, const char *marker)
@@ -2457,23 +2444,21 @@ void Context::pushGroupMarker(GLsizei length, const char *marker)
     {
         // From the EXT_debug_marker spec,
         // "If <marker> is null then an empty string is pushed on the stack."
-        ANGLE_CONTEXT_TRY(mImplementation->pushGroupMarker(length, ""));
+        mImplementation->pushGroupMarker(length, "");
     }
     else
     {
-        ANGLE_CONTEXT_TRY(mImplementation->pushGroupMarker(length, marker));
+        mImplementation->pushGroupMarker(length, marker);
     }
 }
 
 void Context::popGroupMarker()
 {
     ASSERT(mImplementation);
-    ANGLE_CONTEXT_TRY(mImplementation->popGroupMarker());
+    mImplementation->popGroupMarker();
 }
 
-void Context::bindUniformLocation(ShaderProgramID program,
-                                  UniformLocation location,
-                                  const GLchar *name)
+void Context::bindUniformLocation(ShaderProgramID program, GLint location, const GLchar *name)
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
@@ -2764,9 +2749,9 @@ void Context::handleError(GLenum errorCode,
     mErrors.handleError(errorCode, message, file, function, line);
 }
 
-void Context::validationError(GLenum errorCode, const char *message) const
+void Context::validationError(GLenum errorCode, const char *message)
 {
-    const_cast<Context *>(this)->mErrors.validationError(errorCode, message);
+    mErrors.validationError(errorCode, message);
 }
 
 // Get one of the recorded errors and clear its flag, if any.
@@ -2907,13 +2892,13 @@ TransformFeedback *Context::checkTransformFeedbackAllocation(
     return transformFeedback;
 }
 
-bool Context::isVertexArrayGenerated(VertexArrayID vertexArray) const
+bool Context::isVertexArrayGenerated(VertexArrayID vertexArray)
 {
     ASSERT(mVertexArrayMap.contains({0}));
     return mVertexArrayMap.contains(vertexArray);
 }
 
-bool Context::isTransformFeedbackGenerated(TransformFeedbackID transformFeedback) const
+bool Context::isTransformFeedbackGenerated(TransformFeedbackID transformFeedback)
 {
     ASSERT(mTransformFeedbackMap.contains({0}));
     return mTransformFeedbackMap.contains(transformFeedback);
@@ -3295,7 +3280,7 @@ size_t Context::getExtensionStringCount() const
     return mExtensionStrings.size();
 }
 
-bool Context::isExtensionRequestable(const char *name) const
+bool Context::isExtensionRequestable(const char *name)
 {
     const ExtensionInfoMap &extensionInfos = GetExtensionInfoMap();
     auto extension                         = extensionInfos.find(name);
@@ -3304,7 +3289,7 @@ bool Context::isExtensionRequestable(const char *name) const
            mSupportedExtensions.*(extension->second.ExtensionsMember);
 }
 
-bool Context::isExtensionDisablable(const char *name) const
+bool Context::isExtensionDisablable(const char *name)
 {
     const ExtensionInfoMap &extensionInfos = GetExtensionInfoMap();
     auto extension                         = extensionInfos.find(name);
@@ -3505,8 +3490,8 @@ Extensions Context::generateSupportedExtensions() const
     supportedExtensions.maxDebugGroupStackDepth = 1024;
     supportedExtensions.maxLabelLength          = 1024;
 
-    // Explicitly enable GL_ANGLE_robust_client_memory if the context supports validation.
-    supportedExtensions.robustClientMemory = !mSkipValidation;
+    // Explicitly enable GL_ANGLE_robust_client_memory
+    supportedExtensions.robustClientMemory = true;
 
     // Determine robust resource init availability from EGL.
     supportedExtensions.robustResourceInitialization = mState.isRobustResourceInitEnabled();
@@ -4926,7 +4911,7 @@ void Context::blendBarrier()
 
 void Context::blendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
-    mState.setBlendColor(red, green, blue, alpha);
+    mState.setBlendColor(clamp01(red), clamp01(green), clamp01(blue), clamp01(alpha));
 }
 
 void Context::blendEquation(GLenum mode)
@@ -5355,18 +5340,13 @@ void Context::vertexAttribI4uiv(GLuint index, const GLuint *v)
     mStateCache.onDefaultVertexAttributeChange(this);
 }
 
-void Context::getVertexAttribivImpl(GLuint index, GLenum pname, GLint *params) const
+void Context::getVertexAttribiv(GLuint index, GLenum pname, GLint *params)
 {
     const VertexAttribCurrentValueData &currentValues =
         getState().getVertexAttribCurrentValue(index);
     const VertexArray *vao = getState().getVertexArray();
     QueryVertexAttribiv(vao->getVertexAttribute(index), vao->getBindingFromAttribIndex(index),
                         currentValues, pname, params);
-}
-
-void Context::getVertexAttribiv(GLuint index, GLenum pname, GLint *params)
-{
-    return getVertexAttribivImpl(index, pname, params);
 }
 
 void Context::getVertexAttribivRobust(GLuint index,
@@ -5491,14 +5471,14 @@ GLuint Context::getDebugMessageLog(GLuint count,
 void Context::pushDebugGroup(GLenum source, GLuint id, GLsizei length, const GLchar *message)
 {
     std::string msg(message, (length > 0) ? static_cast<size_t>(length) : strlen(message));
-    ANGLE_CONTEXT_TRY(mImplementation->pushDebugGroup(this, source, id, msg));
+    mImplementation->pushDebugGroup(source, id, msg);
     mState.getDebug().pushGroup(source, id, std::move(msg));
 }
 
 void Context::popDebugGroup()
 {
     mState.getDebug().popGroup();
-    ANGLE_CONTEXT_TRY(mImplementation->popDebugGroup(this));
+    mImplementation->popDebugGroup();
 }
 
 void Context::primitiveBoundingBox(GLfloat minX,
@@ -5777,36 +5757,13 @@ void Context::framebufferParameteri(GLenum target, GLenum pname, GLint param)
 bool Context::getScratchBuffer(size_t requstedSizeBytes,
                                angle::MemoryBuffer **scratchBufferOut) const
 {
-    if (!mScratchBuffer.valid())
-    {
-        mScratchBuffer = mDisplay->requestScratchBuffer();
-    }
-
-    ASSERT(mScratchBuffer.valid());
-    return mScratchBuffer.value().get(requstedSizeBytes, scratchBufferOut);
-}
-
-angle::ScratchBuffer *Context::getScratchBuffer() const
-{
-    if (!mScratchBuffer.valid())
-    {
-        mScratchBuffer = mDisplay->requestScratchBuffer();
-    }
-
-    ASSERT(mScratchBuffer.valid());
-    return &mScratchBuffer.value();
+    return mScratchBuffer.get(requstedSizeBytes, scratchBufferOut);
 }
 
 bool Context::getZeroFilledBuffer(size_t requstedSizeBytes,
                                   angle::MemoryBuffer **zeroBufferOut) const
 {
-    if (!mZeroFilledBuffer.valid())
-    {
-        mZeroFilledBuffer = mDisplay->requestZeroFilledBuffer();
-    }
-
-    ASSERT(mZeroFilledBuffer.valid());
-    return mZeroFilledBuffer.value().getInitialized(requstedSizeBytes, zeroBufferOut, 0);
+    return mZeroFilledBuffer.getInitialized(requstedSizeBytes, zeroBufferOut, 0);
 }
 
 void Context::dispatchCompute(GLuint numGroupsX, GLuint numGroupsY, GLuint numGroupsZ)
@@ -6647,7 +6604,7 @@ void Context::getShaderSource(ShaderProgramID shader,
     shaderObject->getSource(bufsize, length, source);
 }
 
-void Context::getUniformfv(ShaderProgramID program, UniformLocation location, GLfloat *params)
+void Context::getUniformfv(ShaderProgramID program, GLint location, GLfloat *params)
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
@@ -6655,7 +6612,7 @@ void Context::getUniformfv(ShaderProgramID program, UniformLocation location, GL
 }
 
 void Context::getUniformfvRobust(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei bufSize,
                                  GLsizei *length,
                                  GLfloat *params)
@@ -6663,7 +6620,7 @@ void Context::getUniformfvRobust(ShaderProgramID program,
     getUniformfv(program, location, params);
 }
 
-void Context::getUniformiv(ShaderProgramID program, UniformLocation location, GLint *params)
+void Context::getUniformiv(ShaderProgramID program, GLint location, GLint *params)
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
@@ -6671,7 +6628,7 @@ void Context::getUniformiv(ShaderProgramID program, UniformLocation location, GL
 }
 
 void Context::getUniformivRobust(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei bufSize,
                                  GLsizei *length,
                                  GLint *params)
@@ -6683,10 +6640,10 @@ GLint Context::getUniformLocation(ShaderProgramID program, const GLchar *name)
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
-    return programObject->getUniformLocation(name).value;
+    return programObject->getUniformLocation(name);
 }
 
-GLboolean Context::isBuffer(BufferID buffer) const
+GLboolean Context::isBuffer(BufferID buffer)
 {
     if (buffer.value == 0)
     {
@@ -6696,18 +6653,18 @@ GLboolean Context::isBuffer(BufferID buffer) const
     return ConvertToGLBoolean(getBuffer(buffer));
 }
 
-GLboolean Context::isEnabled(GLenum cap) const
+GLboolean Context::isEnabled(GLenum cap)
 {
     return mState.getEnableFeature(cap);
 }
 
-GLboolean Context::isEnabledi(GLenum target, GLuint index) const
+GLboolean Context::isEnabledi(GLenum target, GLuint index)
 {
     UNIMPLEMENTED();
     return false;
 }
 
-GLboolean Context::isFramebuffer(FramebufferID framebuffer) const
+GLboolean Context::isFramebuffer(FramebufferID framebuffer)
 {
     if (framebuffer.value == 0)
     {
@@ -6717,7 +6674,7 @@ GLboolean Context::isFramebuffer(FramebufferID framebuffer) const
     return ConvertToGLBoolean(getFramebuffer(framebuffer));
 }
 
-GLboolean Context::isProgram(ShaderProgramID program) const
+GLboolean Context::isProgram(ShaderProgramID program)
 {
     if (program.value == 0)
     {
@@ -6727,7 +6684,7 @@ GLboolean Context::isProgram(ShaderProgramID program) const
     return ConvertToGLBoolean(getProgramNoResolveLink(program));
 }
 
-GLboolean Context::isRenderbuffer(RenderbufferID renderbuffer) const
+GLboolean Context::isRenderbuffer(RenderbufferID renderbuffer)
 {
     if (renderbuffer.value == 0)
     {
@@ -6737,7 +6694,7 @@ GLboolean Context::isRenderbuffer(RenderbufferID renderbuffer) const
     return ConvertToGLBoolean(getRenderbuffer(renderbuffer));
 }
 
-GLboolean Context::isShader(ShaderProgramID shader) const
+GLboolean Context::isShader(ShaderProgramID shader)
 {
     if (shader.value == 0)
     {
@@ -6747,7 +6704,7 @@ GLboolean Context::isShader(ShaderProgramID shader) const
     return ConvertToGLBoolean(getShader(shader));
 }
 
-GLboolean Context::isTexture(TextureID texture) const
+GLboolean Context::isTexture(TextureID texture)
 {
     if (texture.value == 0)
     {
@@ -6840,22 +6797,19 @@ void Context::patchParameteri(GLenum pname, GLint value)
     UNIMPLEMENTED();
 }
 
-void Context::uniform1f(UniformLocation location, GLfloat x)
+void Context::uniform1f(GLint location, GLfloat x)
 {
     Program *program = mState.getProgram();
     program->setUniform1fv(location, 1, &x);
 }
 
-void Context::uniform1fv(UniformLocation location, GLsizei count, const GLfloat *v)
+void Context::uniform1fv(GLint location, GLsizei count, const GLfloat *v)
 {
     Program *program = mState.getProgram();
     program->setUniform1fv(location, count, v);
 }
 
-void Context::setUniform1iImpl(Program *program,
-                               UniformLocation location,
-                               GLsizei count,
-                               const GLint *v)
+void Context::setUniform1iImpl(Program *program, GLint location, GLsizei count, const GLint *v)
 {
     program->setUniform1iv(this, location, count, v);
 }
@@ -6866,95 +6820,95 @@ void Context::onSamplerUniformChange(size_t textureUnitIndex)
     mStateCache.onActiveTextureChange(this);
 }
 
-void Context::uniform1i(UniformLocation location, GLint x)
+void Context::uniform1i(GLint location, GLint x)
 {
     setUniform1iImpl(mState.getProgram(), location, 1, &x);
 }
 
-void Context::uniform1iv(UniformLocation location, GLsizei count, const GLint *v)
+void Context::uniform1iv(GLint location, GLsizei count, const GLint *v)
 {
     setUniform1iImpl(mState.getProgram(), location, count, v);
 }
 
-void Context::uniform2f(UniformLocation location, GLfloat x, GLfloat y)
+void Context::uniform2f(GLint location, GLfloat x, GLfloat y)
 {
     GLfloat xy[2]    = {x, y};
     Program *program = mState.getProgram();
     program->setUniform2fv(location, 1, xy);
 }
 
-void Context::uniform2fv(UniformLocation location, GLsizei count, const GLfloat *v)
+void Context::uniform2fv(GLint location, GLsizei count, const GLfloat *v)
 {
     Program *program = mState.getProgram();
     program->setUniform2fv(location, count, v);
 }
 
-void Context::uniform2i(UniformLocation location, GLint x, GLint y)
+void Context::uniform2i(GLint location, GLint x, GLint y)
 {
     GLint xy[2]      = {x, y};
     Program *program = mState.getProgram();
     program->setUniform2iv(location, 1, xy);
 }
 
-void Context::uniform2iv(UniformLocation location, GLsizei count, const GLint *v)
+void Context::uniform2iv(GLint location, GLsizei count, const GLint *v)
 {
     Program *program = mState.getProgram();
     program->setUniform2iv(location, count, v);
 }
 
-void Context::uniform3f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z)
+void Context::uniform3f(GLint location, GLfloat x, GLfloat y, GLfloat z)
 {
     GLfloat xyz[3]   = {x, y, z};
     Program *program = mState.getProgram();
     program->setUniform3fv(location, 1, xyz);
 }
 
-void Context::uniform3fv(UniformLocation location, GLsizei count, const GLfloat *v)
+void Context::uniform3fv(GLint location, GLsizei count, const GLfloat *v)
 {
     Program *program = mState.getProgram();
     program->setUniform3fv(location, count, v);
 }
 
-void Context::uniform3i(UniformLocation location, GLint x, GLint y, GLint z)
+void Context::uniform3i(GLint location, GLint x, GLint y, GLint z)
 {
     GLint xyz[3]     = {x, y, z};
     Program *program = mState.getProgram();
     program->setUniform3iv(location, 1, xyz);
 }
 
-void Context::uniform3iv(UniformLocation location, GLsizei count, const GLint *v)
+void Context::uniform3iv(GLint location, GLsizei count, const GLint *v)
 {
     Program *program = mState.getProgram();
     program->setUniform3iv(location, count, v);
 }
 
-void Context::uniform4f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+void Context::uniform4f(GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     GLfloat xyzw[4]  = {x, y, z, w};
     Program *program = mState.getProgram();
     program->setUniform4fv(location, 1, xyzw);
 }
 
-void Context::uniform4fv(UniformLocation location, GLsizei count, const GLfloat *v)
+void Context::uniform4fv(GLint location, GLsizei count, const GLfloat *v)
 {
     Program *program = mState.getProgram();
     program->setUniform4fv(location, count, v);
 }
 
-void Context::uniform4i(UniformLocation location, GLint x, GLint y, GLint z, GLint w)
+void Context::uniform4i(GLint location, GLint x, GLint y, GLint z, GLint w)
 {
     GLint xyzw[4]    = {x, y, z, w};
     Program *program = mState.getProgram();
     program->setUniform4iv(location, 1, xyzw);
 }
 
-void Context::uniform4iv(UniformLocation location, GLsizei count, const GLint *v)
+void Context::uniform4iv(GLint location, GLsizei count, const GLint *v)
 {
     Program *program = mState.getProgram();
     program->setUniform4iv(location, count, v);
 }
 
-void Context::uniformMatrix2fv(UniformLocation location,
+void Context::uniformMatrix2fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value)
@@ -6963,7 +6917,7 @@ void Context::uniformMatrix2fv(UniformLocation location,
     program->setUniformMatrix2fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix3fv(UniformLocation location,
+void Context::uniformMatrix3fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value)
@@ -6972,7 +6926,7 @@ void Context::uniformMatrix3fv(UniformLocation location,
     program->setUniformMatrix3fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix4fv(UniformLocation location,
+void Context::uniformMatrix4fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value)
@@ -7017,51 +6971,51 @@ void Context::programBinary(ShaderProgramID program,
     ANGLE_CONTEXT_TRY(onProgramLink(programObject));
 }
 
-void Context::uniform1ui(UniformLocation location, GLuint v0)
+void Context::uniform1ui(GLint location, GLuint v0)
 {
     Program *program = mState.getProgram();
     program->setUniform1uiv(location, 1, &v0);
 }
 
-void Context::uniform2ui(UniformLocation location, GLuint v0, GLuint v1)
+void Context::uniform2ui(GLint location, GLuint v0, GLuint v1)
 {
     Program *program  = mState.getProgram();
     const GLuint xy[] = {v0, v1};
     program->setUniform2uiv(location, 1, xy);
 }
 
-void Context::uniform3ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2)
+void Context::uniform3ui(GLint location, GLuint v0, GLuint v1, GLuint v2)
 {
     Program *program   = mState.getProgram();
     const GLuint xyz[] = {v0, v1, v2};
     program->setUniform3uiv(location, 1, xyz);
 }
 
-void Context::uniform4ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2, GLuint v3)
+void Context::uniform4ui(GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3)
 {
     Program *program    = mState.getProgram();
     const GLuint xyzw[] = {v0, v1, v2, v3};
     program->setUniform4uiv(location, 1, xyzw);
 }
 
-void Context::uniform1uiv(UniformLocation location, GLsizei count, const GLuint *value)
+void Context::uniform1uiv(GLint location, GLsizei count, const GLuint *value)
 {
     Program *program = mState.getProgram();
     program->setUniform1uiv(location, count, value);
 }
-void Context::uniform2uiv(UniformLocation location, GLsizei count, const GLuint *value)
+void Context::uniform2uiv(GLint location, GLsizei count, const GLuint *value)
 {
     Program *program = mState.getProgram();
     program->setUniform2uiv(location, count, value);
 }
 
-void Context::uniform3uiv(UniformLocation location, GLsizei count, const GLuint *value)
+void Context::uniform3uiv(GLint location, GLsizei count, const GLuint *value)
 {
     Program *program = mState.getProgram();
     program->setUniform3uiv(location, count, value);
 }
 
-void Context::uniform4uiv(UniformLocation location, GLsizei count, const GLuint *value)
+void Context::uniform4uiv(GLint location, GLsizei count, const GLuint *value)
 {
     Program *program = mState.getProgram();
     program->setUniform4uiv(location, count, value);
@@ -7095,17 +7049,12 @@ void Context::deleteQueries(GLsizei n, const QueryID *ids)
     }
 }
 
-bool Context::isQueryGenerated(QueryID query) const
+GLboolean Context::isQuery(QueryID id)
 {
-    return mQueryMap.contains(query);
+    return ConvertToGLBoolean(getQuery(id, false, QueryType::InvalidEnum) != nullptr);
 }
 
-GLboolean Context::isQuery(QueryID id) const
-{
-    return ConvertToGLBoolean(getQuery(id) != nullptr);
-}
-
-void Context::uniformMatrix2x3fv(UniformLocation location,
+void Context::uniformMatrix2x3fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7114,7 +7063,7 @@ void Context::uniformMatrix2x3fv(UniformLocation location,
     program->setUniformMatrix2x3fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix3x2fv(UniformLocation location,
+void Context::uniformMatrix3x2fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7123,7 +7072,7 @@ void Context::uniformMatrix3x2fv(UniformLocation location,
     program->setUniformMatrix3x2fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix2x4fv(UniformLocation location,
+void Context::uniformMatrix2x4fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7132,7 +7081,7 @@ void Context::uniformMatrix2x4fv(UniformLocation location,
     program->setUniformMatrix2x4fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix4x2fv(UniformLocation location,
+void Context::uniformMatrix4x2fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7141,7 +7090,7 @@ void Context::uniformMatrix4x2fv(UniformLocation location,
     program->setUniformMatrix4x2fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix3x4fv(UniformLocation location,
+void Context::uniformMatrix3x4fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7150,7 +7099,7 @@ void Context::uniformMatrix3x4fv(UniformLocation location,
     program->setUniformMatrix3x4fv(location, count, transpose, value);
 }
 
-void Context::uniformMatrix4x3fv(UniformLocation location,
+void Context::uniformMatrix4x3fv(GLint location,
                                  GLsizei count,
                                  GLboolean transpose,
                                  const GLfloat *value)
@@ -7192,7 +7141,7 @@ void Context::genVertexArrays(GLsizei n, VertexArrayID *arrays)
     }
 }
 
-GLboolean Context::isVertexArray(VertexArrayID array) const
+GLboolean Context::isVertexArray(VertexArrayID array)
 {
     if (array.value == 0)
     {
@@ -7267,7 +7216,7 @@ void Context::genTransformFeedbacks(GLsizei n, TransformFeedbackID *ids)
     }
 }
 
-GLboolean Context::isTransformFeedback(TransformFeedbackID id) const
+GLboolean Context::isTransformFeedback(TransformFeedbackID id)
 {
     if (id.value == 0)
     {
@@ -7294,14 +7243,14 @@ void Context::resumeTransformFeedback()
     mStateCache.onActiveTransformFeedbackChange(this);
 }
 
-void Context::getUniformuiv(ShaderProgramID program, UniformLocation location, GLuint *params)
+void Context::getUniformuiv(ShaderProgramID program, GLint location, GLuint *params)
 {
     const Program *programObject = getProgramResolveLink(program);
     programObject->getUniformuiv(this, location, params);
 }
 
 void Context::getUniformuivRobust(ShaderProgramID program,
-                                  UniformLocation location,
+                                  GLint location,
                                   GLsizei bufSize,
                                   GLsizei *length,
                                   GLuint *params)
@@ -7416,7 +7365,7 @@ GLsync Context::fenceSync(GLenum condition, GLbitfield flags)
     return syncHandle;
 }
 
-GLboolean Context::isSync(GLsync sync) const
+GLboolean Context::isSync(GLsync sync)
 {
     return (getSync(sync) != nullptr);
 }
@@ -7523,22 +7472,19 @@ void Context::getInternalformativRobust(GLenum target,
     getInternalformativ(target, internalformat, pname, bufSize, params);
 }
 
-void Context::programUniform1i(ShaderProgramID program, UniformLocation location, GLint v0)
+void Context::programUniform1i(ShaderProgramID program, GLint location, GLint v0)
 {
     programUniform1iv(program, location, 1, &v0);
 }
 
-void Context::programUniform2i(ShaderProgramID program,
-                               UniformLocation location,
-                               GLint v0,
-                               GLint v1)
+void Context::programUniform2i(ShaderProgramID program, GLint location, GLint v0, GLint v1)
 {
     GLint xy[2] = {v0, v1};
     programUniform2iv(program, location, 1, xy);
 }
 
 void Context::programUniform3i(ShaderProgramID program,
-                               UniformLocation location,
+                               GLint location,
                                GLint v0,
                                GLint v1,
                                GLint v2)
@@ -7548,7 +7494,7 @@ void Context::programUniform3i(ShaderProgramID program,
 }
 
 void Context::programUniform4i(ShaderProgramID program,
-                               UniformLocation location,
+                               GLint location,
                                GLint v0,
                                GLint v1,
                                GLint v2,
@@ -7558,22 +7504,19 @@ void Context::programUniform4i(ShaderProgramID program,
     programUniform4iv(program, location, 1, xyzw);
 }
 
-void Context::programUniform1ui(ShaderProgramID program, UniformLocation location, GLuint v0)
+void Context::programUniform1ui(ShaderProgramID program, GLint location, GLuint v0)
 {
     programUniform1uiv(program, location, 1, &v0);
 }
 
-void Context::programUniform2ui(ShaderProgramID program,
-                                UniformLocation location,
-                                GLuint v0,
-                                GLuint v1)
+void Context::programUniform2ui(ShaderProgramID program, GLint location, GLuint v0, GLuint v1)
 {
     GLuint xy[2] = {v0, v1};
     programUniform2uiv(program, location, 1, xy);
 }
 
 void Context::programUniform3ui(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLuint v0,
                                 GLuint v1,
                                 GLuint v2)
@@ -7583,7 +7526,7 @@ void Context::programUniform3ui(ShaderProgramID program,
 }
 
 void Context::programUniform4ui(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLuint v0,
                                 GLuint v1,
                                 GLuint v2,
@@ -7593,22 +7536,19 @@ void Context::programUniform4ui(ShaderProgramID program,
     programUniform4uiv(program, location, 1, xyzw);
 }
 
-void Context::programUniform1f(ShaderProgramID program, UniformLocation location, GLfloat v0)
+void Context::programUniform1f(ShaderProgramID program, GLint location, GLfloat v0)
 {
     programUniform1fv(program, location, 1, &v0);
 }
 
-void Context::programUniform2f(ShaderProgramID program,
-                               UniformLocation location,
-                               GLfloat v0,
-                               GLfloat v1)
+void Context::programUniform2f(ShaderProgramID program, GLint location, GLfloat v0, GLfloat v1)
 {
     GLfloat xy[2] = {v0, v1};
     programUniform2fv(program, location, 1, xy);
 }
 
 void Context::programUniform3f(ShaderProgramID program,
-                               UniformLocation location,
+                               GLint location,
                                GLfloat v0,
                                GLfloat v1,
                                GLfloat v2)
@@ -7618,7 +7558,7 @@ void Context::programUniform3f(ShaderProgramID program,
 }
 
 void Context::programUniform4f(ShaderProgramID program,
-                               UniformLocation location,
+                               GLint location,
                                GLfloat v0,
                                GLfloat v1,
                                GLfloat v2,
@@ -7629,7 +7569,7 @@ void Context::programUniform4f(ShaderProgramID program,
 }
 
 void Context::programUniform1iv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLint *value)
 {
@@ -7639,7 +7579,7 @@ void Context::programUniform1iv(ShaderProgramID program,
 }
 
 void Context::programUniform2iv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLint *value)
 {
@@ -7649,7 +7589,7 @@ void Context::programUniform2iv(ShaderProgramID program,
 }
 
 void Context::programUniform3iv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLint *value)
 {
@@ -7659,7 +7599,7 @@ void Context::programUniform3iv(ShaderProgramID program,
 }
 
 void Context::programUniform4iv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLint *value)
 {
@@ -7669,7 +7609,7 @@ void Context::programUniform4iv(ShaderProgramID program,
 }
 
 void Context::programUniform1uiv(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei count,
                                  const GLuint *value)
 {
@@ -7679,7 +7619,7 @@ void Context::programUniform1uiv(ShaderProgramID program,
 }
 
 void Context::programUniform2uiv(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei count,
                                  const GLuint *value)
 {
@@ -7689,7 +7629,7 @@ void Context::programUniform2uiv(ShaderProgramID program,
 }
 
 void Context::programUniform3uiv(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei count,
                                  const GLuint *value)
 {
@@ -7699,7 +7639,7 @@ void Context::programUniform3uiv(ShaderProgramID program,
 }
 
 void Context::programUniform4uiv(ShaderProgramID program,
-                                 UniformLocation location,
+                                 GLint location,
                                  GLsizei count,
                                  const GLuint *value)
 {
@@ -7709,7 +7649,7 @@ void Context::programUniform4uiv(ShaderProgramID program,
 }
 
 void Context::programUniform1fv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLfloat *value)
 {
@@ -7719,7 +7659,7 @@ void Context::programUniform1fv(ShaderProgramID program,
 }
 
 void Context::programUniform2fv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLfloat *value)
 {
@@ -7729,7 +7669,7 @@ void Context::programUniform2fv(ShaderProgramID program,
 }
 
 void Context::programUniform3fv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLfloat *value)
 {
@@ -7739,7 +7679,7 @@ void Context::programUniform3fv(ShaderProgramID program,
 }
 
 void Context::programUniform4fv(ShaderProgramID program,
-                                UniformLocation location,
+                                GLint location,
                                 GLsizei count,
                                 const GLfloat *value)
 {
@@ -7749,7 +7689,7 @@ void Context::programUniform4fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix2fv(ShaderProgramID program,
-                                      UniformLocation location,
+                                      GLint location,
                                       GLsizei count,
                                       GLboolean transpose,
                                       const GLfloat *value)
@@ -7760,7 +7700,7 @@ void Context::programUniformMatrix2fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix3fv(ShaderProgramID program,
-                                      UniformLocation location,
+                                      GLint location,
                                       GLsizei count,
                                       GLboolean transpose,
                                       const GLfloat *value)
@@ -7771,7 +7711,7 @@ void Context::programUniformMatrix3fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix4fv(ShaderProgramID program,
-                                      UniformLocation location,
+                                      GLint location,
                                       GLsizei count,
                                       GLboolean transpose,
                                       const GLfloat *value)
@@ -7782,7 +7722,7 @@ void Context::programUniformMatrix4fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix2x3fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7793,7 +7733,7 @@ void Context::programUniformMatrix2x3fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix3x2fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7804,7 +7744,7 @@ void Context::programUniformMatrix3x2fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix2x4fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7815,7 +7755,7 @@ void Context::programUniformMatrix2x4fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix4x2fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7826,7 +7766,7 @@ void Context::programUniformMatrix4x2fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix3x4fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7837,7 +7777,7 @@ void Context::programUniformMatrix3x4fv(ShaderProgramID program,
 }
 
 void Context::programUniformMatrix4x3fv(ShaderProgramID program,
-                                        UniformLocation location,
+                                        GLint location,
                                         GLsizei count,
                                         GLboolean transpose,
                                         const GLfloat *value)
@@ -7871,7 +7811,7 @@ void Context::deleteProgramPipelines(GLsizei count, const ProgramPipelineID *pip
     }
 }
 
-GLboolean Context::isProgramPipeline(ProgramPipelineID pipeline) const
+GLboolean Context::isProgramPipeline(ProgramPipelineID pipeline)
 {
     if (pipeline.value == 0)
     {
@@ -7934,7 +7874,7 @@ void Context::getTranslatedShaderSource(ShaderProgramID shader,
 }
 
 void Context::getnUniformfv(ShaderProgramID program,
-                            UniformLocation location,
+                            GLint location,
                             GLsizei bufSize,
                             GLfloat *params)
 {
@@ -7945,7 +7885,7 @@ void Context::getnUniformfv(ShaderProgramID program,
 }
 
 void Context::getnUniformfvRobust(ShaderProgramID program,
-                                  UniformLocation location,
+                                  GLint location,
                                   GLsizei bufSize,
                                   GLsizei *length,
                                   GLfloat *params)
@@ -7953,10 +7893,7 @@ void Context::getnUniformfvRobust(ShaderProgramID program,
     UNIMPLEMENTED();
 }
 
-void Context::getnUniformiv(ShaderProgramID program,
-                            UniformLocation location,
-                            GLsizei bufSize,
-                            GLint *params)
+void Context::getnUniformiv(ShaderProgramID program, GLint location, GLsizei bufSize, GLint *params)
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
@@ -7965,7 +7902,7 @@ void Context::getnUniformiv(ShaderProgramID program,
 }
 
 void Context::getnUniformivRobust(ShaderProgramID program,
-                                  UniformLocation location,
+                                  GLint location,
                                   GLsizei bufSize,
                                   GLsizei *length,
                                   GLint *params)
@@ -7974,7 +7911,7 @@ void Context::getnUniformivRobust(ShaderProgramID program,
 }
 
 void Context::getnUniformuivRobust(ShaderProgramID program,
-                                   UniformLocation location,
+                                   GLint location,
                                    GLsizei bufSize,
                                    GLsizei *length,
                                    GLuint *params)
@@ -7982,7 +7919,7 @@ void Context::getnUniformuivRobust(ShaderProgramID program,
     UNIMPLEMENTED();
 }
 
-GLboolean Context::isFenceNV(FenceNVID fence) const
+GLboolean Context::isFenceNV(FenceNVID fence)
 {
     FenceNV *fenceObject = getFenceNV(fence);
 
@@ -8042,7 +7979,7 @@ void Context::deleteMemoryObjects(GLsizei n, const MemoryObjectID *memoryObjects
     }
 }
 
-GLboolean Context::isMemoryObject(MemoryObjectID memoryObject) const
+GLboolean Context::isMemoryObject(MemoryObjectID memoryObject)
 {
     if (memoryObject.value == 0)
     {
@@ -8140,16 +8077,6 @@ void Context::importMemoryFd(MemoryObjectID memory, GLuint64 size, HandleType ha
     ANGLE_CONTEXT_TRY(memoryObject->importFd(this, size, handleType, fd));
 }
 
-void Context::importMemoryZirconHandle(MemoryObjectID memory,
-                                       GLuint64 size,
-                                       HandleType handleType,
-                                       GLuint handle)
-{
-    MemoryObject *memoryObject = getMemoryObject(memory);
-    ASSERT(memoryObject != nullptr);
-    ANGLE_CONTEXT_TRY(memoryObject->importZirconHandle(this, size, handleType, handle));
-}
-
 void Context::genSemaphores(GLsizei n, SemaphoreID *semaphores)
 {
     for (int i = 0; i < n; i++)
@@ -8166,7 +8093,7 @@ void Context::deleteSemaphores(GLsizei n, const SemaphoreID *semaphores)
     }
 }
 
-GLboolean Context::isSemaphore(SemaphoreID semaphore) const
+GLboolean Context::isSemaphore(SemaphoreID semaphore)
 {
     if (semaphore.value == 0)
     {
@@ -8243,15 +8170,6 @@ void Context::importSemaphoreFd(SemaphoreID semaphore, HandleType handleType, GL
     Semaphore *semaphoreObject = getSemaphore(semaphore);
     ASSERT(semaphoreObject != nullptr);
     ANGLE_CONTEXT_TRY(semaphoreObject->importFd(this, handleType, fd));
-}
-
-void Context::importSemaphoreZirconHandle(SemaphoreID semaphore,
-                                          HandleType handleType,
-                                          GLuint handle)
-{
-    Semaphore *semaphoreObject = getSemaphore(semaphore);
-    ASSERT(semaphoreObject != nullptr);
-    ANGLE_CONTEXT_TRY(semaphoreObject->importZirconHandle(this, handleType, handle));
 }
 
 void Context::eGLImageTargetTexture2D(TextureType target, GLeglImageOES image)
@@ -8782,14 +8700,14 @@ void StateCache::updateBasicDrawElementsError()
     mCachedBasicDrawElementsError = kInvalidPointer;
 }
 
-intptr_t StateCache::getBasicDrawStatesErrorImpl(const Context *context) const
+intptr_t StateCache::getBasicDrawStatesErrorImpl(Context *context) const
 {
     ASSERT(mCachedBasicDrawStatesError == kInvalidPointer);
     mCachedBasicDrawStatesError = reinterpret_cast<intptr_t>(ValidateDrawStates(context));
     return mCachedBasicDrawStatesError;
 }
 
-intptr_t StateCache::getBasicDrawElementsErrorImpl(const Context *context) const
+intptr_t StateCache::getBasicDrawElementsErrorImpl(Context *context) const
 {
     ASSERT(mCachedBasicDrawElementsError == kInvalidPointer);
     mCachedBasicDrawElementsError = reinterpret_cast<intptr_t>(ValidateDrawElementsStates(context));

@@ -713,12 +713,12 @@ const char kDefaultUniformsNameGS[]  = "defaultUniformsGS";
 const char kDefaultUniformsNameFS[]  = "defaultUniformsFS";
 const char kDefaultUniformsNameCS[]  = "defaultUniformsCS";
 
-// Interface block and variable names containing driver uniforms
+// Interface block and variable name containing driver uniforms
 const char kDriverUniformsBlockName[] = "ANGLEUniformBlock";
 const char kDriverUniformsVarName[]   = "ANGLEUniforms";
 
-// Interface block array name used for atomic counter emulation
-const char kAtomicCountersBlockName[] = "ANGLEAtomicCounters";
+// Interface block array variable name used for atomic counter emulation
+const char kAtomicCountersVarName[] = "atomicCounters";
 
 const char kLineRasterEmulationPosition[] = "ANGLEPosition";
 

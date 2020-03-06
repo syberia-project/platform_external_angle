@@ -413,7 +413,7 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
         : TIntermTraverser(true, true, true, symbolTable),
           mCompiler(compiler),
           mStructMapOut(&mOuterPass.structMap),
-          mInterfaceBlockMap(&mOuterPass.interfaceBlockMap),
+          mInterfaceBlockMapIn(mOuterPass.interfaceBlockMap),
           mInterfaceBlockFieldConvertedIn(mOuterPass.interfaceBlockFieldConverted),
           mCopyFunctionDefinitionsOut(&mOuterPass.copyFunctionDefinitions),
           mOuterTraverser(nullptr),
@@ -493,24 +493,15 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
             return;
         }
 
-        const TVariable *variable = &symbol->variable();
-        bool needsRewrite         = mInterfaceBlockMap->count(variable) != 0;
+        const TVariable *symbolVariable = &symbol->variable();
 
-        // If it's a field of a nameless interface block, it may still need conversion.
-        if (!needsRewrite)
+        // If the symbol doesn't need to be replaced, there's nothing to do.
+        if (mInterfaceBlockMapIn.count(symbolVariable) == 0)
         {
-            // Nameless interface block field symbols have the interface block pointer set, but are
-            // not interface blocks.
-            if (symbol->getType().getInterfaceBlock() && !variable->getType().isInterfaceBlock())
-            {
-                needsRewrite = convertNamelessInterfaceBlockField(symbol);
-            }
+            return;
         }
 
-        if (needsRewrite)
-        {
-            transformExpression(symbol);
-        }
+        transformExpression(symbol);
     }
 
     bool visitBinary(Visit visit, TIntermBinary *node) override
@@ -536,14 +527,14 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
     RewriteRowMajorMatricesTraverser(
         TSymbolTable *symbolTable,
         RewriteRowMajorMatricesTraverser *outerTraverser,
-        InterfaceBlockMap *interfaceBlockMap,
+        const InterfaceBlockMap &interfaceBlockMap,
         const InterfaceBlockFieldConverted &interfaceBlockFieldConverted,
         StructMap *structMap,
         TIntermSequence *copyFunctionDefinitions,
         TIntermBinary *innerPassRoot)
         : TIntermTraverser(true, true, true, symbolTable),
           mStructMapOut(structMap),
-          mInterfaceBlockMap(interfaceBlockMap),
+          mInterfaceBlockMapIn(interfaceBlockMap),
           mInterfaceBlockFieldConvertedIn(interfaceBlockFieldConverted),
           mCopyFunctionDefinitionsOut(copyFunctionDefinitions),
           mOuterTraverser(outerTraverser),
@@ -630,66 +621,6 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
         // Replace the interface block definition with the new one, prepending any new struct
         // definitions.
         mMultiReplacements.emplace_back(getParentNode()->getAsBlock(), node, newDeclarations);
-    }
-
-    bool convertNamelessInterfaceBlockField(TIntermSymbol *symbol)
-    {
-        const TVariable *variable             = &symbol->variable();
-        const TInterfaceBlock *interfaceBlock = symbol->getType().getInterfaceBlock();
-
-        // Find the variable corresponding to this interface block.  If the interface block
-        // is not rewritten, or this refers to a field that is not rewritten, there's
-        // nothing to do.
-        for (auto iter : *mInterfaceBlockMap)
-        {
-            // Skip other rewritten nameless interface block fields.
-            if (!iter.first->getType().isInterfaceBlock())
-            {
-                continue;
-            }
-
-            // Skip if this is not a field of this rewritten interface block.
-            if (iter.first->getType().getInterfaceBlock() != interfaceBlock)
-            {
-                continue;
-            }
-
-            const ImmutableString symbolName = symbol->getName();
-
-            // Find which field it is
-            const TVector<TField *> fields = interfaceBlock->fields();
-            for (size_t fieldIndex = 0; fieldIndex < fields.size(); ++fieldIndex)
-            {
-                const TField *field = fields[fieldIndex];
-                if (field->name() != symbolName)
-                {
-                    continue;
-                }
-
-                // If this field doesn't need a rewrite, there's nothing to do.
-                if (mInterfaceBlockFieldConvertedIn.count(field) == 0 ||
-                    !mInterfaceBlockFieldConvertedIn.at(field))
-                {
-                    break;
-                }
-
-                // Create a new variable that references the replaced interface block.
-                TType *newType = new TType(variable->getType());
-                newType->setInterfaceBlock(iter.second->getType().getInterfaceBlock());
-
-                TVariable *newVariable =
-                    new TVariable(mSymbolTable, variable->name(), newType, variable->symbolType(),
-                                  variable->extension());
-
-                (*mInterfaceBlockMap)[variable] = newVariable;
-
-                return true;
-            }
-
-            break;
-        }
-
-        return false;
     }
 
     void convertStruct(const TStructure *structure, TIntermSequence *newDeclarations)
@@ -858,7 +789,7 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
         // See http://anglebug.com/3829.
         //
         TIntermTyped *baseExpression =
-            new TIntermSymbol(mInterfaceBlockMap->at(&symbol->variable()));
+            new TIntermSymbol(mInterfaceBlockMapIn.at(&symbol->variable()));
         const TStructure *structure = nullptr;
 
         TIntermNode *primaryIndex = nullptr;
@@ -875,10 +806,7 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
         // transpformation is necessary.
         //
         // In all these cases, |baseExpression| contains all of the original expression.
-        //
-        // If the starting symbol itself is a field of a nameless interface block, it needs
-        // conversion if we reach here.
-        bool requiresTransformation = !symbol->getType().isInterfaceBlock();
+        bool requiresTransformation = false;
 
         uint32_t accessorIndex         = 0;
         TIntermTyped *previousAncestor = symbol;
@@ -1081,7 +1009,7 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
                     RewriteRowMajorMatricesTraverser *outerTraverser =
                         mOuterTraverser ? mOuterTraverser : this;
                     RewriteRowMajorMatricesTraverser rhsTraverser(
-                        mSymbolTable, outerTraverser, mInterfaceBlockMap,
+                        mSymbolTable, outerTraverser, mInterfaceBlockMapIn,
                         mInterfaceBlockFieldConvertedIn, mStructMapOut, mCopyFunctionDefinitionsOut,
                         assignment);
                     getRootNode()->traverse(&rhsTraverser);
@@ -1554,11 +1482,8 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
 
     // A map from structures with matrices to their converted version.
     StructMap *mStructMapOut;
-    // A map from interface block instances with row-major matrices to their converted variable.  If
-    // an interface block is nameless, its fields are placed in this map instead.  When a variable
-    // in this map is encountered, it signals the start of an expression that my need conversion,
-    // which is either "interfaceBlock.field..." or "field..." if nameless.
-    InterfaceBlockMap *mInterfaceBlockMap;
+    // A map from interface block instances with row-major matrices to their converted variable.
+    const InterfaceBlockMap &mInterfaceBlockMapIn;
     // A map from interface block fields to whether they need to be converted.  If a field was
     // already column-major, it shouldn't be transposed.
     const InterfaceBlockFieldConverted &mInterfaceBlockFieldConvertedIn;

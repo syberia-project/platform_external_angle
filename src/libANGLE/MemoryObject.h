@@ -35,10 +35,6 @@ class MemoryObject final : public RefCountObject<MemoryObjectID>
     rx::MemoryObjectImpl *getImplementation() const { return mImplementation.get(); }
 
     angle::Result importFd(Context *context, GLuint64 size, HandleType handleType, GLint fd);
-    angle::Result importZirconHandle(Context *context,
-                                     GLuint64 size,
-                                     HandleType handleType,
-                                     GLuint handle);
 
   private:
     std::unique_ptr<rx::MemoryObjectImpl> mImplementation;

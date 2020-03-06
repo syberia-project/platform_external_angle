@@ -187,7 +187,7 @@ class StateCache final : angle::NonCopyable
         return getBasicDrawStatesErrorImpl(context) != 0;
     }
 
-    intptr_t getBasicDrawStatesError(const Context *context) const
+    intptr_t getBasicDrawStatesError(Context *context) const
     {
         if (mCachedBasicDrawStatesError != kInvalidPointer)
         {
@@ -201,7 +201,7 @@ class StateCache final : angle::NonCopyable
     // 1. onActiveTransformFeedbackChange.
     // 2. onVertexArrayBufferStateChange.
     // 3. onBufferBindingChange.
-    intptr_t getBasicDrawElementsError(const Context *context) const
+    intptr_t getBasicDrawElementsError(Context *context) const
     {
         if (mCachedBasicDrawElementsError != kInvalidPointer)
         {
@@ -291,8 +291,8 @@ class StateCache final : angle::NonCopyable
 
     void setValidDrawModes(bool pointsOK, bool linesOK, bool trisOK, bool lineAdjOK, bool triAdjOK);
 
-    intptr_t getBasicDrawStatesErrorImpl(const Context *context) const;
-    intptr_t getBasicDrawElementsErrorImpl(const Context *context) const;
+    intptr_t getBasicDrawStatesErrorImpl(Context *context) const;
+    intptr_t getBasicDrawElementsErrorImpl(Context *context) const;
 
     static constexpr intptr_t kInvalidPointer = 1;
 
@@ -374,7 +374,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     void bindDrawFramebuffer(FramebufferID framebufferHandle);
 
     Buffer *getBuffer(BufferID handle) const;
-    FenceNV *getFenceNV(FenceNVID handle) const;
+    FenceNV *getFenceNV(FenceNVID handle);
     Sync *getSync(GLsync handle) const;
     ANGLE_INLINE Texture *getTexture(TextureID handle) const
     {
@@ -385,7 +385,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     Renderbuffer *getRenderbuffer(RenderbufferID handle) const;
     VertexArray *getVertexArray(VertexArrayID handle) const;
     Sampler *getSampler(SamplerID handle) const;
-    Query *getOrCreateQuery(QueryID handle, QueryType type);
+    Query *getQuery(QueryID handle, bool create, QueryType type);
     Query *getQuery(QueryID handle) const;
     TransformFeedback *getTransformFeedback(TransformFeedbackID handle) const;
     ProgramPipeline *getProgramPipeline(ProgramPipelineID handle) const;
@@ -398,15 +398,13 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     Compiler *getCompiler() const;
 
-    bool isVertexArrayGenerated(VertexArrayID vertexArray) const;
-    bool isTransformFeedbackGenerated(TransformFeedbackID transformFeedback) const;
+    bool isVertexArrayGenerated(VertexArrayID vertexArray);
+    bool isTransformFeedbackGenerated(TransformFeedbackID transformFeedback);
 
-    void getBooleanvImpl(GLenum pname, GLboolean *params) const;
-    void getFloatvImpl(GLenum pname, GLfloat *params) const;
-    void getIntegervImpl(GLenum pname, GLint *params) const;
-    void getInteger64vImpl(GLenum pname, GLint64 *params) const;
-    void getIntegerVertexAttribImpl(GLenum pname, GLenum attribpname, GLint *params) const;
-    void getVertexAttribivImpl(GLuint index, GLenum pname, GLint *params) const;
+    void getBooleanvImpl(GLenum pname, GLboolean *params);
+    void getFloatvImpl(GLenum pname, GLfloat *params);
+    void getIntegervImpl(GLenum pname, GLint *params);
+    void getInteger64vImpl(GLenum pname, GLint64 *params);
 
     // Framebuffers are owned by the Context, so these methods do not pass through
     FramebufferID createFramebuffer();
@@ -450,7 +448,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
                      const char *function,
                      unsigned int line);
 
-    void validationError(GLenum errorCode, const char *message) const;
+    void validationError(GLenum errorCode, const char *message);
 
     void markContextLost(GraphicsResetStatus status);
 
@@ -470,8 +468,8 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     size_t getExtensionStringCount() const;
 
-    bool isExtensionRequestable(const char *name) const;
-    bool isExtensionDisablable(const char *name) const;
+    bool isExtensionRequestable(const char *name);
+    bool isExtensionDisablable(const char *name);
     size_t getRequestableExtensionStringCount() const;
     void setExtensionEnabled(const char *name, bool enabled);
     void reinitializeAfterExtensionsChanged();
@@ -482,7 +480,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
                                            angle::MemoryBuffer **scratchBufferOut) const;
     ANGLE_NO_DISCARD bool getZeroFilledBuffer(size_t requstedSizeBytes,
                                               angle::MemoryBuffer **zeroBufferOut) const;
-    angle::ScratchBuffer *getScratchBuffer() const;
+    angle::ScratchBuffer *getScratchBuffer() const { return &mScratchBuffer; }
 
     angle::Result prepareForCopyImage();
     angle::Result prepareForDispatch();
@@ -555,7 +553,6 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     bool isRenderbufferGenerated(RenderbufferID renderbuffer) const;
     bool isFramebufferGenerated(FramebufferID framebuffer) const;
     bool isProgramPipelineGenerated(ProgramPipelineID pipeline) const;
-    bool isQueryGenerated(QueryID query) const;
 
     bool usingDisplayTextureShareGroup() const;
 
@@ -638,10 +635,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     gl::LabeledObject *getLabeledObject(GLenum identifier, GLuint name) const;
     gl::LabeledObject *getLabeledObjectFromPtr(const void *ptr) const;
 
-    void setUniform1iImpl(Program *program,
-                          UniformLocation location,
-                          GLsizei count,
-                          const GLint *v);
+    void setUniform1iImpl(Program *program, GLint location, GLsizei count, const GLint *v);
 
     State mState;
     bool mShared;
@@ -737,8 +731,8 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     std::vector<angle::ObserverBinding> mImageObserverBindings;
 
     // Not really a property of context state. The size and contexts change per-api-call.
-    mutable Optional<angle::ScratchBuffer> mScratchBuffer;
-    mutable Optional<angle::ScratchBuffer> mZeroFilledBuffer;
+    mutable angle::ScratchBuffer mScratchBuffer;
+    mutable angle::ScratchBuffer mZeroFilledBuffer;
 
     std::shared_ptr<angle::WorkerThreadPool> mThreadPool;
 

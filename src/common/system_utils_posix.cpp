@@ -55,19 +55,6 @@ const char *GetPathSeparatorForEnvironmentVar()
     return ":";
 }
 
-std::string GetHelperExecutableDir()
-{
-    std::string directory;
-    static int dummySymbol = 0;
-    Dl_info dlInfo;
-    if (dladdr(&dummySymbol, &dlInfo) != 0)
-    {
-        std::string moduleName = dlInfo.dli_fname;
-        directory              = moduleName.substr(0, moduleName.find_last_of('/') + 1);
-    }
-    return directory;
-}
-
 class PosixLibrary : public Library
 {
   public:
@@ -76,7 +63,13 @@ class PosixLibrary : public Library
         std::string directory;
         if (searchType == SearchType::ApplicationDir)
         {
-            directory = GetHelperExecutableDir();
+            static int dummySymbol = 0;
+            Dl_info dlInfo;
+            if (dladdr(&dummySymbol, &dlInfo) != 0)
+            {
+                std::string moduleName = dlInfo.dli_fname;
+                directory              = moduleName.substr(0, moduleName.find_last_of('/') + 1);
+            }
         }
 
         std::string fullPath = directory + libraryName + "." + GetSharedLibraryExtension();

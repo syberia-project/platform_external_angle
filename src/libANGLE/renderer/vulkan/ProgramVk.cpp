@@ -367,12 +367,13 @@ ProgramVk::ShaderInfo::~ShaderInfo() = default;
 angle::Result ProgramVk::ShaderInfo::initShaders(
     ContextVk *contextVk,
     const gl::ShaderMap<std::string> &shaderSources,
-    const ShaderInterfaceVariableInfoMap &variableInfoMap)
+    const ShaderInterfaceVariableInfoMap &variableInfoMap,
+    gl::ShaderMap<SpirvBlob> *spirvBlobsOut)
 {
     ASSERT(!valid());
 
     ANGLE_TRY(GlslangWrapperVk::GetShaderCode(contextVk, contextVk->getCaps(), shaderSources,
-                                              variableInfoMap, &mSpirvBlobs));
+                                              variableInfoMap, spirvBlobsOut));
 
     mIsInitialized = true;
     return angle::Result::Continue;
@@ -385,34 +386,6 @@ void ProgramVk::ShaderInfo::release(ContextVk *contextVk)
         spirvBlob.clear();
     }
     mIsInitialized = false;
-}
-
-void ProgramVk::ShaderInfo::load(gl::BinaryInputStream *stream)
-{
-    // Read in shader codes for all shader types
-    for (const gl::ShaderType shaderType : gl::AllShaderTypes())
-    {
-        SpirvBlob *spirvBlob = &mSpirvBlobs[shaderType];
-
-        // Read the SPIR-V
-        stream->readIntVector<uint32_t>(spirvBlob);
-    }
-
-    mIsInitialized = true;
-}
-
-void ProgramVk::ShaderInfo::save(gl::BinaryOutputStream *stream)
-{
-    ASSERT(valid());
-
-    // Write out shader codes for all shader types
-    for (const gl::ShaderType shaderType : gl::AllShaderTypes())
-    {
-        const SpirvBlob &spirvBlob = mSpirvBlobs[shaderType];
-
-        // Write the SPIR-V
-        stream->writeIntVector(spirvBlob);
-    }
 }
 
 // ProgramVk::ProgramInfo implementation.
@@ -456,6 +429,78 @@ void ProgramVk::ProgramInfo::release(ContextVk *contextVk)
     for (vk::RefCounted<vk::ShaderAndSerial> &shader : mShaders)
     {
         shader.get().destroy(contextVk->getDevice());
+    }
+}
+
+angle::Result ProgramVk::loadSpirvBlob(ContextVk *contextVk, gl::BinaryInputStream *stream)
+{
+    // Read in shader codes for all shader types
+    for (const gl::ShaderType shaderType : gl::AllShaderTypes())
+    {
+        // Read the shader source
+        mShaderSources[shaderType] = stream->readString();
+
+        SpirvBlob *spirvBlob = &mShaderInfo.getSpirvBlobs()[shaderType];
+
+        // Read the SPIR-V
+        stream->readIntVector<uint32_t>(spirvBlob);
+    }
+
+    // Read the expected bindings
+    size_t infoCount = stream->readInt<size_t>();
+    for (size_t i = 0; i < infoCount; ++i)
+    {
+        std::string varName = stream->readString();
+        ShaderInterfaceVariableInfo info;
+
+        info.descriptorSet = stream->readInt<uint32_t>();
+        info.binding       = stream->readInt<uint32_t>();
+        info.activeStages  = gl::ShaderBitSet(static_cast<uint8_t>(stream->readInt<uint32_t>()));
+        info.xfbBuffer     = stream->readInt<uint32_t>();
+        info.xfbOffset     = stream->readInt<uint32_t>();
+        info.xfbStride     = stream->readInt<uint32_t>();
+        for (gl::ShaderType shaderType : gl::AllShaderTypes())
+        {
+            info.location[shaderType]  = stream->readInt<uint32_t>();
+            info.component[shaderType] = stream->readInt<uint32_t>();
+        }
+
+        mVariableInfoMap[varName] = info;
+    }
+
+    return angle::Result::Continue;
+}
+
+void ProgramVk::saveSpirvBlob(gl::BinaryOutputStream *stream)
+{
+    // Write out shader codes for all shader types
+    for (const gl::ShaderType shaderType : gl::AllShaderTypes())
+    {
+        // Write the shader source
+        stream->writeString(mShaderSources[shaderType]);
+
+        const SpirvBlob &spirvBlob = mShaderInfo.getSpirvBlobs()[shaderType];
+
+        // Write the SPIR-V
+        stream->writeIntVector(spirvBlob);
+    }
+
+    // Write the expected bindings
+    stream->writeInt(mVariableInfoMap.size());
+    for (const auto &nameInfo : mVariableInfoMap)
+    {
+        stream->writeString(nameInfo.first);
+        stream->writeIntOrNegOne(nameInfo.second.descriptorSet);
+        stream->writeIntOrNegOne(nameInfo.second.binding);
+        stream->writeIntOrNegOne(nameInfo.second.activeStages.bits());
+        stream->writeIntOrNegOne(nameInfo.second.xfbBuffer);
+        stream->writeIntOrNegOne(nameInfo.second.xfbOffset);
+        stream->writeIntOrNegOne(nameInfo.second.xfbStride);
+        for (gl::ShaderType shaderType : gl::AllShaderTypes())
+        {
+            stream->writeIntOrNegOne(nameInfo.second.location[shaderType]);
+            stream->writeIntOrNegOne(nameInfo.second.component[shaderType]);
+        }
     }
 }
 
@@ -526,9 +571,11 @@ std::unique_ptr<rx::LinkEvent> ProgramVk::load(const gl::Context *context,
     gl::ShaderMap<size_t> requiredBufferSize;
     requiredBufferSize.fill(0);
 
-    reset(contextVk);
-
-    mShaderInfo.load(stream);
+    angle::Result status = loadSpirvBlob(contextVk, stream);
+    if (status != angle::Result::Continue)
+    {
+        return std::make_unique<LinkEventDone>(status);
+    }
 
     // Deserializes the uniformLayout data of mDefaultUniformBlocks
     for (gl::ShaderType shaderType : gl::AllShaderTypes())
@@ -548,8 +595,10 @@ std::unique_ptr<rx::LinkEvent> ProgramVk::load(const gl::Context *context,
         requiredBufferSize[shaderType] = stream->readInt<size_t>();
     }
 
+    reset(contextVk);
+
     // Initialize and resize the mDefaultUniformBlocks' memory
-    angle::Result status = resizeUniformBlockMemory(contextVk, requiredBufferSize);
+    status = resizeUniformBlockMemory(contextVk, requiredBufferSize);
     if (status != angle::Result::Continue)
     {
         return std::make_unique<LinkEventDone>(status);
@@ -560,7 +609,9 @@ std::unique_ptr<rx::LinkEvent> ProgramVk::load(const gl::Context *context,
 
 void ProgramVk::save(const gl::Context *context, gl::BinaryOutputStream *stream)
 {
-    mShaderInfo.save(stream);
+    // (geofflang): Look into saving shader modules in ShaderInfo objects (keep in mind that we
+    // compile shaders lazily)
+    saveSpirvBlob(stream);
 
     // Serializes the uniformLayout data of mDefaultUniformBlocks
     for (gl::ShaderType shaderType : gl::AllShaderTypes())
@@ -601,22 +652,12 @@ std::unique_ptr<LinkEvent> ProgramVk::link(const gl::Context *context,
     // assignment done in that function.
     linkResources(resources);
 
+    GlslangWrapperVk::GetShaderSource(contextVk->getRenderer()->getFeatures(), mState, resources,
+                                      &mShaderSources, &mVariableInfoMap);
+
     reset(contextVk);
 
-    // Gather variable info and transform sources.
-    gl::ShaderMap<std::string> shaderSources;
-    ShaderInterfaceVariableInfoMap variableInfoMap;
-    GlslangWrapperVk::GetShaderSource(contextVk->getRenderer()->getFeatures(), mState, resources,
-                                      &shaderSources, &variableInfoMap);
-
-    // Compile the shaders.
-    angle::Result status = mShaderInfo.initShaders(contextVk, shaderSources, variableInfoMap);
-    if (status != angle::Result::Continue)
-    {
-        return std::make_unique<LinkEventDone>(status);
-    }
-
-    status = initDefaultUniformBlocks(context);
+    angle::Result status = initDefaultUniformBlocks(context);
     if (status != angle::Result::Continue)
     {
         return std::make_unique<LinkEventDone>(status);
@@ -1293,7 +1334,7 @@ void ProgramVk::updateDefaultUniformsDescriptorSet(ContextVk *contextVk)
         }
         else
         {
-            mEmptyBuffer.retain(&contextVk->getResourceUseList());
+            mEmptyBuffer.onResourceAccess(&contextVk->getResourceUseList());
             bufferInfo.buffer = mEmptyBuffer.getBuffer().getHandle();
             mDescriptorBuffersCache.emplace_back(&mEmptyBuffer);
         }
@@ -1324,9 +1365,7 @@ void ProgramVk::updateDefaultUniformsDescriptorSet(ContextVk *contextVk)
 }
 
 void ProgramVk::updateBuffersDescriptorSet(ContextVk *contextVk,
-                                           vk::ResourceUseList *resourceUseList,
-                                           CommandBufferHelper *commandBufferHelper,
-                                           vk::Resource *recorder,
+                                           vk::CommandGraphResource *recorder,
                                            const std::vector<gl::InterfaceBlock> &blocks,
                                            VkDescriptorType descriptorType)
 {
@@ -1393,12 +1432,25 @@ void ProgramVk::updateBuffersDescriptorSet(ContextVk *contextVk,
         {
             // We set the SHADER_READ_BIT to be conservative.
             VkAccessFlags accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            commandBufferHelper->bufferWrite(resourceUseList, accessFlags, &bufferHelper);
+            if (contextVk->getFeatures().commandGraph.enabled)
+            {
+                bufferHelper.onWrite(contextVk, recorder, accessFlags);
+            }
+            else
+            {
+                contextVk->onBufferWrite(accessFlags, &bufferHelper);
+            }
         }
         else
         {
-            commandBufferHelper->bufferRead(resourceUseList, VK_ACCESS_UNIFORM_READ_BIT,
-                                            &bufferHelper);
+            if (contextVk->getFeatures().commandGraph.enabled)
+            {
+                bufferHelper.onRead(contextVk, recorder, VK_ACCESS_UNIFORM_READ_BIT);
+            }
+            else
+            {
+                contextVk->onBufferRead(VK_ACCESS_UNIFORM_READ_BIT, &bufferHelper);
+            }
         }
 
         ++writeCount;
@@ -1410,9 +1462,7 @@ void ProgramVk::updateBuffersDescriptorSet(ContextVk *contextVk,
 }
 
 void ProgramVk::updateAtomicCounterBuffersDescriptorSet(ContextVk *contextVk,
-                                                        vk::ResourceUseList *resourceUseList,
-                                                        CommandBufferHelper *commandBufferHelper,
-                                                        vk::Resource *recorder)
+                                                        vk::CommandGraphResource *recorder)
 {
     const gl::State &glState = contextVk->getState();
     const std::vector<gl::AtomicCounterBuffer> &atomicCounterBuffers =
@@ -1459,14 +1509,14 @@ void ProgramVk::updateAtomicCounterBuffersDescriptorSet(ContextVk *contextVk,
         vk::BufferHelper &bufferHelper = bufferVk->getBuffer();
 
         // We set SHADER_READ_BIT to be conservative.
-        commandBufferHelper->bufferWrite(
-            resourceUseList, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, &bufferHelper);
+        bufferHelper.onWrite(contextVk, recorder,
+                             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
 
         writtenBindings.set(binding);
     }
 
     // Bind the empty buffer to every array slot that's unused.
-    mEmptyBuffer.retain(&contextVk->getResourceUseList());
+    mEmptyBuffer.onResourceAccess(&contextVk->getResourceUseList());
     for (size_t binding : ~writtenBindings)
     {
         VkDescriptorBufferInfo &bufferInfo = descriptorBufferInfo[binding];
@@ -1494,7 +1544,8 @@ void ProgramVk::updateAtomicCounterBuffersDescriptorSet(ContextVk *contextVk,
                            writeDescriptorInfo.data(), 0, nullptr);
 }
 
-angle::Result ProgramVk::updateImagesDescriptorSet(ContextVk *contextVk, vk::Resource *recorder)
+angle::Result ProgramVk::updateImagesDescriptorSet(ContextVk *contextVk,
+                                                   vk::CommandGraphResource *recorder)
 {
     const gl::State &glState                           = contextVk->getState();
     const std::vector<gl::ImageBinding> &imageBindings = mState.getImageBindings();
@@ -1568,27 +1619,27 @@ angle::Result ProgramVk::updateImagesDescriptorSet(ContextVk *contextVk, vk::Res
     return angle::Result::Continue;
 }
 
-angle::Result ProgramVk::updateShaderResourcesDescriptorSet(
-    ContextVk *contextVk,
-    vk::ResourceUseList *resourceUseList,
-    CommandBufferHelper *commandBufferHelper,
-    vk::Resource *recorder)
+angle::Result ProgramVk::updateShaderResourcesDescriptorSet(ContextVk *contextVk,
+                                                            vk::CommandGraphResource *recorder)
 {
     ANGLE_TRY(allocateDescriptorSet(contextVk, kShaderResourceDescriptorSetIndex));
 
-    updateBuffersDescriptorSet(contextVk, resourceUseList, commandBufferHelper, recorder,
-                               mState.getUniformBlocks(), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    updateBuffersDescriptorSet(contextVk, resourceUseList, commandBufferHelper, recorder,
-                               mState.getShaderStorageBlocks(), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-    updateAtomicCounterBuffersDescriptorSet(contextVk, resourceUseList, commandBufferHelper,
-                                            recorder);
+    updateBuffersDescriptorSet(contextVk, recorder, mState.getUniformBlocks(),
+                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    updateBuffersDescriptorSet(contextVk, recorder, mState.getShaderStorageBlocks(),
+                               VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    updateAtomicCounterBuffersDescriptorSet(contextVk, recorder);
     return updateImagesDescriptorSet(contextVk, recorder);
 }
 
 angle::Result ProgramVk::updateTransformFeedbackDescriptorSet(ContextVk *contextVk,
                                                               vk::FramebufferHelper *framebuffer)
 {
+    const gl::State &glState = contextVk->getState();
     ASSERT(hasTransformFeedbackOutput());
+
+    TransformFeedbackVk *transformFeedbackVk = vk::GetImpl(glState.getCurrentTransformFeedback());
+    transformFeedbackVk->addFramebufferDependency(contextVk, mState, framebuffer);
 
     ANGLE_TRY(allocateDescriptorSet(contextVk, kUniformsAndXfbDescriptorSetIndex));
 
@@ -1828,7 +1879,7 @@ angle::Result ProgramVk::updateDescriptorSets(ContextVk *contextVk,
 
     for (vk::BufferHelper *buffer : mDescriptorBuffersCache)
     {
-        buffer->retain(&contextVk->getResourceUseList());
+        buffer->onResourceAccess(&contextVk->getResourceUseList());
     }
 
     return angle::Result::Continue;
