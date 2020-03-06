@@ -175,7 +175,7 @@ class State : angle::NonCopyable
     void setPolygonOffsetParams(GLfloat factor, GLfloat units);
 
     // Multisample coverage state manipulation
-    bool isSampleAlphaToCoverageEnabled() const { return mSampleAlphaToCoverage; }
+    bool isSampleAlphaToCoverageEnabled() const { return mBlend.sampleAlphaToCoverage; }
     void setSampleAlphaToCoverage(bool enabled);
     bool isSampleCoverageEnabled() const { return mSampleCoverage; }
     void setSampleCoverage(bool enabled);
@@ -207,7 +207,7 @@ class State : angle::NonCopyable
     const Rectangle &getScissor() const { return mScissor; }
 
     // Dither state toggle & query
-    bool isDitherEnabled() const { return mRasterizer.dither; }
+    bool isDitherEnabled() const { return mBlend.dither; }
     void setDither(bool enabled);
 
     // Generic state toggle & query
@@ -498,13 +498,13 @@ class State : angle::NonCopyable
     GLuint getMaxShaderCompilerThreads() const { return mMaxShaderCompilerThreads; }
 
     // State query functions
-    void getBooleanv(GLenum pname, GLboolean *params) const;
-    void getFloatv(GLenum pname, GLfloat *params) const;
-    angle::Result getIntegerv(const Context *context, GLenum pname, GLint *params) const;
+    void getBooleanv(GLenum pname, GLboolean *params);
+    void getFloatv(GLenum pname, GLfloat *params);
+    angle::Result getIntegerv(const Context *context, GLenum pname, GLint *params);
     void getPointerv(const Context *context, GLenum pname, void **params) const;
-    void getIntegeri_v(GLenum target, GLuint index, GLint *data) const;
-    void getInteger64i_v(GLenum target, GLuint index, GLint64 *data) const;
-    void getBooleani_v(GLenum target, GLuint index, GLboolean *data) const;
+    void getIntegeri_v(GLenum target, GLuint index, GLint *data);
+    void getInteger64i_v(GLenum target, GLuint index, GLint64 *data);
+    void getBooleani_v(GLenum target, GLuint index, GLboolean *data);
 
     bool isRobustResourceInitEnabled() const { return mRobustResourceInit; }
 
@@ -808,7 +808,6 @@ class State : angle::NonCopyable
 
     BlendState mBlend;
     ColorF mBlendColor;
-    bool mSampleAlphaToCoverage;
     bool mSampleCoverage;
     GLfloat mSampleCoverageValue;
     bool mSampleCoverageInvert;

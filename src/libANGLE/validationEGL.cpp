@@ -225,13 +225,6 @@ Error ValidateConfigAttribute(const Display *display, EGLAttrib attribute)
             }
             break;
 
-        case EGL_BIND_TO_TEXTURE_TARGET_ANGLE:
-            if (!display->getExtensions().iosurfaceClientBuffer)
-            {
-                return EglBadAttribute() << "EGL_ANGLE_iosurface_client_buffer is not enabled.";
-            }
-            break;
-
         default:
             return EglBadAttribute() << "Unknown attribute.";
     }
@@ -1881,11 +1874,19 @@ Error ValidateCreatePbufferFromClientBuffer(Display *display,
 
     if (buftype == EGL_IOSURFACE_ANGLE)
     {
-        if (static_cast<EGLenum>(textureTarget) != config->bindToTextureTarget)
+#if ANGLE_PLATFORM_MACOS || ANGLE_PLATFORM_MACCATALYST
+        if (textureTarget != EGL_TEXTURE_RECTANGLE_ANGLE)
         {
             return EglBadAttribute()
-                   << "EGL_IOSURFACE requires the texture target to match the config";
+                   << "EGL_IOSURFACE requires the EGL_TEXTURE_RECTANGLE target on desktop macOS";
         }
+#else   // ANGLE_PLATFORM_MACOS || ANGLE_PLATFORM_MACCATALYST
+        if (textureTarget != EGL_TEXTURE_2D)
+        {
+            return EglBadAttribute() << "EGL_IOSURFACE requires the EGL_TEXTURE_2D target on iOS";
+        }
+#endif  // ANGLE_PLATFORM_MACOS || ANGLE_PLATFORM_MACCATALYST
+
         if (textureFormat != EGL_TEXTURE_RGBA)
         {
             return EglBadAttribute() << "EGL_IOSURFACE requires the EGL_TEXTURE_RGBA format";

@@ -92,13 +92,8 @@ egl::Error DisplayVk::waitClient(const gl::Context *context)
 
 egl::Error DisplayVk::waitNative(const gl::Context *context, EGLint engine)
 {
-    ANGLE_TRACE_EVENT0("gpu.angle", "DisplayVk::waitNative");
-    return angle::ResultToEGL(waitNativeImpl());
-}
-
-angle::Result DisplayVk::waitNativeImpl()
-{
-    return angle::Result::Continue;
+    UNIMPLEMENTED();
+    return egl::EglBadAccess();
 }
 
 SurfaceImpl *DisplayVk::createWindowSurface(const egl::SurfaceState &state,
@@ -203,8 +198,7 @@ void DisplayVk::generateExtensions(egl::DisplayExtensions *outExtensions) const
     outExtensions->framebufferTargetANDROID = true;
 #endif  // defined(ANGLE_PLATFORM_ANDROID)
 
-    // Disable context priority when non-zero memory init is enabled. This enforces a queue order.
-    outExtensions->contextPriority = !getRenderer()->getFeatures().allocateNonZeroMemory.enabled;
+    outExtensions->contextPriority = true;
     outExtensions->noConfigContext = true;
 
 #if defined(ANGLE_PLATFORM_GGP)

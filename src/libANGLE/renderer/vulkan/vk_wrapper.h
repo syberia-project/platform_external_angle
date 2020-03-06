@@ -131,9 +131,6 @@ class CommandPool final : public WrappedObject<CommandPool, VkCommandPool>
 
     void destroy(VkDevice device);
     VkResult reset(VkDevice device, VkCommandPoolResetFlags flags);
-    void freeCommandBuffers(VkDevice device,
-                            uint32_t commandBufferCount,
-                            const VkCommandBuffer *commandBuffers);
 
     VkResult init(VkDevice device, const VkCommandPoolCreateInfo &createInfo);
 };
@@ -313,7 +310,7 @@ class CommandBuffer : public WrappedObject<CommandBuffer, VkCommandBuffer>
 
     void imageBarrier(VkPipelineStageFlags srcStageMask,
                       VkPipelineStageFlags dstStageMask,
-                      const VkImageMemoryBarrier &imageMemoryBarrier);
+                      const VkImageMemoryBarrier *imageMemoryBarrier);
 
     void memoryBarrier(VkPipelineStageFlags srcStageMask,
                        VkPipelineStageFlags dstStageMask,
@@ -359,26 +356,6 @@ class CommandBuffer : public WrappedObject<CommandBuffer, VkCommandBuffer>
     void writeTimestamp(VkPipelineStageFlagBits pipelineStage,
                         VkQueryPool queryPool,
                         uint32_t query);
-
-    // VK_EXT_transform_feedback
-    void beginTransformFeedbackEXT(uint32_t firstCounterBuffer,
-                                   uint32_t counterBufferCount,
-                                   const VkBuffer *counterBuffers,
-                                   const VkDeviceSize *counterBufferOffsets);
-    void endTransformFeedbackEXT(uint32_t firstCounterBuffer,
-                                 uint32_t counterBufferCount,
-                                 const VkBuffer *counterBuffers,
-                                 const VkDeviceSize *counterBufferOffsets);
-    void bindTransformFeedbackBuffersEXT(uint32_t firstBinding,
-                                         uint32_t bindingCount,
-                                         const VkBuffer *buffers,
-                                         const VkDeviceSize *offsets,
-                                         const VkDeviceSize *sizes);
-
-    // VK_EXT_debug_utils
-    void beginDebugUtilsLabelEXT(const VkDebugUtilsLabelEXT &labelInfo);
-    void endDebugUtilsLabelEXT();
-    void insertDebugUtilsLabelEXT(const VkDebugUtilsLabelEXT &labelInfo);
 };
 }  // namespace priv
 
@@ -612,14 +589,6 @@ ANGLE_INLINE VkResult CommandPool::reset(VkDevice device, VkCommandPoolResetFlag
     return vkResetCommandPool(device, mHandle, flags);
 }
 
-ANGLE_INLINE void CommandPool::freeCommandBuffers(VkDevice device,
-                                                  uint32_t commandBufferCount,
-                                                  const VkCommandBuffer *commandBuffers)
-{
-    ASSERT(valid());
-    vkFreeCommandBuffers(device, mHandle, commandBufferCount, commandBuffers);
-}
-
 ANGLE_INLINE VkResult CommandPool::init(VkDevice device, const VkCommandPoolCreateInfo &createInfo)
 {
     ASSERT(!valid());
@@ -718,11 +687,11 @@ ANGLE_INLINE void CommandBuffer::bufferBarrier(VkPipelineStageFlags srcStageMask
 
 ANGLE_INLINE void CommandBuffer::imageBarrier(VkPipelineStageFlags srcStageMask,
                                               VkPipelineStageFlags dstStageMask,
-                                              const VkImageMemoryBarrier &imageMemoryBarrier)
+                                              const VkImageMemoryBarrier *imageMemoryBarrier)
 {
     ASSERT(valid());
     vkCmdPipelineBarrier(mHandle, srcStageMask, dstStageMask, 0, 0, nullptr, 0, nullptr, 1,
-                         &imageMemoryBarrier);
+                         imageMemoryBarrier);
 }
 
 ANGLE_INLINE void CommandBuffer::destroy(VkDevice device)
@@ -1096,60 +1065,6 @@ ANGLE_INLINE void CommandBuffer::bindVertexBuffers(uint32_t firstBinding,
     vkCmdBindVertexBuffers(mHandle, firstBinding, bindingCount, buffers, offsets);
 }
 
-ANGLE_INLINE void CommandBuffer::beginTransformFeedbackEXT(uint32_t firstCounterBuffer,
-                                                           uint32_t counterBufferCount,
-                                                           const VkBuffer *counterBuffers,
-                                                           const VkDeviceSize *counterBufferOffsets)
-{
-    ASSERT(valid());
-    ASSERT(vkCmdBeginTransformFeedbackEXT);
-    vkCmdBeginTransformFeedbackEXT(mHandle, firstCounterBuffer, counterBufferCount, counterBuffers,
-                                   counterBufferOffsets);
-}
-
-ANGLE_INLINE void CommandBuffer::endTransformFeedbackEXT(uint32_t firstCounterBuffer,
-                                                         uint32_t counterBufferCount,
-                                                         const VkBuffer *counterBuffers,
-                                                         const VkDeviceSize *counterBufferOffsets)
-{
-    ASSERT(valid());
-    ASSERT(vkCmdEndTransformFeedbackEXT);
-    vkCmdEndTransformFeedbackEXT(mHandle, firstCounterBuffer, counterBufferCount, counterBuffers,
-                                 counterBufferOffsets);
-}
-
-ANGLE_INLINE void CommandBuffer::bindTransformFeedbackBuffersEXT(uint32_t firstBinding,
-                                                                 uint32_t bindingCount,
-                                                                 const VkBuffer *buffers,
-                                                                 const VkDeviceSize *offsets,
-                                                                 const VkDeviceSize *sizes)
-{
-    ASSERT(valid());
-    ASSERT(vkCmdBindTransformFeedbackBuffersEXT);
-    vkCmdBindTransformFeedbackBuffersEXT(mHandle, firstBinding, bindingCount, buffers, offsets,
-                                         sizes);
-}
-
-ANGLE_INLINE void CommandBuffer::beginDebugUtilsLabelEXT(const VkDebugUtilsLabelEXT &labelInfo)
-{
-    ASSERT(valid());
-    ASSERT(vkCmdBeginDebugUtilsLabelEXT);
-    vkCmdBeginDebugUtilsLabelEXT(mHandle, &labelInfo);
-}
-
-ANGLE_INLINE void CommandBuffer::endDebugUtilsLabelEXT()
-{
-    ASSERT(valid());
-    ASSERT(vkCmdEndDebugUtilsLabelEXT);
-    vkCmdEndDebugUtilsLabelEXT(mHandle);
-}
-
-ANGLE_INLINE void CommandBuffer::insertDebugUtilsLabelEXT(const VkDebugUtilsLabelEXT &labelInfo)
-{
-    ASSERT(valid());
-    ASSERT(vkCmdInsertDebugUtilsLabelEXT);
-    vkCmdInsertDebugUtilsLabelEXT(mHandle, &labelInfo);
-}
 }  // namespace priv
 
 // Image implementation.

@@ -187,6 +187,15 @@ std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp)
         stream << "_NoVirtual";
     }
 
+    if (pp.eglParameters.commandGraphFeature == EGL_FALSE)
+    {
+        stream << "_NoCommandGraph";
+    }
+    else if (pp.eglParameters.commandGraphFeature == EGL_TRUE)
+    {
+        stream << "_CommandGraph";
+    }
+
     if (pp.eglParameters.transformFeedbackFeature == EGL_FALSE)
     {
         stream << "_NoTransformFeedback";
@@ -194,15 +203,6 @@ std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp)
     else if (pp.eglParameters.transformFeedbackFeature == EGL_TRUE)
     {
         stream << "_TransformFeedback";
-    }
-
-    if (pp.eglParameters.allocateNonZeroMemoryFeature == EGL_FALSE)
-    {
-        stream << "_NoAllocateNonZeroMemory";
-    }
-    else if (pp.eglParameters.allocateNonZeroMemoryFeature == EGL_TRUE)
-    {
-        stream << "_AllocateNonZeroMemory";
     }
 
     return stream;

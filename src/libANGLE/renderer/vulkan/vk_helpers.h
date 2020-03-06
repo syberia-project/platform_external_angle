@@ -9,8 +9,8 @@
 #ifndef LIBANGLE_RENDERER_VULKAN_VK_HELPERS_H_
 #define LIBANGLE_RENDERER_VULKAN_VK_HELPERS_H_
 
-#include "libANGLE/renderer/vulkan/ResourceVk.h"
-#include "libANGLE/renderer/vulkan/vk_cache_utils.h"
+#include "libANGLE/renderer/vulkan/CommandGraph.h"
+#include "libANGLE/renderer/vulkan/vk_utils.h"
 
 namespace gl
 {
@@ -324,9 +324,9 @@ class QueryHelper final
     // Used only by DynamicQueryPool.
     size_t getQueryPoolIndex() const { return mQueryPoolIndex; }
 
-    angle::Result beginQuery(ContextVk *contextVk);
-    angle::Result endQuery(ContextVk *contextVk);
-    angle::Result writeTimestamp(ContextVk *contextVk);
+    void beginQuery(ContextVk *contextVk);
+    void endQuery(ContextVk *contextVk);
+    void writeTimestamp(ContextVk *contextVk);
 
     Serial getStoredQueueSerial() { return mMostRecentSerial; }
     bool hasPendingWork(ContextVk *contextVk);
@@ -458,7 +458,7 @@ class LineLoopHelper final : angle::NonCopyable
 
 class FramebufferHelper;
 
-class BufferHelper final : public Resource
+class BufferHelper final : public CommandGraphResource
 {
   public:
     BufferHelper();
@@ -475,18 +475,50 @@ class BufferHelper final : public Resource
     const Buffer &getBuffer() const { return mBuffer; }
     const DeviceMemory &getDeviceMemory() const { return mDeviceMemory; }
     VkDeviceSize getSize() const { return mSize; }
-    bool isHostVisible() const
-    {
-        return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
-    }
 
+    // Helpers for setting the graph dependencies *and* setting the appropriate barrier.  These are
+    // made for dependencies to non-buffer resources, as only one of two resources participating in
+    // the dependency would require a memory barrier.  Note that onWrite takes read access flags
+    // too, as output buffers could be read as well.
+    void onRead(ContextVk *contextVk, CommandGraphResource *reader, VkAccessFlags readAccessType)
+    {
+        addReadDependency(contextVk, reader);
+        onReadAccess(reader, readAccessType);
+    }
+    void onWrite(ContextVk *contextVk, CommandGraphResource *writer, VkAccessFlags writeAccessType)
+    {
+        addWriteDependency(contextVk, writer);
+        onWriteAccess(contextVk, writeAccessType);
+    }
+    // Helper for setting a graph dependency between two buffers.  This is a specialized function as
+    // both buffers may incur a memory barrier.  Using |onRead| followed by |onWrite| between the
+    // buffers is impossible as it would result in a command graph loop.
+    void onReadByBuffer(ContextVk *contextVk,
+                        BufferHelper *reader,
+                        VkAccessFlags readAccessType,
+                        VkAccessFlags writeAccessType)
+    {
+        addReadDependency(contextVk, reader);
+        onReadAccess(reader, readAccessType);
+        reader->onWriteAccess(contextVk, writeAccessType);
+    }
+    // Helper for setting a barrier when different parts of the same buffer is being read from and
+    // written to in the same command.
+    void onSelfReadWrite(ContextVk *contextVk, VkAccessFlags writeAccessType)
+    {
+        if (mCurrentReadAccess || mCurrentWriteAccess)
+        {
+            finishCurrentCommands(contextVk);
+        }
+        onWriteAccess(contextVk, writeAccessType);
+    }
     // Set write access mask when the buffer is modified externally, e.g. by host.  There is no
     // graph resource to create a dependency to.
     void onExternalWrite(VkAccessFlags writeAccessType) { mCurrentWriteAccess |= writeAccessType; }
 
     // Also implicitly sets up the correct barriers.
     angle::Result copyFromBuffer(ContextVk *contextVk,
-                                 BufferHelper *srcBuffer,
+                                 const Buffer &buffer,
                                  VkAccessFlags bufferAccessType,
                                  const VkBufferCopy &copyRegion);
 
@@ -525,7 +557,7 @@ class BufferHelper final : public Resource
 
     void changeQueue(uint32_t newQueueFamilyIndex, CommandBuffer *commandBuffer);
 
-    // Currently always returns false. Should be smarter about accumulation.
+    // New methods used when the CommandGraph is disabled.
     bool canAccumulateRead(ContextVk *contextVk, VkAccessFlags readAccessType);
     bool canAccumulateWrite(ContextVk *contextVk, VkAccessFlags writeAccessType);
 
@@ -552,11 +584,19 @@ class BufferHelper final : public Resource
         mCurrentReadAccess |= readAccessType;
         return needsBarrier;
     }
+    void onReadAccess(CommandGraphResource *reader, VkAccessFlags readAccessType)
+    {
+        VkAccessFlags barrierSrc, barrierDst;
+        if (needsOnReadBarrier(readAccessType, &barrierSrc, &barrierDst))
+        {
+            reader->addGlobalMemoryBarrier(barrierSrc, barrierDst,
+                                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        }
+    }
     bool needsOnWriteBarrier(VkAccessFlags writeAccessType,
                              VkAccessFlags *barrierSrcOut,
                              VkAccessFlags *barrierDstOut);
-
-    angle::Result initializeNonZeroMemory(Context *context, VkDeviceSize size);
+    void onWriteAccess(ContextVk *contextVk, VkAccessFlags writeAccessType);
 
     // Vulkan objects.
     Buffer mBuffer;
@@ -625,7 +665,7 @@ enum class ImageLayout
     EnumCount   = 13,
 };
 
-class ImageHelper final : public Resource
+class ImageHelper final : public CommandGraphResource
 {
   public:
     ImageHelper();
@@ -737,10 +777,6 @@ class ImageHelper final : public Resource
 
     gl::Extents getSize(const gl::ImageIndex &index) const;
 
-    // Return unique Serial for underlying image, first assigning it if it hasn't been set yet
-    Serial getAssignSerial(ContextVk *contextVk);
-    void resetSerial() { mSerial = rx::kZeroSerial; }
-
     static void Copy(ImageHelper *srcImage,
                      ImageHelper *dstImage,
                      const gl::Offset &srcOffset,
@@ -814,7 +850,7 @@ class ImageHelper final : public Resource
                                          const VkImageType imageType);
 
     // Stage a clear operation to a clear value based on WebGL requirements.
-    void stageSubresourceRobustClear(const gl::ImageIndex &index, const Format &format);
+    void stageSubresourceRobustClear(const gl::ImageIndex &index, const angle::Format &format);
 
     // Stage a clear operation to a clear value that initializes emulated channels to the desired
     // values.
@@ -856,18 +892,9 @@ class ImageHelper final : public Resource
     // purpose of performing a transition (which may then not be issued).
     bool isLayoutChangeNecessary(ImageLayout newLayout) const;
 
-    template <typename CommandBufferT>
     void changeLayout(VkImageAspectFlags aspectMask,
                       ImageLayout newLayout,
-                      CommandBufferT *commandBuffer)
-    {
-        if (!isLayoutChangeNecessary(newLayout))
-        {
-            return;
-        }
-
-        forceChangeLayoutAndQueue(aspectMask, newLayout, mCurrentQueueFamilyIndex, commandBuffer);
-    }
+                      CommandBuffer *commandBuffer);
 
     bool isQueueChangeNeccesary(uint32_t newQueueFamilyIndex) const
     {
@@ -935,12 +962,10 @@ class ImageHelper final : public Resource
                                       GLuint *inputSkipBytes);
 
   private:
-    // Generalized to accept both "primary" and "secondary" command buffers.
-    template <typename CommandBufferT>
     void forceChangeLayoutAndQueue(VkImageAspectFlags aspectMask,
                                    ImageLayout newLayout,
                                    uint32_t newQueueFamilyIndex,
-                                   CommandBufferT *commandBuffer);
+                                   CommandBuffer *commandBuffer);
 
     void stageSubresourceClear(const gl::ImageIndex &index,
                                const angle::Format &format,
@@ -962,8 +987,6 @@ class ImageHelper final : public Resource
                            uint32_t baseArrayLayer,
                            uint32_t layerCount,
                            CommandBuffer *commandBuffer);
-
-    angle::Result initializeNonZeroMemory(Context *context, VkDeviceSize size);
 
     enum class UpdateSource
     {
@@ -1024,7 +1047,6 @@ class ImageHelper final : public Resource
     VkExtent3D mExtents;
     const Format *mFormat;
     GLint mSamples;
-    Serial mSerial;
 
     // Current state.
     ImageLayout mCurrentLayout;
@@ -1067,7 +1089,7 @@ class ImageViewHelper : angle::NonCopyable
     bool hasFetchImageView() const { return mFetchImageView.valid(); }
 
     // Store reference to usage in graph.
-    void retain(ResourceUseList *resourceUseList) const { resourceUseList->add(mUse); }
+    void onResourceAccess(ResourceUseList *resourceUseList) const { resourceUseList->add(mUse); }
 
     // Creates views with multiple layers and levels.
     angle::Result initReadViews(ContextVk *contextVk,
@@ -1122,21 +1144,18 @@ class SamplerHelper final : angle::NonCopyable
     Sampler &get() { return mSampler; }
     const Sampler &get() const { return mSampler; }
 
-    void retain(ResourceUseList *resourceUseList) { resourceUseList->add(mUse); }
+    void onResourceAccess(ResourceUseList *resourceUseList) { resourceUseList->add(mUse); }
 
   private:
     SharedResourceUse mUse;
     Sampler mSampler;
 };
 
-class FramebufferHelper : public Resource
+class FramebufferHelper : public CommandGraphResource
 {
   public:
     FramebufferHelper();
     ~FramebufferHelper() override;
-
-    FramebufferHelper(FramebufferHelper &&other);
-    FramebufferHelper &operator=(FramebufferHelper &&other);
 
     angle::Result init(ContextVk *contextVk, const VkFramebufferCreateInfo &createInfo);
     void release(ContextVk *contextVk);
@@ -1162,7 +1181,7 @@ class FramebufferHelper : public Resource
 
 // A special command graph resource to hold resource dependencies for dispatch calls.  It's the
 // equivalent of FramebufferHelper, though it doesn't contain a Vulkan object.
-class DispatchHelper : public Resource
+class DispatchHelper : public CommandGraphResource
 {
   public:
     DispatchHelper();

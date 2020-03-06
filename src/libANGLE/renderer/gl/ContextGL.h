@@ -216,16 +216,13 @@ class ContextGL : public ContextImpl
     std::string getRendererDescription() const override;
 
     // EXT_debug_marker
-    angle::Result insertEventMarker(GLsizei length, const char *marker) override;
-    angle::Result pushGroupMarker(GLsizei length, const char *marker) override;
-    angle::Result popGroupMarker() override;
+    void insertEventMarker(GLsizei length, const char *marker) override;
+    void pushGroupMarker(GLsizei length, const char *marker) override;
+    void popGroupMarker() override;
 
     // KHR_debug
-    angle::Result pushDebugGroup(const gl::Context *context,
-                                 GLenum source,
-                                 GLuint id,
-                                 const std::string &message) override;
-    angle::Result popDebugGroup(const gl::Context *context) override;
+    void pushDebugGroup(GLenum source, GLuint id, const std::string &message) override;
+    void popDebugGroup() override;
 
     // State sync with dirty bits.
     angle::Result syncState(const gl::Context *context,

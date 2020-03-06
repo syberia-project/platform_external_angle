@@ -43,16 +43,10 @@ struct Optional
     }
 
     void reset() { mValid = false; }
-    T &&release()
-    {
-        mValid = false;
-        return std::move(mValue);
-    }
 
     static Optional Invalid() { return Optional(); }
 
     bool valid() const { return mValid; }
-    T &value() { return mValue; }
     const T &value() const { return mValue; }
 
     bool operator==(const Optional &other) const

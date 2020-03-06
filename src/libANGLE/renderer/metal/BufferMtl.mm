@@ -88,7 +88,7 @@ BufferMtl::~BufferMtl() {}
 void BufferMtl::destroy(const gl::Context *context)
 {
     ContextMtl *contextMtl = mtl::GetImpl(context);
-    mShadowCopy.clear();
+    mShadowCopy.resize(0);
     mBufferPool.destroy(contextMtl);
     mBuffer = nullptr;
 

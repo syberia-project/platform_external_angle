@@ -194,11 +194,6 @@ ParamsT NullDevice(const ParamsT &input)
     output.trackGpuTime             = false;
     return output;
 }
-
-template <typename ParamsT>
-ParamsT Passthrough(const ParamsT &input)
-{
-    return input;
-}
 }  // namespace params
+
 #endif  // PERF_TESTS_ANGLE_PERF_TEST_H_
