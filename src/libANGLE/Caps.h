@@ -118,6 +118,7 @@ struct Extensions
     // GL_EXT_color_buffer_float
     // GL_EXT_texture_norm16
     // GL_EXT_texture_compression_bptc
+    // GL_EXT_texture_compression_rgtc
     void setTextureExtensionSupport(const TextureCapsMap &textureCaps);
 
     // indicate if any depth texture extension is available
@@ -214,6 +215,9 @@ struct Extensions
 
     // GL_EXT_texture_compression_bptc
     bool textureCompressionBPTC = false;
+
+    // GL_EXT_texture_compression_rgtc
+    bool textureCompressionRGTC = false;
 
     // GL_OES_compressed_ETC1_RGB8_texture
     // Implies that TextureCaps for GL_ETC1_RGB8_OES exist
@@ -388,11 +392,17 @@ struct Extensions
     // GL_EXT_memory_object_fd
     bool memoryObjectFd = false;
 
+    // GL_ANGLE_memory_object_fuchsia
+    bool memoryObjectFuchsiaANGLE = false;
+
     // GL_EXT_semaphore
     bool semaphore = false;
 
     // GL_EXT_semaphore_fd
     bool semaphoreFd = false;
+
+    // GL_ANGLE_semaphore_fuchsia
+    bool semaphoreFuchsiaANGLE = false;
 
     // NV_EGL_stream_consumer_external
     bool eglStreamConsumerExternalNV = false;

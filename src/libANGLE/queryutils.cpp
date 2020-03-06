@@ -329,7 +329,23 @@ void QueryTexParameterBase(const Context *context,
     }
 }
 
-template <bool isPureInteger, typename ParamType>
+// this function is needed to handle OES_FIXED_POINT.
+// Some pname values can take in GLfixed values and may need to be converted
+template <bool isGLfixed, typename ReturnType, typename ParamType>
+ReturnType ConvertTexParam(GLenum pname, const ParamType param)
+{
+    if (isGLfixed)
+    {
+        return CastQueryValueTo<ReturnType>(pname,
+                                            ConvertFixedToFloat(static_cast<GLfixed>(param)));
+    }
+    else
+    {
+        return CastQueryValueTo<ReturnType>(pname, param);
+    }
+}
+
+template <bool isPureInteger, bool isGLfixed, typename ParamType>
 void SetTexParameterBase(Context *context, Texture *texture, GLenum pname, const ParamType *params)
 {
     ASSERT(texture != nullptr);
@@ -355,7 +371,8 @@ void SetTexParameterBase(Context *context, Texture *texture, GLenum pname, const
             texture->setUsage(context, ConvertToGLenum(pname, params[0]));
             break;
         case GL_TEXTURE_MAX_ANISOTROPY_EXT:
-            texture->setMaxAnisotropy(context, CastQueryValueTo<GLfloat>(pname, params[0]));
+            texture->setMaxAnisotropy(context,
+                                      ConvertTexParam<isGLfixed, GLfloat>(pname, params[0]));
             break;
         case GL_TEXTURE_COMPARE_MODE:
             texture->setCompareMode(context, ConvertToGLenum(pname, params[0]));
@@ -398,10 +415,10 @@ void SetTexParameterBase(Context *context, Texture *texture, GLenum pname, const
             texture->setSRGBDecode(context, ConvertToGLenum(pname, params[0]));
             break;
         case GL_TEXTURE_CROP_RECT_OES:
-            texture->setCrop(gl::Rectangle(CastQueryValueTo<GLint>(pname, params[0]),
-                                           CastQueryValueTo<GLint>(pname, params[1]),
-                                           CastQueryValueTo<GLint>(pname, params[2]),
-                                           CastQueryValueTo<GLint>(pname, params[3])));
+            texture->setCrop(gl::Rectangle(ConvertTexParam<isGLfixed, GLint>(pname, params[0]),
+                                           ConvertTexParam<isGLfixed, GLint>(pname, params[1]),
+                                           ConvertTexParam<isGLfixed, GLint>(pname, params[2]),
+                                           ConvertTexParam<isGLfixed, GLint>(pname, params[3])));
             break;
         case GL_GENERATE_MIPMAP:
             texture->setGenerateMipmapHint(ConvertToGLenum(params[0]));
@@ -1609,34 +1626,44 @@ angle::Result QuerySynciv(const Context *context,
     return angle::Result::Continue;
 }
 
+void SetTexParameterx(Context *context, Texture *texture, GLenum pname, GLfixed param)
+{
+    SetTexParameterBase<false, true>(context, texture, pname, &param);
+}
+
+void SetTexParameterxv(Context *context, Texture *texture, GLenum pname, const GLfixed *params)
+{
+    SetTexParameterBase<false, true>(context, texture, pname, params);
+}
+
 void SetTexParameterf(Context *context, Texture *texture, GLenum pname, GLfloat param)
 {
-    SetTexParameterBase<false>(context, texture, pname, &param);
+    SetTexParameterBase<false, false>(context, texture, pname, &param);
 }
 
 void SetTexParameterfv(Context *context, Texture *texture, GLenum pname, const GLfloat *params)
 {
-    SetTexParameterBase<false>(context, texture, pname, params);
+    SetTexParameterBase<false, false>(context, texture, pname, params);
 }
 
 void SetTexParameteri(Context *context, Texture *texture, GLenum pname, GLint param)
 {
-    SetTexParameterBase<false>(context, texture, pname, &param);
+    SetTexParameterBase<false, false>(context, texture, pname, &param);
 }
 
 void SetTexParameteriv(Context *context, Texture *texture, GLenum pname, const GLint *params)
 {
-    SetTexParameterBase<false>(context, texture, pname, params);
+    SetTexParameterBase<false, false>(context, texture, pname, params);
 }
 
 void SetTexParameterIiv(Context *context, Texture *texture, GLenum pname, const GLint *params)
 {
-    SetTexParameterBase<true>(context, texture, pname, params);
+    SetTexParameterBase<true, false>(context, texture, pname, params);
 }
 
 void SetTexParameterIuiv(Context *context, Texture *texture, GLenum pname, const GLuint *params)
 {
-    SetTexParameterBase<true>(context, texture, pname, params);
+    SetTexParameterBase<true, false>(context, texture, pname, params);
 }
 
 void SetSamplerParameterf(Context *context, Sampler *sampler, GLenum pname, GLfloat param)
@@ -1729,7 +1756,7 @@ GLint GetUniformResourceProperty(const Program *program, GLuint index, const GLe
             return GetCommonVariableProperty(uniform, resourceProp);
 
         case GL_LOCATION:
-            return program->getUniformLocation(uniform.name);
+            return program->getUniformLocation(uniform.name).value;
 
         case GL_BLOCK_INDEX:
             return (uniform.isAtomicCounter() ? -1 : uniform.bufferIndex);
@@ -1904,7 +1931,7 @@ GLint QueryProgramResourceLocation(const Program *program,
             return program->getOutputResourceLocation(name);
 
         case GL_UNIFORM:
-            return program->getUniformLocation(name);
+            return program->getUniformLocation(name).value;
 
         default:
             UNREACHABLE();
@@ -2792,7 +2819,7 @@ void SetPointSize(GLES1State *state, GLfloat size)
     params.pointSize        = size;
 }
 
-void GetPointSize(GLES1State *state, GLfloat *sizeOut)
+void GetPointSize(const GLES1State *state, GLfloat *sizeOut)
 {
     const PointParameters &params = state->pointParameters();
     *sizeOut                      = params.pointSize;
@@ -3653,6 +3680,9 @@ void QueryConfigAttrib(const Config *config, EGLint attribute, EGLint *value)
             break;
         case EGL_SURFACE_TYPE:
             *value = config->surfaceType;
+            break;
+        case EGL_BIND_TO_TEXTURE_TARGET_ANGLE:
+            *value = config->bindToTextureTarget;
             break;
         case EGL_TRANSPARENT_TYPE:
             *value = config->transparentType;

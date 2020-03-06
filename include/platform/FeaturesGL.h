@@ -404,6 +404,26 @@ struct FeaturesGL : FeatureSetBase
         "Some drivers track CopyTex{Sub}Image texture dependencies incorrectly. Flush"
         " before glDeleteTextures in this case",
         &members, "http://anglebug.com/4267"};
+
+    // Rewrite row-major matrices as column-major as a driver bug workaround if
+    // necessary.
+    Feature rewriteRowMajorMatrices = {
+        "rewrite_row_major_matrices", FeatureCategory::OpenGLWorkarounds,
+        "Rewrite row major matrices in shaders as column major as a driver bug workaround",
+        &members, "http://anglebug.com/2273"};
+
+    // Bugs exist in various OpenGL Intel drivers on Windows that produce incorrect
+    // values for GL_COMPRESSED_SRGB_S3TC_DXT1_EXT format. Replace it with
+    // GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT as it's the closest option allowed by
+    // the WebGL extension spec.
+    Feature avoidDXT1sRGBTextureFormat = {
+        "avoid_dxt1_srgb_texture_format", FeatureCategory::OpenGLWorkarounds,
+        "Replaces DXT1 sRGB with DXT1 sRGB Alpha as a driver bug workaround.", &members};
+
+    // GL_EXT_semaphore_fd doesn't work properly with Mesa 19.3.4 and earlier versions.
+    Feature disableSemaphoreFd = {"disable_semaphore_fd", FeatureCategory::OpenGLWorkarounds,
+                                  "Disable GL_EXT_semaphore_fd extension", &members,
+                                  "https://crbug.com/1046462"};
 };
 
 inline FeaturesGL::FeaturesGL()  = default;
