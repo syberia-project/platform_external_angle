@@ -13,10 +13,10 @@
 #include "common/utilities.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/renderer/vulkan/BufferVk.h"
-#include "libANGLE/renderer/vulkan/CommandGraph.h"
 #include "libANGLE/renderer/vulkan/ContextVk.h"
 #include "libANGLE/renderer/vulkan/FramebufferVk.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
+#include "libANGLE/renderer/vulkan/ResourceVk.h"
 #include "libANGLE/renderer/vulkan/vk_format_utils.h"
 #include "libANGLE/trace.h"
 
@@ -639,8 +639,13 @@ angle::Result VertexArrayVk::syncDirtyAttrib(ContextVk *contextVk,
                     vk::BufferHelper &bufferHelper          = bufferVk->getBuffer();
                     mCurrentArrayBuffers[attribIndex]       = &bufferHelper;
                     mCurrentArrayBufferHandles[attribIndex] = bufferHelper.getBuffer().getHandle();
-                    mCurrentArrayBufferOffsets[attribIndex] = binding.getOffset();
-                    stride                                  = binding.getStride();
+
+                    // Vulkan requires the offset is within the buffer. We use robust access
+                    // behaviour to reset the offset if it starts outside the buffer.
+                    mCurrentArrayBufferOffsets[attribIndex] =
+                        binding.getOffset() < bufferVk->getSize() ? binding.getOffset() : 0;
+
+                    stride = binding.getStride();
                 }
             }
         }
