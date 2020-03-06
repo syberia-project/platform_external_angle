@@ -1029,6 +1029,10 @@ angle::CallCapture CaptureGenQueriesEXT(const State &glState,
                                         bool isCallValid,
                                         GLsizei n,
                                         QueryID *idsPacked);
+angle::CallCapture CaptureGetInteger64vEXT(const State &glState,
+                                           bool isCallValid,
+                                           GLenum pname,
+                                           GLint64 *data);
 angle::CallCapture CaptureGetQueryObjecti64vEXT(const State &glState,
                                                 bool isCallValid,
                                                 QueryID idPacked,
@@ -1068,6 +1072,49 @@ angle::CallCapture CaptureDrawBuffersEXT(const State &glState,
                                          bool isCallValid,
                                          GLsizei n,
                                          const GLenum *bufs);
+
+// GL_EXT_draw_buffers_indexed
+angle::CallCapture CaptureBlendEquationSeparateiEXT(const State &glState,
+                                                    bool isCallValid,
+                                                    GLuint buf,
+                                                    GLenum modeRGB,
+                                                    GLenum modeAlpha);
+angle::CallCapture CaptureBlendEquationiEXT(const State &glState,
+                                            bool isCallValid,
+                                            GLuint buf,
+                                            GLenum mode);
+angle::CallCapture CaptureBlendFuncSeparateiEXT(const State &glState,
+                                                bool isCallValid,
+                                                GLuint buf,
+                                                GLenum srcRGB,
+                                                GLenum dstRGB,
+                                                GLenum srcAlpha,
+                                                GLenum dstAlpha);
+angle::CallCapture CaptureBlendFunciEXT(const State &glState,
+                                        bool isCallValid,
+                                        GLuint buf,
+                                        GLenum src,
+                                        GLenum dst);
+angle::CallCapture CaptureColorMaskiEXT(const State &glState,
+                                        bool isCallValid,
+                                        GLuint index,
+                                        GLboolean r,
+                                        GLboolean g,
+                                        GLboolean b,
+                                        GLboolean a);
+angle::CallCapture CaptureDisableiEXT(const State &glState,
+                                      bool isCallValid,
+                                      GLenum target,
+                                      GLuint index);
+angle::CallCapture CaptureEnableiEXT(const State &glState,
+                                     bool isCallValid,
+                                     GLenum target,
+                                     GLuint index);
+angle::CallCapture CaptureIsEnablediEXT(const State &glState,
+                                        bool isCallValid,
+                                        GLenum target,
+                                        GLuint index,
+                                        GLboolean returnValue);
 
 // GL_EXT_draw_elements_base_vertex
 angle::CallCapture CaptureDrawElementsBaseVertexEXT(const State &glState,
@@ -1481,6 +1528,49 @@ angle::CallCapture CaptureEGLImageTargetTexture2DOES(const State &glState,
 // GL_OES_compressed_ETC1_RGB8_texture
 
 // GL_OES_depth32
+
+// GL_OES_draw_buffers_indexed
+angle::CallCapture CaptureBlendEquationSeparateiOES(const State &glState,
+                                                    bool isCallValid,
+                                                    GLuint buf,
+                                                    GLenum modeRGB,
+                                                    GLenum modeAlpha);
+angle::CallCapture CaptureBlendEquationiOES(const State &glState,
+                                            bool isCallValid,
+                                            GLuint buf,
+                                            GLenum mode);
+angle::CallCapture CaptureBlendFuncSeparateiOES(const State &glState,
+                                                bool isCallValid,
+                                                GLuint buf,
+                                                GLenum srcRGB,
+                                                GLenum dstRGB,
+                                                GLenum srcAlpha,
+                                                GLenum dstAlpha);
+angle::CallCapture CaptureBlendFunciOES(const State &glState,
+                                        bool isCallValid,
+                                        GLuint buf,
+                                        GLenum src,
+                                        GLenum dst);
+angle::CallCapture CaptureColorMaskiOES(const State &glState,
+                                        bool isCallValid,
+                                        GLuint index,
+                                        GLboolean r,
+                                        GLboolean g,
+                                        GLboolean b,
+                                        GLboolean a);
+angle::CallCapture CaptureDisableiOES(const State &glState,
+                                      bool isCallValid,
+                                      GLenum target,
+                                      GLuint index);
+angle::CallCapture CaptureEnableiOES(const State &glState,
+                                     bool isCallValid,
+                                     GLenum target,
+                                     GLuint index);
+angle::CallCapture CaptureIsEnablediOES(const State &glState,
+                                        bool isCallValid,
+                                        GLenum target,
+                                        GLuint index,
+                                        GLboolean returnValue);
 
 // GL_OES_draw_elements_base_vertex
 angle::CallCapture CaptureDrawElementsBaseVertexOES(const State &glState,
@@ -3395,6 +3485,11 @@ void CaptureGenQueriesEXT_idsPacked(const State &glState,
                                     GLsizei n,
                                     QueryID *idsPacked,
                                     angle::ParamCapture *paramCapture);
+void CaptureGetInteger64vEXT_data(const State &glState,
+                                  bool isCallValid,
+                                  GLenum pname,
+                                  GLint64 *data,
+                                  angle::ParamCapture *paramCapture);
 void CaptureGetQueryObjecti64vEXT_params(const State &glState,
                                          bool isCallValid,
                                          QueryID idPacked,

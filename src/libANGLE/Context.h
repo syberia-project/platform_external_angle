@@ -174,6 +174,7 @@ class StateCache final : angle::NonCopyable
     // 13. onUniformBufferStateChange.
     // 14. onColorMaskChange.
     // 15. onBufferBindingChange.
+    // 16. onBlendFuncIndexedChange.
     bool hasBasicDrawStatesError(Context *context) const
     {
         if (mCachedBasicDrawStatesError == 0)
@@ -274,6 +275,7 @@ class StateCache final : angle::NonCopyable
     void onUniformBufferStateChange(Context *context);
     void onColorMaskChange(Context *context);
     void onBufferBindingChange(Context *context);
+    void onBlendFuncIndexedChange(Context *context);
 
   private:
     // Cache update functions.
@@ -323,6 +325,10 @@ class StateCache final : angle::NonCopyable
                          angle::EnumSize<VertexAttribType>() + 1>
         mCachedIntegerVertexAttribTypesValidation;
 };
+
+using VertexArrayMap       = ResourceMap<VertexArray, VertexArrayID>;
+using QueryMap             = ResourceMap<Query, QueryID>;
+using TransformFeedbackMap = ResourceMap<TransformFeedback, TransformFeedbackID>;
 
 class Context final : public egl::LabeledObject, angle::NonCopyable, public angle::ObserverInterface
 {
@@ -587,6 +593,13 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     angle::FrameCapture *getFrameCapture() { return mFrameCapture.get(); }
 
+    const VertexArrayMap &getVertexArraysForCapture() const { return mVertexArrayMap; }
+    const QueryMap &getQueriesForCapture() const { return mQueryMap; }
+    const TransformFeedbackMap &getTransformFeedbacksForCapture() const
+    {
+        return mTransformFeedbackMap;
+    }
+
     void onPostSwap() const;
 
   private:
@@ -672,13 +685,13 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     ResourceMap<FenceNV, FenceNVID> mFenceNVMap;
     HandleAllocator mFenceNVHandleAllocator;
 
-    ResourceMap<Query, QueryID> mQueryMap;
+    QueryMap mQueryMap;
     HandleAllocator mQueryHandleAllocator;
 
-    ResourceMap<VertexArray, VertexArrayID> mVertexArrayMap;
+    VertexArrayMap mVertexArrayMap;
     HandleAllocator mVertexArrayHandleAllocator;
 
-    ResourceMap<TransformFeedback, TransformFeedbackID> mTransformFeedbackMap;
+    TransformFeedbackMap mTransformFeedbackMap;
     HandleAllocator mTransformFeedbackHandleAllocator;
 
     const char *mVersionString;

@@ -19,6 +19,8 @@
 #include "common/system_utils.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/Framebuffer.h"
+#include "libANGLE/Query.h"
+#include "libANGLE/ResourceMap.h"
 #include "libANGLE/Shader.h"
 #include "libANGLE/VertexArray.h"
 #include "libANGLE/capture_gles_2_0_autogen.h"
@@ -1210,6 +1212,21 @@ bool IsDefaultCurrentValue(const gl::VertexAttribCurrentValueData &currentValue)
            currentValue.Values.FloatValues[2] == 0.0f && currentValue.Values.FloatValues[3] == 1.0f;
 }
 
+bool IsQueryActive(const gl::State &glState, gl::QueryID &queryID)
+{
+    const gl::ActiveQueryMap &activeQueries = glState.getActiveQueriesForCapture();
+    for (const auto &activeQueryIter : activeQueries)
+    {
+        const gl::Query *activeQuery = activeQueryIter.get();
+        if (activeQuery && activeQuery->id() == queryID)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void Capture(std::vector<CallCapture> *setupCalls, CallCapture &&call)
 {
     setupCalls->emplace_back(std::move(call));
@@ -1236,6 +1253,54 @@ void CaptureFramebufferAttachment(std::vector<CallCapture> *setupCalls,
         Capture(setupCalls, CaptureFramebufferRenderbuffer(replayState, true, GL_FRAMEBUFFER,
                                                            attachment.getBinding(), GL_RENDERBUFFER,
                                                            {resourceID}));
+    }
+}
+
+void CaptureVertexArrayData(std::vector<CallCapture> *setupCalls,
+                            const gl::Context *context,
+                            const gl::VertexArray *vertexArray,
+                            gl::State *replayState)
+{
+    const std::vector<gl::VertexAttribute> &vertexAttribs = vertexArray->getVertexAttributes();
+    const std::vector<gl::VertexBinding> &vertexBindings  = vertexArray->getVertexBindings();
+
+    for (GLuint attribIndex = 0; attribIndex < gl::MAX_VERTEX_ATTRIBS; ++attribIndex)
+    {
+        const gl::VertexAttribute defaultAttrib(attribIndex);
+        const gl::VertexBinding defaultBinding;
+
+        const gl::VertexAttribute &attrib = vertexAttribs[attribIndex];
+        const gl::VertexBinding &binding  = vertexBindings[attrib.bindingIndex];
+
+        if (attrib.enabled != defaultAttrib.enabled)
+        {
+            Capture(setupCalls, CaptureEnableVertexAttribArray(*replayState, false, attribIndex));
+        }
+
+        if (attrib.format != defaultAttrib.format || attrib.pointer != defaultAttrib.pointer ||
+            binding.getStride() != defaultBinding.getStride() ||
+            binding.getBuffer().get() != nullptr)
+        {
+            gl::Buffer *buffer = binding.getBuffer().get();
+
+            if (buffer != replayState->getArrayBuffer())
+            {
+                replayState->setBufferBinding(context, gl::BufferBinding::Array, buffer);
+                Capture(setupCalls, CaptureBindBuffer(*replayState, true, gl::BufferBinding::Array,
+                                                      buffer->id()));
+            }
+
+            Capture(setupCalls, CaptureVertexAttribPointer(
+                                    *replayState, true, attribIndex, attrib.format->channelCount,
+                                    attrib.format->vertexAttribType, attrib.format->isNorm(),
+                                    binding.getStride(), attrib.pointer));
+        }
+
+        if (binding.getDivisor() != 0)
+        {
+            Capture(setupCalls, CaptureVertexAttribDivisor(*replayState, true, attribIndex,
+                                                           binding.getDivisor()));
+        }
     }
 }
 
@@ -1302,55 +1367,49 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     // Vertex input states. Only handles GLES 2.0 states right now.
     // Must happen after buffer data initialization.
     // TODO(http://anglebug.com/3662): Complete state capture.
+
+    // Capture default vertex attribs
     const std::vector<gl::VertexAttribCurrentValueData> &currentValues =
         apiState.getVertexAttribCurrentValues();
-    const std::vector<gl::VertexAttribute> &vertexAttribs =
-        apiState.getVertexArray()->getVertexAttributes();
-    const std::vector<gl::VertexBinding> &vertexBindings =
-        apiState.getVertexArray()->getVertexBindings();
 
     for (GLuint attribIndex = 0; attribIndex < gl::MAX_VERTEX_ATTRIBS; ++attribIndex)
     {
-        const gl::VertexAttribCurrentValueData &currentValue = currentValues[attribIndex];
-        if (!IsDefaultCurrentValue(currentValue))
+        const gl::VertexAttribCurrentValueData &defaultValue = currentValues[attribIndex];
+        if (!IsDefaultCurrentValue(defaultValue))
         {
-            cap(CaptureVertexAttrib4fv(replayState, true, attribIndex,
-                                       currentValue.Values.FloatValues));
+            Capture(setupCalls, CaptureVertexAttrib4fv(replayState, true, attribIndex,
+                                                       defaultValue.Values.FloatValues));
         }
+    }
 
-        const gl::VertexAttribute &attrib = vertexAttribs[attribIndex];
-        const gl::VertexBinding &binding  = vertexBindings[attrib.bindingIndex];
+    // Capture vertex array objects
+    const gl::VertexArrayMap &vertexArrayMap = context->getVertexArraysForCapture();
+    gl::VertexArrayID boundVertexArrayID     = {0};
+    for (const auto &vertexArrayIter : vertexArrayMap)
+    {
+        gl::VertexArrayID vertexArrayID = {vertexArrayIter.first};
+        cap(CaptureGenVertexArrays(replayState, true, 1, &vertexArrayID));
+        MaybeCaptureUpdateResourceIDs(setupCalls);
 
-        const gl::VertexAttribute defaultAttrib(attribIndex);
-        const gl::VertexBinding defaultBinding;
-
-        if (attrib.enabled != defaultAttrib.enabled)
+        if (vertexArrayIter.second)
         {
-            cap(CaptureEnableVertexAttribArray(replayState, false, attribIndex));
-        }
+            const gl::VertexArray *vertexArray = vertexArrayIter.second;
 
-        if (attrib.format != defaultAttrib.format || attrib.pointer != defaultAttrib.pointer ||
-            binding.getStride() != defaultBinding.getStride() ||
-            binding.getBuffer().get() != nullptr)
-        {
-            gl::Buffer *buffer = binding.getBuffer().get();
-
-            if (buffer != replayState.getArrayBuffer())
+            // Bind the vertexArray (unless default) and populate it
+            if (vertexArrayID.value != 0)
             {
-                replayState.setBufferBinding(context, gl::BufferBinding::Array, buffer);
-                cap(CaptureBindBuffer(replayState, true, gl::BufferBinding::Array, buffer->id()));
+                cap(CaptureBindVertexArray(replayState, true, vertexArrayID));
+                boundVertexArrayID = vertexArrayID;
             }
-
-            cap(CaptureVertexAttribPointer(replayState, true, attribIndex,
-                                           attrib.format->channelCount,
-                                           attrib.format->vertexAttribType, attrib.format->isNorm(),
-                                           binding.getStride(), attrib.pointer));
+            CaptureVertexArrayData(setupCalls, context, vertexArray, &replayState);
         }
+    }
 
-        if (binding.getDivisor() != 0)
-        {
-            cap(CaptureVertexAttribDivisor(replayState, true, attribIndex, binding.getDivisor()));
-        }
+    // Bind the current vertex array
+    const gl::VertexArray *currentVertexArray = apiState.getVertexArray();
+    if (currentVertexArray->id() != boundVertexArrayID)
+    {
+        cap(CaptureBindVertexArray(replayState, true, currentVertexArray->id()));
     }
 
     // Capture Buffer bindings.
@@ -1370,12 +1429,12 @@ void CaptureMidExecutionSetup(const gl::Context *context,
         }
     }
 
-    // Set a pack alignment of 1.
-    gl::PixelPackState &currentPackState = replayState.getPackState();
-    if (currentPackState.alignment != 1)
+    // Set a unpack alignment of 1.
+    gl::PixelUnpackState &currentUnpackState = replayState.getUnpackState();
+    if (currentUnpackState.alignment != 1)
     {
         cap(CapturePixelStorei(replayState, true, GL_UNPACK_ALIGNMENT, 1));
-        currentPackState.alignment = 1;
+        currentUnpackState.alignment = 1;
     }
 
     // Capture Texture setup and data.
@@ -1411,6 +1470,10 @@ void CaptureMidExecutionSetup(const gl::Context *context,
             cap(CaptureTexParameteri(replayState, true, texture->getType(), pname, param));
         };
 
+        auto capTexParamf = [cap, &replayState, texture](GLenum pname, GLfloat param) {
+            cap(CaptureTexParameterf(replayState, true, texture->getType(), pname, param));
+        };
+
         if (textureSamplerState.getMinFilter() != defaultSamplerState.getMinFilter())
         {
             capTexParam(GL_TEXTURE_MIN_FILTER, textureSamplerState.getMinFilter());
@@ -1434,6 +1497,48 @@ void CaptureMidExecutionSetup(const gl::Context *context,
         if (textureSamplerState.getWrapT() != defaultSamplerState.getWrapT())
         {
             capTexParam(GL_TEXTURE_WRAP_T, textureSamplerState.getWrapT());
+        }
+
+        if (textureSamplerState.getMinLod() != defaultSamplerState.getMinLod())
+        {
+            capTexParamf(GL_TEXTURE_MIN_LOD, textureSamplerState.getMinLod());
+        }
+
+        if (textureSamplerState.getMaxLod() != defaultSamplerState.getMaxLod())
+        {
+            capTexParamf(GL_TEXTURE_MAX_LOD, textureSamplerState.getMaxLod());
+        }
+
+        if (textureSamplerState.getCompareMode() != defaultSamplerState.getCompareMode())
+        {
+            capTexParam(GL_TEXTURE_COMPARE_MODE, textureSamplerState.getCompareMode());
+        }
+
+        if (textureSamplerState.getCompareFunc() != defaultSamplerState.getCompareFunc())
+        {
+            capTexParam(GL_TEXTURE_COMPARE_FUNC, textureSamplerState.getCompareFunc());
+        }
+
+        // Texture parameters
+        // TODO: Add immutable and base/max when TexStorage is handled (http://anglebug.com/3662)
+        if (texture->getSwizzleRed() != GL_RED)
+        {
+            capTexParam(GL_TEXTURE_SWIZZLE_R, texture->getSwizzleRed());
+        }
+
+        if (texture->getSwizzleGreen() != GL_GREEN)
+        {
+            capTexParam(GL_TEXTURE_SWIZZLE_G, texture->getSwizzleGreen());
+        }
+
+        if (texture->getSwizzleBlue() != GL_BLUE)
+        {
+            capTexParam(GL_TEXTURE_SWIZZLE_B, texture->getSwizzleBlue());
+        }
+
+        if (texture->getSwizzleAlpha() != GL_ALPHA)
+        {
+            capTexParam(GL_TEXTURE_SWIZZLE_A, texture->getSwizzleAlpha());
         }
 
         // Iterate texture levels and layers.
@@ -1752,6 +1857,28 @@ void CaptureMidExecutionSetup(const gl::Context *context,
             cap(CaptureDeleteShader(replayState, true, tempShaderID));
         }
 
+        // Gather XFB varyings
+        std::vector<std::string> xfbVaryings;
+        for (const gl::TransformFeedbackVarying &xfbVarying :
+             program->getState().getLinkedTransformFeedbackVaryings())
+        {
+            xfbVaryings.push_back(xfbVarying.nameWithArrayIndex());
+        }
+
+        if (!xfbVaryings.empty())
+        {
+            std::vector<const char *> varyingsStrings;
+            for (const std::string &varyingString : xfbVaryings)
+            {
+                varyingsStrings.push_back(varyingString.data());
+            }
+
+            GLenum xfbMode = program->getState().getTransformFeedbackBufferMode();
+            cap(CaptureTransformFeedbackVaryings(replayState, true, id,
+                                                 static_cast<GLint>(xfbVaryings.size()),
+                                                 varyingsStrings.data(), xfbMode));
+        }
+
         cap(CaptureLinkProgram(replayState, true, id));
         CaptureUpdateUniformLocations(program, setupCalls);
     }
@@ -1800,6 +1927,144 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     }
 
     // TODO(http://anglebug.com/3662): ES 3.x objects.
+
+    // Create existing queries
+    const gl::QueryMap &queryMap = context->getQueriesForCapture();
+    for (const auto &queryIter : queryMap)
+    {
+        ASSERT(queryIter.first);
+        gl::QueryID queryID = {queryIter.first};
+
+        cap(CaptureGenQueries(replayState, true, 1, &queryID));
+        MaybeCaptureUpdateResourceIDs(setupCalls);
+
+        if (queryIter.second)
+        {
+            gl::QueryType queryType = queryIter.second->getType();
+
+            // Begin the query to generate the object
+            cap(CaptureBeginQuery(replayState, true, queryType, queryID));
+
+            // End the query if it was not active
+            if (!IsQueryActive(apiState, queryID))
+            {
+                cap(CaptureEndQuery(replayState, true, queryType));
+            }
+        }
+    }
+
+    // Transform Feedback
+    const gl::TransformFeedbackMap &xfbMap = context->getTransformFeedbacksForCapture();
+    for (const auto &xfbIter : xfbMap)
+    {
+        gl::TransformFeedbackID xfbID = {xfbIter.first};
+        cap(CaptureGenTransformFeedbacks(replayState, true, 1, &xfbID));
+        MaybeCaptureUpdateResourceIDs(setupCalls);
+
+        gl::TransformFeedback *xfb = xfbIter.second;
+        if (!xfb)
+        {
+            // The object was never created
+            continue;
+        }
+
+        // Bind XFB to create the object
+        cap(CaptureBindTransformFeedback(replayState, true, GL_TRANSFORM_FEEDBACK, xfbID));
+
+        // Bind the buffers associated with this XFB object
+        for (size_t i = 0; i < xfb->getIndexedBufferCount(); ++i)
+        {
+            const gl::OffsetBindingPointer<gl::Buffer> &xfbBuffer = xfb->getIndexedBuffer(i);
+
+            // Note: Buffers bound with BindBufferBase can be used with BindBuffer
+            cap(CaptureBindBufferRange(replayState, true, gl::BufferBinding::TransformFeedback, 0,
+                                       xfbBuffer.id(), xfbBuffer.getOffset(), xfbBuffer.getSize()));
+        }
+
+        if (xfb->isActive() || xfb->isPaused())
+        {
+            // We don't support active XFB in MEC yet
+            UNIMPLEMENTED();
+        }
+    }
+
+    // Bind the current XFB buffer after populating XFB objects
+    gl::TransformFeedback *currentXFB = apiState.getCurrentTransformFeedback();
+    cap(CaptureBindTransformFeedback(replayState, true, GL_TRANSFORM_FEEDBACK, currentXFB->id()));
+
+    // Capture Sampler Objects
+    const gl::SamplerManager &samplers = apiState.getSamplerManagerForCapture();
+    for (const auto &samplerIter : samplers)
+    {
+        gl::SamplerID samplerID = {samplerIter.first};
+        cap(CaptureGenSamplers(replayState, true, 1, &samplerID));
+        MaybeCaptureUpdateResourceIDs(setupCalls);
+
+        gl::Sampler *sampler = samplerIter.second;
+        if (!sampler)
+        {
+            continue;
+        }
+
+        gl::SamplerState defaultSamplerState;
+        if (sampler->getMinFilter() != defaultSamplerState.getMinFilter())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_MIN_FILTER,
+                                         sampler->getMinFilter()));
+        }
+        if (sampler->getMagFilter() != defaultSamplerState.getMagFilter())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_MAG_FILTER,
+                                         sampler->getMagFilter()));
+        }
+        if (sampler->getWrapS() != defaultSamplerState.getWrapS())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_WRAP_S,
+                                         sampler->getWrapS()));
+        }
+        if (sampler->getWrapR() != defaultSamplerState.getWrapR())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_WRAP_R,
+                                         sampler->getWrapR()));
+        }
+        if (sampler->getWrapT() != defaultSamplerState.getWrapT())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_WRAP_T,
+                                         sampler->getWrapT()));
+        }
+        if (sampler->getMinLod() != defaultSamplerState.getMinLod())
+        {
+            cap(CaptureSamplerParameterf(replayState, true, samplerID, GL_TEXTURE_MIN_LOD,
+                                         sampler->getMinLod()));
+        }
+        if (sampler->getMaxLod() != defaultSamplerState.getMaxLod())
+        {
+            cap(CaptureSamplerParameterf(replayState, true, samplerID, GL_TEXTURE_MAX_LOD,
+                                         sampler->getMaxLod()));
+        }
+        if (sampler->getCompareMode() != defaultSamplerState.getCompareMode())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_COMPARE_MODE,
+                                         sampler->getCompareMode()));
+        }
+        if (sampler->getCompareFunc() != defaultSamplerState.getCompareFunc())
+        {
+            cap(CaptureSamplerParameteri(replayState, true, samplerID, GL_TEXTURE_COMPARE_FUNC,
+                                         sampler->getCompareFunc()));
+        }
+    }
+
+    // Bind samplers
+    gl::SamplerBindingVector samplerBindings = apiState.getSamplers();
+    for (GLuint bindingIndex = 0; bindingIndex < static_cast<GLuint>(samplerBindings.size());
+         ++bindingIndex)
+    {
+        gl::SamplerID samplerID = samplerBindings[bindingIndex].id();
+        if (samplerID.value != 0)
+        {
+            cap(CaptureBindSampler(replayState, true, bindingIndex, samplerID));
+        }
+    }
 
     // Capture GL Context states.
     // TODO(http://anglebug.com/3662): Complete state capture.
@@ -1948,12 +2213,67 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     }
 
     // Pixel storage states.
-    // TODO(jmadill): ES 3.x+ implementation. http://anglebug.com/3662
+    gl::PixelPackState &currentPackState = replayState.getPackState();
     if (currentPackState.alignment != apiState.getPackAlignment())
     {
-        cap(CapturePixelStorei(replayState, true, GL_UNPACK_ALIGNMENT,
-                               apiState.getPackAlignment()));
+        cap(CapturePixelStorei(replayState, true, GL_PACK_ALIGNMENT, apiState.getPackAlignment()));
         currentPackState.alignment = apiState.getPackAlignment();
+    }
+
+    if (currentPackState.rowLength != apiState.getPackRowLength())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_PACK_ROW_LENGTH, apiState.getPackRowLength()));
+        currentPackState.rowLength = apiState.getPackRowLength();
+    }
+
+    if (currentPackState.skipRows != apiState.getPackSkipRows())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_PACK_SKIP_ROWS, apiState.getPackSkipRows()));
+        currentPackState.skipRows = apiState.getPackSkipRows();
+    }
+
+    if (currentPackState.skipPixels != apiState.getPackSkipPixels())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_PACK_SKIP_PIXELS,
+                               apiState.getPackSkipPixels()));
+        currentPackState.skipPixels = apiState.getPackSkipPixels();
+    }
+
+    // We set unpack alignment above, no need to change it here
+    ASSERT(currentUnpackState.alignment == 1);
+    if (currentUnpackState.rowLength != apiState.getUnpackRowLength())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_UNPACK_ROW_LENGTH,
+                               apiState.getUnpackRowLength()));
+        currentUnpackState.rowLength = apiState.getUnpackRowLength();
+    }
+
+    if (currentUnpackState.skipRows != apiState.getUnpackSkipRows())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_UNPACK_SKIP_ROWS,
+                               apiState.getUnpackSkipRows()));
+        currentUnpackState.skipRows = apiState.getUnpackSkipRows();
+    }
+
+    if (currentUnpackState.skipPixels != apiState.getUnpackSkipPixels())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_UNPACK_SKIP_PIXELS,
+                               apiState.getUnpackSkipPixels()));
+        currentUnpackState.skipPixels = apiState.getUnpackSkipPixels();
+    }
+
+    if (currentUnpackState.imageHeight != apiState.getUnpackImageHeight())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_UNPACK_IMAGE_HEIGHT,
+                               apiState.getUnpackImageHeight()));
+        currentUnpackState.imageHeight = apiState.getUnpackImageHeight();
+    }
+
+    if (currentUnpackState.skipImages != apiState.getUnpackSkipImages())
+    {
+        cap(CapturePixelStorei(replayState, true, GL_UNPACK_SKIP_IMAGES,
+                               apiState.getUnpackSkipImages()));
+        currentUnpackState.skipImages = apiState.getUnpackSkipImages();
     }
 
     // Clear state. Missing ES 3.x features.
@@ -1968,6 +2288,11 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     if (apiState.getDepthClearValue() != 1.0f)
     {
         cap(CaptureClearDepthf(replayState, true, apiState.getDepthClearValue()));
+    }
+
+    if (apiState.getStencilClearValue() != 0)
+    {
+        cap(CaptureClearStencil(replayState, true, apiState.getStencilClearValue()));
     }
 
     // Viewport / scissor / clipping planes.
@@ -1993,6 +2318,14 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     {
         cap(CaptureScissor(replayState, true, currentScissor.x, currentScissor.y,
                            currentScissor.width, currentScissor.height));
+    }
+
+    const gl::SyncManager &syncs = apiState.getSyncManagerForCapture();
+    for (const auto &syncIter : syncs)
+    {
+        // TODO: Create existing sync objects (http://anglebug.com/3662)
+        (void)syncIter;
+        UNIMPLEMENTED();
     }
 
     // Allow the replayState object to be destroyed conveniently.

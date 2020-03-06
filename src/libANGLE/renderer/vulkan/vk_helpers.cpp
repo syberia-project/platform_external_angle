@@ -264,7 +264,8 @@ VkImageCreateFlags GetImageCreateFlags(gl::TextureType textureType)
     }
 }
 
-void HandlePrimitiveRestart(gl::DrawElementsType glIndexType,
+void HandlePrimitiveRestart(ContextVk *contextVk,
+                            gl::DrawElementsType glIndexType,
                             GLsizei indexCount,
                             const uint8_t *srcPtr,
                             uint8_t *outPtr)
@@ -272,7 +273,14 @@ void HandlePrimitiveRestart(gl::DrawElementsType glIndexType,
     switch (glIndexType)
     {
         case gl::DrawElementsType::UnsignedByte:
-            CopyLineLoopIndicesWithRestart<uint8_t, uint16_t>(indexCount, srcPtr, outPtr);
+            if (contextVk->getFeatures().supportsIndexTypeUint8.enabled)
+            {
+                CopyLineLoopIndicesWithRestart<uint8_t, uint8_t>(indexCount, srcPtr, outPtr);
+            }
+            else
+            {
+                CopyLineLoopIndicesWithRestart<uint8_t, uint16_t>(indexCount, srcPtr, outPtr);
+            }
             break;
         case gl::DrawElementsType::UnsignedShort:
             CopyLineLoopIndicesWithRestart<uint16_t, uint16_t>(indexCount, srcPtr, outPtr);
@@ -931,50 +939,31 @@ void DynamicQueryPool::destroy(VkDevice device)
 
 angle::Result DynamicQueryPool::allocateQuery(ContextVk *contextVk, QueryHelper *queryOut)
 {
-    ASSERT(!queryOut->getQueryPool());
+    ASSERT(!queryOut->valid());
 
-    size_t poolIndex    = 0;
-    uint32_t queryIndex = 0;
-    ANGLE_TRY(allocateQuery(contextVk, &poolIndex, &queryIndex));
-
-    queryOut->init(this, poolIndex, queryIndex);
-
-    return angle::Result::Continue;
-}
-
-void DynamicQueryPool::freeQuery(ContextVk *contextVk, QueryHelper *query)
-{
-    if (query->getQueryPool())
-    {
-        size_t poolIndex = query->getQueryPoolIndex();
-        ASSERT(query->getQueryPool()->valid());
-
-        freeQuery(contextVk, poolIndex, query->getQuery());
-
-        query->deinit();
-    }
-}
-
-angle::Result DynamicQueryPool::allocateQuery(ContextVk *contextVk,
-                                              size_t *poolIndex,
-                                              uint32_t *queryIndex)
-{
     if (mCurrentFreeEntry >= mPoolSize)
     {
         // No more queries left in this pool, create another one.
         ANGLE_TRY(allocateNewPool(contextVk));
     }
 
-    *poolIndex  = mCurrentPool;
-    *queryIndex = mCurrentFreeEntry++;
+    uint32_t queryIndex = mCurrentFreeEntry++;
+    queryOut->init(this, mCurrentPool, queryIndex);
 
     return angle::Result::Continue;
 }
 
-void DynamicQueryPool::freeQuery(ContextVk *contextVk, size_t poolIndex, uint32_t queryIndex)
+void DynamicQueryPool::freeQuery(ContextVk *contextVk, QueryHelper *query)
 {
-    ANGLE_UNUSED_VARIABLE(queryIndex);
-    onEntryFreed(contextVk, poolIndex);
+    if (query->valid())
+    {
+        size_t poolIndex = query->mQueryPoolIndex;
+        ASSERT(getQueryPool(poolIndex).valid());
+
+        onEntryFreed(contextVk, poolIndex);
+
+        query->deinit();
+    }
 }
 
 angle::Result DynamicQueryPool::allocateNewPool(ContextVk *contextVk)
@@ -1023,7 +1012,7 @@ angle::Result QueryHelper::beginQuery(ContextVk *contextVk)
 {
     vk::PrimaryCommandBuffer *primaryCommands;
     ANGLE_TRY(contextVk->flushAndGetPrimaryCommandBuffer(&primaryCommands));
-    VkQueryPool queryPool = getQueryPool()->getHandle();
+    const QueryPool &queryPool = getQueryPool();
     primaryCommands->resetQueryPool(queryPool, mQuery, 1);
     primaryCommands->beginQuery(queryPool, mQuery, 0);
     mMostRecentSerial = contextVk->getCurrentQueueSerial();
@@ -1034,21 +1023,25 @@ angle::Result QueryHelper::endQuery(ContextVk *contextVk)
 {
     vk::PrimaryCommandBuffer *primaryCommands;
     ANGLE_TRY(contextVk->flushAndGetPrimaryCommandBuffer(&primaryCommands));
-    VkQueryPool queryPool = getQueryPool()->getHandle();
-    primaryCommands->endQuery(queryPool, mQuery);
+    primaryCommands->endQuery(getQueryPool(), mQuery);
     mMostRecentSerial = contextVk->getCurrentQueueSerial();
     return angle::Result::Continue;
 }
 
-angle::Result QueryHelper::writeTimestamp(ContextVk *contextVk)
+angle::Result QueryHelper::flushAndWriteTimestamp(ContextVk *contextVk)
 {
-    vk::PrimaryCommandBuffer *primaryCommands;
-    ANGLE_TRY(contextVk->flushAndGetPrimaryCommandBuffer(&primaryCommands));
-    VkQueryPool queryPool = getQueryPool()->getHandle();
-    primaryCommands->resetQueryPool(queryPool, mQuery, 1);
-    primaryCommands->writeTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, mQuery);
+    vk::PrimaryCommandBuffer *primary;
+    ANGLE_TRY(contextVk->flushAndGetPrimaryCommandBuffer(&primary));
+    writeTimestamp(primary);
     mMostRecentSerial = contextVk->getCurrentQueueSerial();
     return angle::Result::Continue;
+}
+
+void QueryHelper::writeTimestamp(vk::PrimaryCommandBuffer *primary)
+{
+    const QueryPool &queryPool = getQueryPool();
+    primary->resetQueryPool(queryPool, mQuery, 1);
+    primary->writeTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, mQuery);
 }
 
 bool QueryHelper::hasPendingWork(ContextVk *contextVk)
@@ -1056,6 +1049,39 @@ bool QueryHelper::hasPendingWork(ContextVk *contextVk)
     // If the renderer has a queue serial higher than the stored one, the command buffers that
     // recorded this query have already been submitted, so there is no pending work.
     return mMostRecentSerial == contextVk->getCurrentQueueSerial();
+}
+
+angle::Result QueryHelper::getUint64ResultNonBlocking(ContextVk *contextVk,
+                                                      uint64_t *resultOut,
+                                                      bool *availableOut)
+{
+    ASSERT(valid());
+    VkDevice device                     = contextVk->getDevice();
+    constexpr VkQueryResultFlags kFlags = VK_QUERY_RESULT_64_BIT;
+    VkResult result = getQueryPool().getResults(device, mQuery, 1, sizeof(uint64_t), resultOut,
+                                                sizeof(uint64_t), kFlags);
+
+    if (result == VK_NOT_READY)
+    {
+        *availableOut = false;
+        return angle::Result::Continue;
+    }
+    else
+    {
+        ANGLE_VK_TRY(contextVk, result);
+        *availableOut = true;
+    }
+    return angle::Result::Continue;
+}
+
+angle::Result QueryHelper::getUint64Result(ContextVk *contextVk, uint64_t *resultOut)
+{
+    ASSERT(valid());
+    VkDevice device                     = contextVk->getDevice();
+    constexpr VkQueryResultFlags kFlags = VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT;
+    ANGLE_VK_TRY(contextVk, getQueryPool().getResults(device, mQuery, 1, sizeof(uint64_t),
+                                                      resultOut, sizeof(uint64_t), kFlags));
+    return angle::Result::Continue;
 }
 
 // DynamicSemaphorePool implementation
@@ -1236,11 +1262,8 @@ angle::Result LineLoopHelper::getIndexBufferForElementArrayBuffer(ContextVk *con
 
     *indexCountOut = indexCount + 1;
 
-    VkIndexType indexType = gl_vk::kIndexTypeMap[glIndexType];
-    ASSERT(indexType == VK_INDEX_TYPE_UINT16 || indexType == VK_INDEX_TYPE_UINT32);
-    uint32_t *indices = nullptr;
-
-    auto unitSize = (indexType == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+    uint32_t *indices    = nullptr;
+    size_t unitSize      = contextVk->getVkIndexTypeSize(glIndexType);
     size_t allocateBytes = unitSize * (indexCount + 1) + 1;
 
     mDynamicIndexBuffer.releaseInFlightBuffers(contextVk);
@@ -1272,11 +1295,10 @@ angle::Result LineLoopHelper::streamIndices(ContextVk *contextVk,
                                             VkDeviceSize *bufferOffsetOut,
                                             uint32_t *indexCountOut)
 {
-    VkIndexType indexType = gl_vk::kIndexTypeMap[glIndexType];
+    size_t unitSize = contextVk->getVkIndexTypeSize(glIndexType);
 
     uint8_t *indices = nullptr;
 
-    auto unitSize = (indexType == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
     uint32_t numOutIndices = indexCount + 1;
     if (contextVk->getState().isPrimitiveRestartEnabled())
     {
@@ -1291,13 +1313,14 @@ angle::Result LineLoopHelper::streamIndices(ContextVk *contextVk,
 
     if (contextVk->getState().isPrimitiveRestartEnabled())
     {
-        HandlePrimitiveRestart(glIndexType, indexCount, srcPtr, indices);
+        HandlePrimitiveRestart(contextVk, glIndexType, indexCount, srcPtr, indices);
     }
     else
     {
-        if (glIndexType == gl::DrawElementsType::UnsignedByte)
+        if (contextVk->shouldConvertUint8VkIndexType(glIndexType))
         {
-            // Vulkan doesn't support uint8 index types, so we need to emulate it.
+            // If vulkan doesn't support uint8 index types, we need to emulate it.
+            VkIndexType indexType = contextVk->getVkIndexType(glIndexType);
             ASSERT(indexType == VK_INDEX_TYPE_UINT16);
             uint16_t *indicesDst = reinterpret_cast<uint16_t *>(indices);
             for (int i = 0; i < indexCount; i++)
@@ -1328,9 +1351,7 @@ angle::Result LineLoopHelper::streamIndicesIndirect(ContextVk *contextVk,
                                                     BufferHelper **indirectBufferOut,
                                                     VkDeviceSize *indirectBufferOffsetOut)
 {
-    VkIndexType indexType = gl_vk::kIndexTypeMap[glIndexType];
-
-    auto unitSize = (indexType == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+    size_t unitSize      = contextVk->getVkIndexTypeSize(glIndexType);
     size_t allocateBytes = static_cast<size_t>(indexBuffer->getSize() + unitSize);
 
     if (contextVk->getState().isPrimitiveRestartEnabled())
@@ -1367,7 +1388,7 @@ angle::Result LineLoopHelper::streamIndicesIndirect(ContextVk *contextVk,
     params.indirectBufferOffset    = static_cast<uint32_t>(indirectBufferOffset);
     params.dstIndirectBufferOffset = static_cast<uint32_t>(*indirectBufferOffsetOut);
     params.dstIndexBufferOffset    = static_cast<uint32_t>(*indexBufferOffsetOut);
-    params.is32Bit                 = unitSize == 4;
+    params.indicesBitsWidth        = static_cast<uint32_t>(unitSize * 8);
 
     ANGLE_TRY(contextVk->getUtils().convertLineLoopIndexIndirectBuffer(
         contextVk, indirectBuffer, destIndirectBuffer, destIndexBuffer, indexBuffer, params));
@@ -2292,6 +2313,7 @@ angle::Result ImageHelper::generateMipmapsWithBlit(ContextVk *contextVk, GLuint 
     // is a faster way we can generate the mips.
     int32_t mipWidth  = mExtents.width;
     int32_t mipHeight = mExtents.height;
+    int32_t mipDepth  = mExtents.depth;
 
     // Manually manage the image memory barrier because it uses a lot more parameters than our
     // usual one.
@@ -2309,6 +2331,7 @@ angle::Result ImageHelper::generateMipmapsWithBlit(ContextVk *contextVk, GLuint 
     {
         int32_t nextMipWidth  = std::max<int32_t>(1, mipWidth >> 1);
         int32_t nextMipHeight = std::max<int32_t>(1, mipHeight >> 1);
+        int32_t nextMipDepth  = std::max<int32_t>(1, mipDepth >> 1);
 
         barrier.subresourceRange.baseMipLevel = mipLevel - 1;
         barrier.oldLayout                     = getCurrentLayout();
@@ -2321,13 +2344,13 @@ angle::Result ImageHelper::generateMipmapsWithBlit(ContextVk *contextVk, GLuint 
                                     barrier);
         VkImageBlit blit                   = {};
         blit.srcOffsets[0]                 = {0, 0, 0};
-        blit.srcOffsets[1]                 = {mipWidth, mipHeight, 1};
+        blit.srcOffsets[1]                 = {mipWidth, mipHeight, mipDepth};
         blit.srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.mipLevel       = mipLevel - 1;
         blit.srcSubresource.baseArrayLayer = 0;
         blit.srcSubresource.layerCount     = mLayerCount;
         blit.dstOffsets[0]                 = {0, 0, 0};
-        blit.dstOffsets[1]                 = {nextMipWidth, nextMipHeight, 1};
+        blit.dstOffsets[1]                 = {nextMipWidth, nextMipHeight, nextMipDepth};
         blit.dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.mipLevel       = mipLevel;
         blit.dstSubresource.baseArrayLayer = 0;
@@ -2335,6 +2358,7 @@ angle::Result ImageHelper::generateMipmapsWithBlit(ContextVk *contextVk, GLuint 
 
         mipWidth  = nextMipWidth;
         mipHeight = nextMipHeight;
+        mipDepth  = nextMipDepth;
 
         bool formatSupportsLinearFiltering = contextVk->getRenderer()->hasImageFormatFeatureBits(
             getFormat().vkImageFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
@@ -3260,19 +3284,33 @@ angle::Result ImageHelper::readPixelsForGetImage(ContextVk *contextVk,
 {
     const angle::Format &angleFormat = GetFormatFromFormatType(format, type);
 
-    // Depth/stencil readback is not yet implemented.
-    // TODO(http://anglebug.com/4058): Depth/stencil readback.
-    if (angleFormat.depthBits > 0 || angleFormat.stencilBits > 0)
+    VkImageAspectFlagBits aspectFlags = {};
+    if (angleFormat.redBits > 0 || angleFormat.blueBits > 0 || angleFormat.greenBits > 0 ||
+        angleFormat.alphaBits > 0)
     {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
+        aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     }
+    else
+    {
+        if (angleFormat.depthBits > 0)
+        {
+            aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+        }
+        if (angleFormat.stencilBits > 0)
+        {
+            ASSERT(angleFormat.depthBits == 0);
+            aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    }
+
+    ASSERT(aspectFlags != 0);
 
     PackPixelsParams params;
     GLuint outputSkipBytes = 0;
 
     uint32_t width  = std::max(1u, mExtents.width >> level);
     uint32_t height = std::max(1u, mExtents.height >> level);
+    uint32_t depth  = std::max(1u, mExtents.depth >> level);
     gl::Rectangle area(0, 0, width, height);
 
     ANGLE_TRY(GetReadPixelsParams(contextVk, packState, packBuffer, format, type, area, area,
@@ -3283,8 +3321,26 @@ angle::Result ImageHelper::readPixelsForGetImage(ContextVk *contextVk,
     stagingBuffer.get().init(contextVk->getRenderer(), VK_BUFFER_USAGE_TRANSFER_DST_BIT, 1,
                              kStagingBufferSize, true);
 
-    return readPixels(contextVk, area, params, VK_IMAGE_ASPECT_COLOR_BIT, level, layer,
-                      static_cast<uint8_t *>(pixels) + outputSkipBytes, &stagingBuffer.get());
+    if (mExtents.depth > 1)
+    {
+        // Depth > 1 means this is a 3D texture and we need to copy all layers
+        for (layer = 0; layer < depth; layer++)
+        {
+            ANGLE_TRY(readPixels(contextVk, area, params, aspectFlags, level, layer,
+                                 static_cast<uint8_t *>(pixels) + outputSkipBytes,
+                                 &stagingBuffer.get()));
+
+            outputSkipBytes += width * height * gl::GetInternalFormatInfo(format, type).pixelBytes;
+        }
+    }
+    else
+    {
+        ANGLE_TRY(readPixels(contextVk, area, params, aspectFlags, level, layer,
+                             static_cast<uint8_t *>(pixels) + outputSkipBytes,
+                             &stagingBuffer.get()));
+    }
+
+    return angle::Result::Continue;
 }
 
 angle::Result ImageHelper::readPixels(ContextVk *contextVk,
