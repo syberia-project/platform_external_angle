@@ -6,6 +6,7 @@
 // capture_gles3_params.cpp:
 //   Pointer parameter capture functions for the OpenGL ES 3.0 entry points.
 
+#include "libANGLE/capture_gles_2_0_autogen.h"
 #include "libANGLE/capture_gles_3_0_autogen.h"
 
 using namespace angle;
@@ -55,7 +56,17 @@ void CaptureCompressedTexImage3D_data(const State &glState,
                                       const void *data,
                                       ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    if (glState.getTargetBuffer(gl::BufferBinding::PixelUnpack))
+    {
+        return;
+    }
+
+    if (!data)
+    {
+        return;
+    }
+
+    CaptureMemory(data, imageSize, paramCapture);
 }
 
 void CaptureCompressedTexSubImage3D_data(const State &glState,
@@ -73,7 +84,8 @@ void CaptureCompressedTexSubImage3D_data(const State &glState,
                                          const void *data,
                                          ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureCompressedTexImage3D_data(glState, isCallValid, targetPacked, level, 0, width, height,
+                                     depth, 0, imageSize, data, paramCapture);
 }
 
 void CaptureDeleteQueries_idsPacked(const State &glState,
@@ -118,7 +130,7 @@ void CaptureDrawBuffers_bufs(const State &glState,
                              const GLenum *bufs,
                              ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureMemory(bufs, sizeof(GLenum) * n, paramCapture);
 }
 
 void CaptureDrawElementsInstanced_indices(const State &glState,
@@ -130,7 +142,8 @@ void CaptureDrawElementsInstanced_indices(const State &glState,
                                           GLsizei instancecount,
                                           ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureDrawElements_indices(glState, isCallValid, modePacked, count, typePacked, indices,
+                                paramCapture);
 }
 
 void CaptureDrawRangeElements_indices(const State &glState,
@@ -354,7 +367,8 @@ void CaptureGetQueryObjectuiv_params(const State &glState,
                                      GLuint *params,
                                      ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    // This only returns one value
+    paramCapture->readBufferSizeBytes = sizeof(GLint);
 }
 
 void CaptureGetQueryiv_params(const State &glState,
@@ -473,7 +487,7 @@ void CaptureGetUniformBlockIndex_uniformBlockName(const State &glState,
                                                   const GLchar *uniformBlockName,
                                                   ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureString(uniformBlockName, paramCapture);
 }
 
 void CaptureGetUniformIndices_uniformNames(const State &glState,
@@ -501,7 +515,7 @@ void CaptureGetUniformIndices_uniformIndices(const State &glState,
 void CaptureGetUniformuiv_params(const State &glState,
                                  bool isCallValid,
                                  ShaderProgramID program,
-                                 GLint location,
+                                 UniformLocation location,
                                  GLuint *params,
                                  ParamCapture *paramCapture)
 {
@@ -597,7 +611,27 @@ void CaptureTexImage3D_pixels(const State &glState,
                               const void *pixels,
                               ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    if (glState.getTargetBuffer(gl::BufferBinding::PixelUnpack))
+    {
+        return;
+    }
+
+    if (!pixels)
+    {
+        return;
+    }
+
+    const gl::InternalFormat &internalFormatInfo = gl::GetInternalFormatInfo(format, type);
+    const gl::PixelUnpackState &unpack           = glState.getUnpackState();
+
+    const Extents size(width, height, depth);
+
+    GLuint endByte = 0;
+    bool unpackSize =
+        internalFormatInfo.computePackUnpackEndByte(type, size, unpack, true, &endByte);
+    ASSERT(unpackSize);
+
+    CaptureMemory(pixels, static_cast<size_t>(endByte), paramCapture);
 }
 
 void CaptureTexSubImage3D_pixels(const State &glState,
@@ -615,7 +649,8 @@ void CaptureTexSubImage3D_pixels(const State &glState,
                                  const void *pixels,
                                  ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureTexImage3D_pixels(glState, isCallValid, targetPacked, level, 0, width, height, depth, 0,
+                             format, type, pixels, paramCapture);
 }
 
 void CaptureTransformFeedbackVaryings_varyings(const State &glState,
@@ -626,12 +661,15 @@ void CaptureTransformFeedbackVaryings_varyings(const State &glState,
                                                GLenum bufferMode,
                                                ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    for (GLsizei index = 0; index < count; ++index)
+    {
+        CaptureString(varyings[index], paramCapture);
+    }
 }
 
 void CaptureUniform1uiv_value(const State &glState,
                               bool isCallValid,
-                              GLint location,
+                              UniformLocation location,
                               GLsizei count,
                               const GLuint *value,
                               ParamCapture *paramCapture)
@@ -641,7 +679,7 @@ void CaptureUniform1uiv_value(const State &glState,
 
 void CaptureUniform2uiv_value(const State &glState,
                               bool isCallValid,
-                              GLint location,
+                              UniformLocation location,
                               GLsizei count,
                               const GLuint *value,
                               ParamCapture *paramCapture)
@@ -651,7 +689,7 @@ void CaptureUniform2uiv_value(const State &glState,
 
 void CaptureUniform3uiv_value(const State &glState,
                               bool isCallValid,
-                              GLint location,
+                              UniformLocation location,
                               GLsizei count,
                               const GLuint *value,
                               ParamCapture *paramCapture)
@@ -661,7 +699,7 @@ void CaptureUniform3uiv_value(const State &glState,
 
 void CaptureUniform4uiv_value(const State &glState,
                               bool isCallValid,
-                              GLint location,
+                              UniformLocation location,
                               GLsizei count,
                               const GLuint *value,
                               ParamCapture *paramCapture)
@@ -671,7 +709,7 @@ void CaptureUniform4uiv_value(const State &glState,
 
 void CaptureUniformMatrix2x3fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,
@@ -682,7 +720,7 @@ void CaptureUniformMatrix2x3fv_value(const State &glState,
 
 void CaptureUniformMatrix2x4fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,
@@ -693,7 +731,7 @@ void CaptureUniformMatrix2x4fv_value(const State &glState,
 
 void CaptureUniformMatrix3x2fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,
@@ -704,7 +742,7 @@ void CaptureUniformMatrix3x2fv_value(const State &glState,
 
 void CaptureUniformMatrix3x4fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,
@@ -715,7 +753,7 @@ void CaptureUniformMatrix3x4fv_value(const State &glState,
 
 void CaptureUniformMatrix4x2fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,
@@ -726,7 +764,7 @@ void CaptureUniformMatrix4x2fv_value(const State &glState,
 
 void CaptureUniformMatrix4x3fv_value(const State &glState,
                                      bool isCallValid,
-                                     GLint location,
+                                     UniformLocation location,
                                      GLsizei count,
                                      GLboolean transpose,
                                      const GLfloat *value,

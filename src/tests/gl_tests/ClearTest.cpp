@@ -15,26 +15,6 @@ using namespace angle;
 
 namespace
 {
-
-Vector4 RandomVec4(int seed, float minValue, float maxValue)
-{
-    RNG rng(seed);
-    srand(seed);
-    return Vector4(
-        rng.randomFloatBetween(minValue, maxValue), rng.randomFloatBetween(minValue, maxValue),
-        rng.randomFloatBetween(minValue, maxValue), rng.randomFloatBetween(minValue, maxValue));
-}
-
-GLColor Vec4ToColor(const Vector4 &vec)
-{
-    GLColor color;
-    color.R = static_cast<uint8_t>(vec.x() * 255.0f);
-    color.G = static_cast<uint8_t>(vec.y() * 255.0f);
-    color.B = static_cast<uint8_t>(vec.z() * 255.0f);
-    color.A = static_cast<uint8_t>(vec.w() * 255.0f);
-    return color;
-}
-
 class ClearTestBase : public ANGLETest
 {
   protected:
@@ -1124,6 +1104,7 @@ TEST_P(ClearTestES3, RepeatedClear)
 {
     // Fails on 431.02 driver. http://anglebug.com/3748
     ANGLE_SKIP_TEST_IF(IsWindows() && IsNVIDIA() && IsVulkan());
+    ANGLE_SKIP_TEST_IF(IsARM64() && IsWindows() && IsD3D());
 
     constexpr char kVS[] =
         "#version 300 es\n"
@@ -1213,9 +1194,9 @@ TEST_P(ClearTestES3, RepeatedClear)
     {
         for (int cellX = 0; cellX < numRowsCols; cellX++)
         {
-            int seed              = cellX + cellY * numRowsCols;
-            const Vector4 color   = RandomVec4(seed, fmtValueMin, fmtValueMax);
-            GLColor expectedColor = Vec4ToColor(color);
+            int seed            = cellX + cellY * numRowsCols;
+            const Vector4 color = RandomVec4(seed, fmtValueMin, fmtValueMax);
+            GLColor expectedColor(color);
 
             int testN = cellX * cellSize + cellY * backFBOSize * cellSize + backFBOSize + 1;
             GLColor actualColor = pixelData[testN];
