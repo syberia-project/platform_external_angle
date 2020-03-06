@@ -163,8 +163,6 @@ bool operator>=(const OSVersion &a, const OSVersion &b);
 
 OSVersion GetMacOSVersion();
 
-OSVersion GetLinuxOSVersion();
-
 inline bool IsAndroid()
 {
 #if defined(ANGLE_PLATFORM_ANDROID)

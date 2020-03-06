@@ -569,6 +569,7 @@ TEST_P(RobustResourceInitTest, TexImageThenSubImage)
     ANGLE_SKIP_TEST_IF((IsNexus5X() || IsNexus6P()) && IsOpenGLES());
 
     // Put some data into the texture
+
     GLTexture tex;
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kWidth, kHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -839,6 +840,11 @@ TEST_P(RobustResourceInitTest, ReadingOutOfBoundsCopiedTexture)
 {
     ANGLE_SKIP_TEST_IF(!hasGLExtension());
 
+    // Flaky failure on Linux / NV / Vulkan when run in a sequence. http://anglebug.com/3416
+    ANGLE_SKIP_TEST_IF(IsVulkan() && IsNVIDIA() && IsLinux());
+    // http://anglebug.com/4092
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsVulkan());
+
     GLTexture tex;
     setupTexture(&tex);
     GLFramebuffer fbo;
@@ -920,9 +926,6 @@ TEST_P(RobustResourceInitTestES3, MultisampledDepthInitializedCorrectly)
 TEST_P(RobustResourceInitTest, Texture)
 {
     ANGLE_SKIP_TEST_IF(!hasGLExtension());
-
-    // Flaky failure on Linux / NV / Vulkan when run in a sequence. http://anglebug.com/3416
-    ANGLE_SKIP_TEST_IF(IsVulkan() && IsNVIDIA() && IsLinux());
 
     GLTexture texture;
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -1864,6 +1867,9 @@ TEST_P(RobustResourceInitTestES31, Multisample2DTextureArray)
 // Tests that using an out of bounds draw offset with a dynamic array succeeds.
 TEST_P(RobustResourceInitTest, DynamicVertexArrayOffsetOutOfBounds)
 {
+    // Not implemented on Vulkan.  http://anglebug.com/3350
+    ANGLE_SKIP_TEST_IF(IsVulkan());
+
     ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Red());
     glUseProgram(program);
 
@@ -1947,12 +1953,10 @@ TEST_P(RobustResourceInitTestES3, InitializeMultisampledDepthRenderbufferAfterCo
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
-ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(RobustResourceInitTest,
-                                       WithAllocateNonZeroMemory(ES2_VULKAN()));
+ANGLE_INSTANTIATE_TEST_ES2_AND_ES3(RobustResourceInitTest);
 
-ANGLE_INSTANTIATE_TEST_ES3_AND(RobustResourceInitTestES3, WithAllocateNonZeroMemory(ES3_VULKAN()));
+ANGLE_INSTANTIATE_TEST_ES3(RobustResourceInitTestES3);
 
-ANGLE_INSTANTIATE_TEST_ES31_AND(RobustResourceInitTestES31,
-                                WithAllocateNonZeroMemory(ES31_VULKAN()));
+ANGLE_INSTANTIATE_TEST_ES31(RobustResourceInitTestES31);
 
 }  // namespace angle

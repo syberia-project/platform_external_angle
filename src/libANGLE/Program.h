@@ -293,54 +293,6 @@ struct ImageBinding
     bool unreferenced;
 };
 
-struct ProgramBinding
-{
-    ProgramBinding() : location(GL_INVALID_INDEX), aliased(false) {}
-    ProgramBinding(GLuint index) : location(index), aliased(false) {}
-
-    GLuint location;
-    // Whether another binding was set that may potentially alias this.
-    bool aliased;
-};
-
-class ProgramBindings final : angle::NonCopyable
-{
-  public:
-    ProgramBindings();
-    ~ProgramBindings();
-
-    void bindLocation(GLuint index, const std::string &name);
-    int getBindingByName(const std::string &name) const;
-    int getBinding(const sh::ShaderVariable &variable) const;
-
-    using const_iterator = std::unordered_map<std::string, GLuint>::const_iterator;
-    const_iterator begin() const;
-    const_iterator end() const;
-
-  private:
-    std::unordered_map<std::string, GLuint> mBindings;
-};
-
-// Uniforms and Fragment Outputs require special treatment due to array notation (e.g., "[0]")
-class ProgramAliasedBindings final : angle::NonCopyable
-{
-  public:
-    ProgramAliasedBindings();
-    ~ProgramAliasedBindings();
-
-    void bindLocation(GLuint index, const std::string &name);
-    int getBindingByName(const std::string &name) const;
-    int getBindingByLocation(GLuint location) const;
-    int getBinding(const sh::ShaderVariable &variable) const;
-
-    using const_iterator = std::unordered_map<std::string, ProgramBinding>::const_iterator;
-    const_iterator begin() const;
-    const_iterator end() const;
-
-  private:
-    std::unordered_map<std::string, ProgramBinding> mBindings;
-};
-
 class ProgramState final : angle::NonCopyable
 {
   public:
@@ -420,8 +372,8 @@ class ProgramState final : angle::NonCopyable
     size_t getUniqueStorageBlockCount() const;
 
     GLuint getUniformIndexFromName(const std::string &name) const;
-    GLuint getUniformIndexFromLocation(UniformLocation location) const;
-    Optional<GLuint> getSamplerIndex(UniformLocation location) const;
+    GLuint getUniformIndexFromLocation(GLint location) const;
+    Optional<GLuint> getSamplerIndex(GLint location) const;
     bool isSamplerUniformIndex(GLuint index) const;
     GLuint getSamplerIndexFromUniformIndex(GLuint uniformIndex) const;
     GLuint getUniformIndexFromSamplerIndex(GLuint samplerIndex) const;
@@ -452,11 +404,6 @@ class ProgramState final : angle::NonCopyable
     }
     ShaderType getFirstAttachedShaderStageType() const;
     ShaderType getLastAttachedShaderStageType() const;
-
-    const ProgramAliasedBindings &getUniformLocationBindings() const
-    {
-        return mUniformLocationBindings;
-    }
 
   private:
     friend class MemoryProgramCache;
@@ -570,21 +517,58 @@ class ProgramState final : angle::NonCopyable
 
     // Cached mask of active images.
     ActiveTextureMask mActiveImagesMask;
+};
 
-    // Note that this has nothing to do with binding layout qualifiers that can be set for some
-    // uniforms in GLES3.1+. It is used to pre-set the location of uniforms.
-    ProgramAliasedBindings mUniformLocationBindings;
+struct ProgramBinding
+{
+    ProgramBinding() : location(GL_INVALID_INDEX), aliased(false) {}
+    ProgramBinding(GLuint index) : location(index), aliased(false) {}
+
+    GLuint location;
+    // Whether another binding was set that may potentially alias this.
+    bool aliased;
+};
+
+class ProgramBindings final : angle::NonCopyable
+{
+  public:
+    ProgramBindings();
+    ~ProgramBindings();
+
+    void bindLocation(GLuint index, const std::string &name);
+    int getBindingByName(const std::string &name) const;
+    int getBinding(const sh::ShaderVariable &variable) const;
+
+    using const_iterator = std::unordered_map<std::string, GLuint>::const_iterator;
+    const_iterator begin() const;
+    const_iterator end() const;
+
+  private:
+    std::unordered_map<std::string, GLuint> mBindings;
+};
+
+// Uniforms and Fragment Outputs require special treatment due to array notation (e.g., "[0]")
+class ProgramAliasedBindings final : angle::NonCopyable
+{
+  public:
+    ProgramAliasedBindings();
+    ~ProgramAliasedBindings();
+
+    void bindLocation(GLuint index, const std::string &name);
+    int getBindingByName(const std::string &name) const;
+    int getBinding(const sh::ShaderVariable &variable) const;
+
+    using const_iterator = std::unordered_map<std::string, ProgramBinding>::const_iterator;
+    const_iterator begin() const;
+    const_iterator end() const;
+
+  private:
+    std::unordered_map<std::string, ProgramBinding> mBindings;
 };
 
 struct ProgramVaryingRef
 {
-    const sh::ShaderVariable *get(ShaderType stage) const
-    {
-        ASSERT(stage == frontShaderStage || stage == backShaderStage);
-        const sh::ShaderVariable *ref = stage == frontShaderStage ? frontShader : backShader;
-        ASSERT(ref);
-        return ref;
-    }
+    const sh::ShaderVariable *get() const { return frontShader ? frontShader : backShader; }
 
     const sh::ShaderVariable *frontShader = nullptr;
     const sh::ShaderVariable *backShader  = nullptr;
@@ -592,7 +576,7 @@ struct ProgramVaryingRef
     ShaderType backShaderStage            = ShaderType::InvalidEnum;
 };
 
-using ProgramMergedVaryings = std::vector<ProgramVaryingRef>;
+using ProgramMergedVaryings = std::map<std::string, ProgramVaryingRef>;
 
 class Program final : angle::NonCopyable, public LabeledObject
 {
@@ -618,7 +602,7 @@ class Program final : angle::NonCopyable, public LabeledObject
     const Shader *getAttachedShader(ShaderType shaderType) const;
 
     void bindAttributeLocation(GLuint index, const char *name);
-    void bindUniformLocation(UniformLocation location, const char *name);
+    void bindUniformLocation(GLuint index, const char *name);
 
     // CHROMIUM_path_rendering
     BindingInfo getFragmentInputBindingInfo(GLint index) const;
@@ -704,9 +688,9 @@ class Program final : angle::NonCopyable, public LabeledObject
     GLint getActiveUniformCount() const;
     size_t getActiveBufferVariableCount() const;
     GLint getActiveUniformMaxLength() const;
-    bool isValidUniformLocation(UniformLocation location) const;
-    const LinkedUniform &getUniformByLocation(UniformLocation location) const;
-    const VariableLocation &getUniformLocation(UniformLocation location) const;
+    bool isValidUniformLocation(GLint location) const;
+    const LinkedUniform &getUniformByLocation(GLint location) const;
+    const VariableLocation &getUniformLocation(GLint location) const;
 
     const std::vector<VariableLocation> &getUniformLocations() const
     {
@@ -729,60 +713,60 @@ class Program final : angle::NonCopyable, public LabeledObject
         NoSamplerChange,
     };
 
-    UniformLocation getUniformLocation(const std::string &name) const;
+    GLint getUniformLocation(const std::string &name) const;
     GLuint getUniformIndex(const std::string &name) const;
-    void setUniform1fv(UniformLocation location, GLsizei count, const GLfloat *v);
-    void setUniform2fv(UniformLocation location, GLsizei count, const GLfloat *v);
-    void setUniform3fv(UniformLocation location, GLsizei count, const GLfloat *v);
-    void setUniform4fv(UniformLocation location, GLsizei count, const GLfloat *v);
-    void setUniform1iv(Context *context, UniformLocation location, GLsizei count, const GLint *v);
-    void setUniform2iv(UniformLocation location, GLsizei count, const GLint *v);
-    void setUniform3iv(UniformLocation location, GLsizei count, const GLint *v);
-    void setUniform4iv(UniformLocation location, GLsizei count, const GLint *v);
-    void setUniform1uiv(UniformLocation location, GLsizei count, const GLuint *v);
-    void setUniform2uiv(UniformLocation location, GLsizei count, const GLuint *v);
-    void setUniform3uiv(UniformLocation location, GLsizei count, const GLuint *v);
-    void setUniform4uiv(UniformLocation location, GLsizei count, const GLuint *v);
-    void setUniformMatrix2fv(UniformLocation location,
+    void setUniform1fv(GLint location, GLsizei count, const GLfloat *v);
+    void setUniform2fv(GLint location, GLsizei count, const GLfloat *v);
+    void setUniform3fv(GLint location, GLsizei count, const GLfloat *v);
+    void setUniform4fv(GLint location, GLsizei count, const GLfloat *v);
+    void setUniform1iv(Context *context, GLint location, GLsizei count, const GLint *v);
+    void setUniform2iv(GLint location, GLsizei count, const GLint *v);
+    void setUniform3iv(GLint location, GLsizei count, const GLint *v);
+    void setUniform4iv(GLint location, GLsizei count, const GLint *v);
+    void setUniform1uiv(GLint location, GLsizei count, const GLuint *v);
+    void setUniform2uiv(GLint location, GLsizei count, const GLuint *v);
+    void setUniform3uiv(GLint location, GLsizei count, const GLuint *v);
+    void setUniform4uiv(GLint location, GLsizei count, const GLuint *v);
+    void setUniformMatrix2fv(GLint location,
                              GLsizei count,
                              GLboolean transpose,
                              const GLfloat *value);
-    void setUniformMatrix3fv(UniformLocation location,
+    void setUniformMatrix3fv(GLint location,
                              GLsizei count,
                              GLboolean transpose,
                              const GLfloat *value);
-    void setUniformMatrix4fv(UniformLocation location,
+    void setUniformMatrix4fv(GLint location,
                              GLsizei count,
                              GLboolean transpose,
                              const GLfloat *value);
-    void setUniformMatrix2x3fv(UniformLocation location,
+    void setUniformMatrix2x3fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
-    void setUniformMatrix3x2fv(UniformLocation location,
+    void setUniformMatrix3x2fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
-    void setUniformMatrix2x4fv(UniformLocation location,
+    void setUniformMatrix2x4fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
-    void setUniformMatrix4x2fv(UniformLocation location,
+    void setUniformMatrix4x2fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
-    void setUniformMatrix3x4fv(UniformLocation location,
+    void setUniformMatrix3x4fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
-    void setUniformMatrix4x3fv(UniformLocation location,
+    void setUniformMatrix4x3fv(GLint location,
                                GLsizei count,
                                GLboolean transpose,
                                const GLfloat *value);
 
-    void getUniformfv(const Context *context, UniformLocation location, GLfloat *params) const;
-    void getUniformiv(const Context *context, UniformLocation location, GLint *params) const;
-    void getUniformuiv(const Context *context, UniformLocation location, GLuint *params) const;
+    void getUniformfv(const Context *context, GLint location, GLfloat *params) const;
+    void getUniformiv(const Context *context, GLint location, GLint *params) const;
+    void getUniformuiv(const Context *context, GLint location, GLuint *params) const;
 
     void getActiveUniformBlockName(const GLuint blockIndex,
                                    GLsizei bufSize,
@@ -988,7 +972,7 @@ class Program final : angle::NonCopyable, public LabeledObject
     ANGLE_INLINE bool hasAnyDirtyBit() const { return mDirtyBits.any(); }
 
     // Writes a program's binary to the output memory buffer.
-    angle::Result serialize(const Context *context, angle::MemoryBuffer *binaryOut) const;
+    void serialize(const Context *context, angle::MemoryBuffer *binaryOut) const;
 
     rx::Serial serial() const { return mSerial; }
 
@@ -1041,11 +1025,10 @@ class Program final : angle::NonCopyable, public LabeledObject
     bool linkValidateTransformFeedback(const Version &version,
                                        InfoLog &infoLog,
                                        const ProgramMergedVaryings &linkedVaryings,
-                                       ShaderType stage,
                                        const Caps &caps) const;
     bool linkValidateGlobalNames(InfoLog &infoLog) const;
 
-    void gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyings, ShaderType stage);
+    void gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyings);
 
     ProgramMergedVaryings getMergedVaryings() const;
     int getOutputLocationForLink(const sh::ShaderVariable &outputVariable) const;
@@ -1057,7 +1040,6 @@ class Program final : angle::NonCopyable, public LabeledObject
                              GLuint combinedShaderStorageBlocksCount);
 
     void setUniformValuesFromBindingQualifiers();
-    bool shouldIgnoreUniform(UniformLocation location) const;
 
     void initInterfaceBlockBindings();
 
@@ -1069,10 +1051,7 @@ class Program final : angle::NonCopyable, public LabeledObject
                               int vectorSize,
                               const T *v);
     template <size_t cols, size_t rows, typename T>
-    GLsizei clampMatrixUniformCount(UniformLocation location,
-                                    GLsizei count,
-                                    GLboolean transpose,
-                                    const T *v);
+    GLsizei clampMatrixUniformCount(GLint location, GLsizei count, GLboolean transpose, const T *v);
 
     void updateSamplerUniform(Context *context,
                               const VariableLocation &locationInfo,
@@ -1082,7 +1061,7 @@ class Program final : angle::NonCopyable, public LabeledObject
     template <typename DestT>
     void getUniformInternal(const Context *context,
                             DestT *dataOut,
-                            UniformLocation location,
+                            GLint location,
                             GLenum nativeType,
                             int components) const;
 
@@ -1111,6 +1090,10 @@ class Program final : angle::NonCopyable, public LabeledObject
     bool mValidated;
 
     ProgramBindings mAttributeBindings;
+
+    // Note that this has nothing to do with binding layout qualifiers that can be set for some
+    // uniforms in GLES3.1+. It is used to pre-set the location of uniforms.
+    ProgramAliasedBindings mUniformLocationBindings;
 
     // CHROMIUM_path_rendering
     ProgramBindings mFragmentInputBindings;

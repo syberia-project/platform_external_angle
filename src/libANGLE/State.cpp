@@ -293,7 +293,6 @@ State::State(ContextID contextIn,
       mDepthClearValue(0),
       mStencilClearValue(0),
       mScissorTest(false),
-      mSampleAlphaToCoverage(false),
       mSampleCoverage(false),
       mSampleCoverageValue(0),
       mSampleCoverageInvert(false),
@@ -726,20 +725,6 @@ void State::setBlendFactors(GLenum sourceRGB, GLenum destRGB, GLenum sourceAlpha
 
 void State::setBlendColor(float red, float green, float blue, float alpha)
 {
-    // In ES2 without render-to-float extensions, BlendColor clamps to [0,1] on store.
-    // On ES3+, or with render-to-float exts enabled, it does not clamp on store.
-    const bool isES2 = mClientVersion.major == 2;
-    const bool hasFloatBlending =
-        mExtensions.colorBufferFloat || mExtensions.colorBufferHalfFloat ||
-        mExtensions.colorBufferFloatRGB || mExtensions.colorBufferFloatRGBA;
-    if (isES2 && !hasFloatBlending)
-    {
-        red   = clamp01(red);
-        green = clamp01(green);
-        blue  = clamp01(blue);
-        alpha = clamp01(alpha);
-    }
-
     mBlendColor.red   = red;
     mBlendColor.green = green;
     mBlendColor.blue  = blue;
@@ -853,7 +838,7 @@ void State::setPolygonOffsetParams(GLfloat factor, GLfloat units)
 
 void State::setSampleAlphaToCoverage(bool enabled)
 {
-    mSampleAlphaToCoverage = enabled;
+    mBlend.sampleAlphaToCoverage = enabled;
     mDirtyBits.set(DIRTY_BIT_SAMPLE_ALPHA_TO_COVERAGE_ENABLED);
 }
 
@@ -913,7 +898,7 @@ void State::setScissorParams(GLint x, GLint y, GLsizei width, GLsizei height)
 
 void State::setDither(bool enabled)
 {
-    mRasterizer.dither = enabled;
+    mBlend.dither = enabled;
     mDirtyBits.set(DIRTY_BIT_DITHER_ENABLED);
 }
 
@@ -1877,7 +1862,7 @@ void State::setMaxShaderCompilerThreads(GLuint count)
     mMaxShaderCompilerThreads = count;
 }
 
-void State::getBooleanv(GLenum pname, GLboolean *params) const
+void State::getBooleanv(GLenum pname, GLboolean *params)
 {
     switch (pname)
     {
@@ -1900,7 +1885,7 @@ void State::getBooleanv(GLenum pname, GLboolean *params) const
             *params = mRasterizer.polygonOffsetFill;
             break;
         case GL_SAMPLE_ALPHA_TO_COVERAGE:
-            *params = mSampleAlphaToCoverage;
+            *params = mBlend.sampleAlphaToCoverage;
             break;
         case GL_SAMPLE_COVERAGE:
             *params = mSampleCoverage;
@@ -1921,7 +1906,7 @@ void State::getBooleanv(GLenum pname, GLboolean *params) const
             *params = mBlend.blend;
             break;
         case GL_DITHER:
-            *params = mRasterizer.dither;
+            *params = mBlend.dither;
             break;
         case GL_TRANSFORM_FEEDBACK_ACTIVE:
             *params = getCurrentTransformFeedback()->isActive() ? GL_TRUE : GL_FALSE;
@@ -1975,7 +1960,7 @@ void State::getBooleanv(GLenum pname, GLboolean *params) const
     }
 }
 
-void State::getFloatv(GLenum pname, GLfloat *params) const
+void State::getFloatv(GLenum pname, GLfloat *params)
 {
     // Please note: DEPTH_CLEAR_VALUE is included in our internal getFloatv implementation
     // because it is stored as a float, despite the fact that the GL ES 2.0 spec names
@@ -2053,14 +2038,13 @@ void State::getFloatv(GLenum pname, GLfloat *params) const
             break;
         }
         case GL_MODELVIEW_MATRIX:
-            memcpy(params, mGLES1State.mModelviewMatrices.back().constData(), 16 * sizeof(GLfloat));
+            memcpy(params, mGLES1State.mModelviewMatrices.back().data(), 16 * sizeof(GLfloat));
             break;
         case GL_PROJECTION_MATRIX:
-            memcpy(params, mGLES1State.mProjectionMatrices.back().constData(),
-                   16 * sizeof(GLfloat));
+            memcpy(params, mGLES1State.mProjectionMatrices.back().data(), 16 * sizeof(GLfloat));
             break;
         case GL_TEXTURE_MATRIX:
-            memcpy(params, mGLES1State.mTextureMatrices[mActiveSampler].back().constData(),
+            memcpy(params, mGLES1State.mTextureMatrices[mActiveSampler].back().data(),
                    16 * sizeof(GLfloat));
             break;
         case GL_LIGHT_MODEL_AMBIENT:
@@ -2088,7 +2072,7 @@ void State::getFloatv(GLenum pname, GLfloat *params) const
     }
 }
 
-angle::Result State::getIntegerv(const Context *context, GLenum pname, GLint *params) const
+angle::Result State::getIntegerv(const Context *context, GLenum pname, GLint *params)
 {
     if (pname >= GL_DRAW_BUFFER0_EXT && pname <= GL_DRAW_BUFFER15_EXT)
     {
@@ -2542,7 +2526,7 @@ void State::getPointerv(const Context *context, GLenum pname, void **params) con
     }
 }
 
-void State::getIntegeri_v(GLenum target, GLuint index, GLint *data) const
+void State::getIntegeri_v(GLenum target, GLuint index, GLint *data)
 {
     switch (target)
     {
@@ -2608,7 +2592,7 @@ void State::getIntegeri_v(GLenum target, GLuint index, GLint *data) const
     }
 }
 
-void State::getInteger64i_v(GLenum target, GLuint index, GLint64 *data) const
+void State::getInteger64i_v(GLenum target, GLuint index, GLint64 *data)
 {
     switch (target)
     {
@@ -2650,7 +2634,7 @@ void State::getInteger64i_v(GLenum target, GLuint index, GLint64 *data) const
     }
 }
 
-void State::getBooleani_v(GLenum target, GLuint index, GLboolean *data) const
+void State::getBooleani_v(GLenum target, GLuint index, GLboolean *data)
 {
     switch (target)
     {

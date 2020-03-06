@@ -18,7 +18,7 @@ using namespace err;
 namespace
 {
 template <typename ObjectT>
-bool ValidateGetImageFormatAndType(const Context *context, ObjectT *obj, GLenum format, GLenum type)
+bool ValidateGetImageFormatAndType(Context *context, ObjectT *obj, GLenum format, GLenum type)
 {
     GLenum implFormat = obj->getImplementationColorReadFormat(context);
     if (!ValidES3Format(format) && (format != implFormat || format == GL_NONE))
@@ -41,12 +41,12 @@ bool ValidateGetImageFormatAndType(const Context *context, ObjectT *obj, GLenum 
 
 }  // namespace
 
-bool ValidateGetTexImageANGLE(const Context *context,
+bool ValidateGetTexImageANGLE(Context *context,
                               TextureTarget target,
                               GLint level,
                               GLenum format,
                               GLenum type,
-                              const void *pixels)
+                              void *pixels)
 {
     if (!context->getExtensions().getImageANGLE)
     {
@@ -91,11 +91,11 @@ bool ValidateGetTexImageANGLE(const Context *context,
     return true;
 }
 
-bool ValidateGetRenderbufferImageANGLE(const Context *context,
+bool ValidateGetRenderbufferImageANGLE(Context *context,
                                        GLenum target,
                                        GLenum format,
                                        GLenum type,
-                                       const void *pixels)
+                                       void *pixels)
 {
     if (!context->getExtensions().getImageANGLE)
     {
@@ -126,7 +126,7 @@ bool ValidateGetRenderbufferImageANGLE(const Context *context,
     return true;
 }
 
-bool ValidateDrawElementsBaseVertexEXT(const Context *context,
+bool ValidateDrawElementsBaseVertexEXT(Context *context,
                                        PrimitiveMode mode,
                                        GLsizei count,
                                        DrawElementsType type,
@@ -142,7 +142,7 @@ bool ValidateDrawElementsBaseVertexEXT(const Context *context,
     return ValidateDrawElementsCommon(context, mode, count, type, indices, 1);
 }
 
-bool ValidateDrawElementsInstancedBaseVertexEXT(const Context *context,
+bool ValidateDrawElementsInstancedBaseVertexEXT(Context *context,
                                                 PrimitiveMode mode,
                                                 GLsizei count,
                                                 DrawElementsType type,
@@ -159,7 +159,7 @@ bool ValidateDrawElementsInstancedBaseVertexEXT(const Context *context,
     return ValidateDrawElementsInstancedBase(context, mode, count, type, indices, instancecount);
 }
 
-bool ValidateDrawRangeElementsBaseVertexEXT(const Context *context,
+bool ValidateDrawRangeElementsBaseVertexEXT(Context *context,
                                             PrimitiveMode mode,
                                             GLuint start,
                                             GLuint end,
@@ -205,7 +205,7 @@ bool ValidateDrawRangeElementsBaseVertexEXT(const Context *context,
     return true;
 }
 
-bool ValidateMultiDrawElementsBaseVertexEXT(const Context *context,
+bool ValidateMultiDrawElementsBaseVertexEXT(Context *context,
                                             PrimitiveMode mode,
                                             const GLsizei *count,
                                             DrawElementsType type,
@@ -216,7 +216,7 @@ bool ValidateMultiDrawElementsBaseVertexEXT(const Context *context,
     return true;
 }
 
-bool ValidateDrawElementsBaseVertexOES(const Context *context,
+bool ValidateDrawElementsBaseVertexOES(Context *context,
                                        PrimitiveMode mode,
                                        GLsizei count,
                                        DrawElementsType type,
@@ -232,7 +232,7 @@ bool ValidateDrawElementsBaseVertexOES(const Context *context,
     return ValidateDrawElementsCommon(context, mode, count, type, indices, 1);
 }
 
-bool ValidateDrawElementsInstancedBaseVertexOES(const Context *context,
+bool ValidateDrawElementsInstancedBaseVertexOES(Context *context,
                                                 PrimitiveMode mode,
                                                 GLsizei count,
                                                 DrawElementsType type,
@@ -249,7 +249,7 @@ bool ValidateDrawElementsInstancedBaseVertexOES(const Context *context,
     return ValidateDrawElementsInstancedBase(context, mode, count, type, indices, instancecount);
 }
 
-bool ValidateDrawRangeElementsBaseVertexOES(const Context *context,
+bool ValidateDrawRangeElementsBaseVertexOES(Context *context,
                                             PrimitiveMode mode,
                                             GLuint start,
                                             GLuint end,

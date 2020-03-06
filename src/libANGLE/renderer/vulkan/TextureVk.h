@@ -11,8 +11,8 @@
 #define LIBANGLE_RENDERER_VULKAN_TEXTUREVK_H_
 
 #include "libANGLE/renderer/TextureImpl.h"
+#include "libANGLE/renderer/vulkan/CommandGraph.h"
 #include "libANGLE/renderer/vulkan/RenderTargetVk.h"
-#include "libANGLE/renderer/vulkan/ResourceVk.h"
 #include "libANGLE/renderer/vulkan/SamplerVk.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 
@@ -179,12 +179,15 @@ class TextureVk : public TextureImpl
         return *mImage;
     }
 
-    void retainImageViews(vk::ResourceUseList *resourceUseList)
+    void onImageViewUse(vk::ResourceUseList *resourceUseList)
     {
-        mImageViews.retain(resourceUseList);
+        mImageViews.onResourceAccess(resourceUseList);
     }
 
-    void retainSampler(vk::ResourceUseList *resourceUseList) { mSampler.retain(resourceUseList); }
+    void onSamplerUse(vk::ResourceUseList *resourceUseList)
+    {
+        mSampler.onResourceAccess(resourceUseList);
+    }
 
     void releaseOwnershipOfImage(const gl::Context *context);
 
