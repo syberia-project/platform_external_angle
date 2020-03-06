@@ -534,11 +534,6 @@
 
 // General Vulkan failures
 
-// ANGLEPosition location assignment overlaps other varyings.  This only affects platforms that
-// don't support the bresenham line raster extension, which in turn also depends on the driver
-// versions.
-4251 VULKAN NVIDIA : dEQP-GLES3.functional.shaders.linkage.varying.struct.float_uvec2_vec3 = FAIL
-
 // Tests failing due to the "flat" qualifier in the shader:
 3677 VULKAN : dEQP-GLES3.functional.fragment_out.basic.int.* = FAIL
 3677 VULKAN : dEQP-GLES3.functional.fragment_out.basic.uint.* = FAIL
@@ -586,6 +581,14 @@
 3816 VULKAN PIXEL2ORXL : dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb16* = FAIL
 3816 VULKAN PIXEL2ORXL : dEQP-GLES3.functional.texture.specification.texstorage3d.format.rg32* = FAIL
 
+// Failing on the Pixel 2 due to Qualcomm Vulkan driver
+4344 VULKAN ANDROID : dEQP-GLES3.functional.fragment_ops.interaction.basic_shader.54 = FAIL
+4344 VULKAN ANDROID : dEQP-GLES3.functional.fragment_ops.random.35 = FAIL
+4344 VULKAN ANDROID : dEQP-GLES3.functional.fragment_ops.random.56 = FAIL
+4344 VULKAN ANDROID : dEQP-GLES3.functional.fragment_ops.random.62 = FAIL
+4344 VULKAN ANDROID : dEQP-GLES3.functional.fragment_ops.random.68 = FAIL
+
+
 // Fails only with SwiftShader:
 
 // These only fail for a 565 config
@@ -604,3 +607,45 @@
 4045 SWIFTSHADER : dEQP-GLES3.functional.uniform_api.value.assigned.by_value.render.nested_structs_arrays.sampler2D_samplerCube_vertex = FAIL
 4045 SWIFTSHADER : dEQP-GLES3.functional.uniform_api.value.assigned.by_value.render.struct_in_array.sampler2D_samplerCube_both = FAIL
 4045 SWIFTSHADER : dEQP-GLES3.functional.uniform_api.value.assigned.by_value.render.struct_in_array.sampler2D_samplerCube_fragment = FAIL
+
+// Fails on SwANGLE bots
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_r16f = FAIL
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rg16f = FAIL
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.r11f_g11f_b10f_to_rgba16f = FAIL
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_r11f_g11f_b10f = FAIL
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.rg16f_to_r11f_g11f_b10f = FAIL
+4416 SWIFTSHADER : dEQP-GLES3.functional.fbo.blit.conversion.rgba16f_to_r11f_g11f_b10f = FAIL
+
+4418 SWIFTSHADER : dEQP-GLES3.functional.negative_api.buffer.framebuffer_texture_layer = FAIL
+
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.void_extent_hdr.* = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.4x4 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x4 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.5x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.6x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.8x8 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x8 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.10x10 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x10 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.color_endpoint_modes.12x12 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.endpoint_value_hdr_cem_* = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.4x4 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.5x4 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.5x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.6x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.6x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.8x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.8x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.8x8 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.10x5 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.10x6 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.10x8 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.10x10 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.12x10 = FAIL
+4447 SWIFTSHADER : dEQP-GLES3.functional.texture.compressed.astc.random.12x12 = FAIL
+

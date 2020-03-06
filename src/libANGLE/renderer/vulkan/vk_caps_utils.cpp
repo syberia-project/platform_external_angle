@@ -47,6 +47,13 @@ void RendererVk::ensureCapsInitialized() const
 
     mNativeExtensions.setTextureExtensionSupport(mNativeTextureCaps);
 
+    // To ensure that ETC2/EAC formats are enabled only on hardware that supports them natively,
+    // this flag is not set by the function above and must be set explicitly. It exposes
+    // ANGLE_compressed_texture_etc extension string.
+    mNativeExtensions.compressedTextureETC =
+        (mPhysicalDeviceFeatures.textureCompressionETC2 == VK_TRUE) &&
+        gl::DetermineCompressedTextureETCSupport(mNativeTextureCaps);
+
     // Vulkan technically only supports the LDR profile but driver all appear to support the HDR
     // profile as well. http://anglebug.com/1185#c8
     mNativeExtensions.textureCompressionASTCHDRKHR = mNativeExtensions.textureCompressionASTCLDRKHR;
@@ -87,9 +94,13 @@ void RendererVk::ensureCapsInitialized() const
 
     mNativeExtensions.memoryObject   = true;
     mNativeExtensions.memoryObjectFd = getFeatures().supportsExternalMemoryFd.enabled;
+    mNativeExtensions.memoryObjectFuchsiaANGLE =
+        getFeatures().supportsExternalMemoryFuchsia.enabled;
 
     mNativeExtensions.semaphore   = true;
     mNativeExtensions.semaphoreFd = getFeatures().supportsExternalSemaphoreFd.enabled;
+    mNativeExtensions.semaphoreFuchsiaANGLE =
+        getFeatures().supportsExternalSemaphoreFuchsia.enabled;
 
     mNativeExtensions.vertexHalfFloatOES = true;
 
@@ -436,8 +447,27 @@ void RendererVk::ensureCapsInitialized() const
     // vars section. It is implicit that we need to actually reserve it for Vulkan in that case.
     GLint reservedVaryingVectorCount = 1;
 
-    mNativeCaps.maxVaryingVectors = LimitToInt(
-        (limitsVk.maxVertexOutputComponents / kComponentsPerVector) - reservedVaryingVectorCount);
+    // reserve 1 extra for ANGLEPosition when GLLineRasterization is enabled
+    constexpr GLint kRservedVaryingForGLLineRasterization = 1;
+    // reserve 2 extra for builtin varables when feedback is enabled
+    // possible capturable out varable: gl_Position, gl_PointSize
+    // https://www.khronos.org/registry/OpenGL/specs/es/3.1/GLSL_ES_Specification_3.10.withchanges.pdf
+    // page 105
+    constexpr GLint kReservedVaryingForTransformFeedbackExtension = 2;
+
+    if (getFeatures().basicGLLineRasterization.enabled)
+    {
+        reservedVaryingVectorCount += kRservedVaryingForGLLineRasterization;
+    }
+    if (getFeatures().supportsTransformFeedbackExtension.enabled)
+    {
+        reservedVaryingVectorCount += kReservedVaryingForTransformFeedbackExtension;
+    }
+
+    const GLint maxVaryingCount =
+        std::min(limitsVk.maxVertexOutputComponents, limitsVk.maxFragmentInputComponents);
+    mNativeCaps.maxVaryingVectors =
+        LimitToInt((maxVaryingCount / kComponentsPerVector) - reservedVaryingVectorCount);
     mNativeCaps.maxVertexOutputComponents = LimitToInt(limitsVk.maxVertexOutputComponents);
 
     mNativeCaps.maxTransformFeedbackInterleavedComponents =
