@@ -149,11 +149,10 @@ struct BlendStateKey final
 
     gl::BlendState blendState;
 
-    uint8_t rtvMasks[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
+    // An int so struct size rounds nicely.
+    uint32_t rtvMax;
 
-    // Use two 16-bit ints to round the struct nicely.
-    uint16_t rtvMax;
-    uint16_t sampleAlphaToCoverage;
+    uint8_t rtvMasks[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
 };
 
 bool operator==(const BlendStateKey &a, const BlendStateKey &b);

@@ -173,19 +173,19 @@ bool EGLWindow::initializeDisplay(OSWindow *osWindow,
     std::vector<const char *> disabledFeatureOverrides;
     std::vector<const char *> enabledFeatureOverrides;
 
+    if (params.commandGraphFeature == EGL_TRUE)
+    {
+        enabledFeatureOverrides.push_back("command_graph");
+    }
+    else if (params.commandGraphFeature == EGL_FALSE)
+    {
+        disabledFeatureOverrides.push_back("command_graph");
+    }
+
     if (params.transformFeedbackFeature == EGL_FALSE)
     {
         disabledFeatureOverrides.push_back("supports_transform_feedback_extension");
         disabledFeatureOverrides.push_back("emulate_transform_feedback");
-    }
-
-    if (params.allocateNonZeroMemoryFeature == EGL_TRUE)
-    {
-        enabledFeatureOverrides.push_back("allocate_non_zero_memory");
-    }
-    else if (params.allocateNonZeroMemoryFeature == EGL_FALSE)
-    {
-        disabledFeatureOverrides.push_back("allocate_non_zero_memory");
     }
 
     if (!disabledFeatureOverrides.empty())

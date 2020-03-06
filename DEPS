@@ -19,13 +19,13 @@ vars = {
   'checkout_angle_internal': False,
 
   # Version of Chromium our Chromium-based DEPS are mirrored from.
-  'chromium_revision': '86e00b5dd2f15e46f20b7877c15c3c862336fd40',
+  'chromium_revision': 'e1633af636fa3bc0bf93ccaf5ccc1c9691439703',
 
   # Current revision of VK-GL-CTS (a.k.a dEQP).
-  'vk_gl_cts_revision': 'a6b249819f7177821d4b7eefff36af07fef71825',
+  'vk_gl_cts_revision': 'd99a765d38d35deeb3f27cf30d9d6fe4f183510e',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': '56364b6b602696c021349794a8d39744a1052afc',
+  'glslang_revision': '9a80305c089704d8d817968d1ef1a20a09ced9b4',
 
   # Current revision of googletest.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -46,19 +46,19 @@ vars = {
   'spirv_headers_revision': 'dc77030acc9c6fe7ca21fff54c5a9d7b532d7da6',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': 'e1688b60caf77e7efd9e440e57cca429ca7c5a1e',
+  'spirv_tools_revision': '97f1d485b76303ea7094fa164c0cc770b79f6f78',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '9bd3f561bcee3f01d22912de10bb07ce4e23d378',
+  'vulkan_headers_revision': '7264358702061d3ed819d62d3d6fd66ab1da33c3',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': '136207a63495917347ea8aec5bfeff267c207eb8',
+  'vulkan_loader_revision': '44ac9b2f406f863c69a297a77bd23c28fa29e78d',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': 'a553ed74b7fe3d5d14da312d47144ccfc4514a4b',
+  'vulkan_tools_revision': 'ebe1b7497acbcf05d460f03827cf3870845cd7b7',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': 'cb689b0b1d30116ee1454492df393c768d2b3ed2',
+  'vulkan_validation_revision': '8317b28e672a6bff682f8406575e5daf446a80f3',
 
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
@@ -69,17 +69,17 @@ vars = {
 deps = {
 
   'build': {
-    'url': '{chromium_git}/chromium/src/build.git@5d6bdfc4f1eb62cf03db782dd1d528f49781536b',
+    'url': '{chromium_git}/chromium/src/build.git@dfe5662014cf45982441c8a767092934dfecfa9e',
     'condition': 'not build_with_chromium',
   },
 
   'buildtools': {
-    'url': '{chromium_git}/chromium/src/buildtools.git@feb2d0c562195d2cc127045597053cc8ade51b4a',
+    'url': '{chromium_git}/chromium/src/buildtools.git@6b3e658d6fe8cd9c2588796d296f07312b776054',
     'condition': 'not build_with_chromium',
   },
 
   'testing': {
-    'url': '{chromium_git}/chromium/src/testing@74854b3f7b8c6e2e728e1b6ea655fa8f1c96de9f',
+    'url': '{chromium_git}/chromium/src/testing@c1b508625d47f26cfc04eab47747a792a5ee765b',
     'condition': 'not build_with_chromium',
   },
 
@@ -115,13 +115,13 @@ deps = {
   },
 
   'third_party/googletest': {
-    'url': '{chromium_git}/chromium/src/third_party/googletest@703ca235f0a83aeebf2dfe2cc56a7eac362cf078',
+    'url': '{chromium_git}/chromium/src/third_party/googletest@f8eeeb06c0e306257817ae2b719a65cae648090e',
     'condition': 'not build_with_chromium',
   },
 
   # libjpeg_turbo is used by glmark2.
   'third_party/libjpeg_turbo': {
-    'url': '{chromium_git}/chromium/deps/libjpeg_turbo.git@ce0e57e8e636f5132fe6f0590a4dba91f92fd935',
+    'url': '{chromium_git}/chromium/deps/libjpeg_turbo.git@bc13578529255ec75005ffc98aae151666122892',
     'condition': 'not build_with_chromium',
   },
 
@@ -131,7 +131,7 @@ deps = {
   },
 
   'third_party/jsoncpp': {
-    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@493c9385c91023c3819b51ee0de552d52229a1e5',
+    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@1cfec065ed4cd9a01fa8e351baa3e714a5868522',
     'condition': 'not build_with_chromium',
    },
 
@@ -182,7 +182,7 @@ deps = {
   },
 
   'third_party/SwiftShader': {
-    'url': '{swiftshader_git}/SwiftShader@416d374522757fc042282b3ae61c53f5510421fc',
+    'url': '{swiftshader_git}/SwiftShader@6c3dc3581eaf4345c0507d5ac7bb013d55351547',
     'condition': 'not build_with_chromium',
   },
 
@@ -203,17 +203,17 @@ deps = {
   },
 
   'third_party/yasm': {
-    'url': '{chromium_git}/chromium/src/third_party/yasm@8e4e548d0b199df58740336024c1b3baf7c0abd7',
+    'url': '{chromium_git}/chromium/src/third_party/yasm@02a8d2167f476660411ea7e1ee6fbd21dda44e96',
     'condition': 'not build_with_chromium',
   },
 
   'third_party/zlib': {
-    'url': '{chromium_git}/chromium/src/third_party/zlib@c2eb8a7f7a0fa7884234ebc1b836644084ccbec9',
+    'url': '{chromium_git}/chromium/src/third_party/zlib@f262c1b3c4196a2fee98c113142faff525b8d884',
     'condition': 'not build_with_chromium',
   },
 
   'tools/clang': {
-    'url': '{chromium_git}/chromium/src/tools/clang.git@eeaa53b76fa7c2e84f655a63a8e66c6db9d72fff',
+    'url': '{chromium_git}/chromium/src/tools/clang.git@a9190d6699c6e6517025c9f69cd74bd3d96a6f0f',
     'condition': 'not build_with_chromium',
   },
 
@@ -422,7 +422,7 @@ hooks = [
                 '--recursive',
                 '--extract',
                 '--bucket', 'chrome-angle-capture-binaries',
-                'src/tests/perf_tests/restricted_traces',
+                './src/tests/perf_tests/restricted_traces',
     ]
   }
 ]

@@ -388,13 +388,9 @@ void ANGLESetDefaultDisplayPlatform(angle::EGLDisplayType display)
     platformMethods->logInfo    = Display_logInfo;
 }
 
-static constexpr uint32_t kScratchBufferLifetime = 64u;
-
 }  // anonymous namespace
 
-DisplayState::DisplayState(EGLNativeDisplayType nativeDisplayId)
-    : label(nullptr), featuresAllDisabled(false), displayId(nativeDisplayId)
-{}
+DisplayState::DisplayState() : label(nullptr), featuresAllDisabled(false) {}
 
 DisplayState::~DisplayState() {}
 
@@ -508,8 +504,8 @@ Display *Display::GetDisplayFromDevice(Device *device, const AttributeMap &attri
 }
 
 Display::Display(EGLenum platform, EGLNativeDisplayType displayId, Device *eglDevice)
-    : mState(displayId),
-      mImplementation(nullptr),
+    : mImplementation(nullptr),
+      mDisplayId(displayId),
       mAttributeMap(),
       mConfigSet(),
       mContextSet(),
@@ -537,7 +533,7 @@ Display::~Display()
     if (mPlatform == EGL_PLATFORM_ANGLE_ANGLE)
     {
         ANGLEPlatformDisplayMap *displays      = GetANGLEPlatformDisplayMap();
-        ANGLEPlatformDisplayMap::iterator iter = displays->find(mState.displayId);
+        ANGLEPlatformDisplayMap::iterator iter = displays->find(mDisplayId);
         if (iter != displays->end())
         {
             displays->erase(iter);
@@ -1075,21 +1071,6 @@ Error Display::makeCurrent(const Thread *thread,
         ANGLE_TRY(context->makeCurrent(this, drawSurface, readSurface));
     }
 
-    // Tick all the scratch buffers to make sure they get cleaned up eventually if they stop being
-    // used.
-    {
-        std::lock_guard<std::mutex> lock(mScratchBufferMutex);
-
-        for (angle::ScratchBuffer &scatchBuffer : mScratchBuffers)
-        {
-            scatchBuffer.tick();
-        }
-        for (angle::ScratchBuffer &zeroFilledBuffer : mZeroFilledBuffers)
-        {
-            zeroFilledBuffer.tick();
-        }
-    }
-
     return NoError();
 }
 
@@ -1501,7 +1482,7 @@ void Display::initializeFrontendFeatures()
 
     mImplementation->initializeFrontendFeatures(&mFrontendFeatures);
 
-    rx::ApplyFeatureOverrides(&mFrontendFeatures, mState);
+    rx::OverrideFeaturesWithDisplayState(&mFrontendFeatures, mState);
 }
 
 const DisplayExtensions &Display::getExtensions() const
@@ -1605,12 +1586,8 @@ Error Display::programCachePopulate(const void *key,
     BlobCache::Key programHash;
     memcpy(programHash.data(), key, BlobCache::kKeyLength);
 
-    if (!mMemoryProgramCache.putBinary(programHash, reinterpret_cast<const uint8_t *>(binary),
-                                       static_cast<size_t>(binarysize)))
-    {
-        return EglBadAccess() << "Failed to copy program binary into the cache.";
-    }
-
+    mMemoryProgramCache.putBinary(programHash, reinterpret_cast<const uint8_t *>(binary),
+                                  static_cast<size_t>(binarysize));
     return NoError();
 }
 
@@ -1682,46 +1659,4 @@ EGLAttrib Display::queryAttrib(const EGLint attribute)
     }
     return value;
 }
-
-angle::ScratchBuffer Display::requestScratchBuffer()
-{
-    return requestScratchBufferImpl(&mScratchBuffers);
-}
-
-void Display::returnScratchBuffer(angle::ScratchBuffer scratchBuffer)
-{
-    returnScratchBufferImpl(std::move(scratchBuffer), &mScratchBuffers);
-}
-
-angle::ScratchBuffer Display::requestZeroFilledBuffer()
-{
-    return requestScratchBufferImpl(&mZeroFilledBuffers);
-}
-
-void Display::returnZeroFilledBuffer(angle::ScratchBuffer zeroFilledBuffer)
-{
-    returnScratchBufferImpl(std::move(zeroFilledBuffer), &mZeroFilledBuffers);
-}
-
-angle::ScratchBuffer Display::requestScratchBufferImpl(
-    std::vector<angle::ScratchBuffer> *bufferVector)
-{
-    std::lock_guard<std::mutex> lock(mScratchBufferMutex);
-    if (!bufferVector->empty())
-    {
-        angle::ScratchBuffer buffer = std::move(bufferVector->back());
-        bufferVector->pop_back();
-        return buffer;
-    }
-
-    return angle::ScratchBuffer(kScratchBufferLifetime);
-}
-
-void Display::returnScratchBufferImpl(angle::ScratchBuffer scratchBuffer,
-                                      std::vector<angle::ScratchBuffer> *bufferVector)
-{
-    std::lock_guard<std::mutex> lock(mScratchBufferMutex);
-    bufferVector->push_back(std::move(scratchBuffer));
-}
-
 }  // namespace egl

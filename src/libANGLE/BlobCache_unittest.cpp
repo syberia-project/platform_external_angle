@@ -31,7 +31,7 @@ void MakeSequence(T &seq, uint8_t start)
 BlobPut MakeBlob(size_t size, uint8_t start = 0)
 {
     BlobPut blob;
-    EXPECT_TRUE(blob.resize(size));
+    blob.resize(size);
     MakeSequence(blob, start);
     return blob;
 }

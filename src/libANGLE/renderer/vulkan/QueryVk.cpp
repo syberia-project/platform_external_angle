@@ -49,7 +49,7 @@ angle::Result QueryVk::begin(const gl::Context *context)
     if (getType() == gl::QueryType::TransformFeedbackPrimitivesWritten)
     {
         mTransformFeedbackPrimitivesDrawn = 0;
-        // We could consider using VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT.
+        contextVk->getCommandGraph()->beginTransformFeedbackEmulatedQuery();
         return angle::Result::Continue;
     }
 
@@ -67,11 +67,11 @@ angle::Result QueryVk::begin(const gl::Context *context)
                 contextVk, &mQueryHelperTimeElapsedBegin));
         }
 
-        ANGLE_TRY(mQueryHelperTimeElapsedBegin.writeTimestamp(contextVk));
+        mQueryHelperTimeElapsedBegin.writeTimestamp(contextVk);
     }
     else
     {
-        ANGLE_TRY(mQueryHelper.beginQuery(contextVk));
+        mQueryHelper.beginQuery(contextVk);
     }
 
     return angle::Result::Continue;
@@ -94,15 +94,15 @@ angle::Result QueryVk::end(const gl::Context *context)
             mCachedResult += transformFeedback->getPrimitivesDrawn();
         }
         mCachedResultValid = true;
-        // We could consider using VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT.
+        contextVk->getCommandGraph()->endTransformFeedbackEmulatedQuery();
     }
     else if (getType() == gl::QueryType::TimeElapsed)
     {
-        ANGLE_TRY(mQueryHelper.writeTimestamp(contextVk));
+        mQueryHelper.writeTimestamp(contextVk);
     }
     else
     {
-        ANGLE_TRY(mQueryHelper.endQuery(contextVk));
+        mQueryHelper.endQuery(contextVk);
     }
 
     return angle::Result::Continue;
@@ -121,7 +121,9 @@ angle::Result QueryVk::queryCounter(const gl::Context *context)
 
     ASSERT(getType() == gl::QueryType::Timestamp);
 
-    return mQueryHelper.writeTimestamp(contextVk);
+    mQueryHelper.writeTimestamp(contextVk);
+
+    return angle::Result::Continue;
 }
 
 angle::Result QueryVk::getResult(const gl::Context *context, bool wait)
