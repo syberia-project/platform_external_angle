@@ -761,6 +761,9 @@ angle::Result ContextVk::initialize()
                                                                vk::kDefaultTimestampQueryPoolSize));
     }
 
+    // Init gles to vulkan index type map
+    initIndexTypeMap();
+
     // Init driver uniforms and get the descriptor set layouts.
     constexpr angle::PackedEnumMap<PipelineType, VkShaderStageFlags> kPipelineStages = {
         {PipelineType::Graphics, VK_SHADER_STAGE_ALL_GRAPHICS},
@@ -954,9 +957,7 @@ angle::Result ContextVk::setupIndexedDraw(const gl::Context *context,
             mLastIndexBufferOffset = indices;
             mVertexArray->updateCurrentElementArrayBufferOffset(mLastIndexBufferOffset);
         }
-
-        if (indexType == gl::DrawElementsType::UnsignedByte &&
-            mGraphicsDirtyBits[DIRTY_BIT_INDEX_BUFFER])
+        if (shouldConvertUint8VkIndexType(indexType) && mGraphicsDirtyBits[DIRTY_BIT_INDEX_BUFFER])
         {
             BufferVk *bufferVk             = vk::GetImpl(elementArrayBuffer);
             vk::BufferHelper &bufferHelper = bufferVk->getBuffer();
@@ -1298,7 +1299,7 @@ angle::Result ContextVk::handleDirtyGraphicsIndexBuffer(const gl::Context *conte
 
     commandBuffer->bindIndexBuffer(elementArrayBuffer->getBuffer(),
                                    mVertexArray->getCurrentElementArrayBufferOffset(),
-                                   gl_vk::kIndexTypeMap[mCurrentDrawElementsType]);
+                                   getVkIndexType(mCurrentDrawElementsType));
 
     mRenderPassCommands.bufferRead(&mResourceUseList, VK_ACCESS_INDEX_READ_BIT, elementArrayBuffer);
 
@@ -1593,13 +1594,7 @@ angle::Result ContextVk::synchronizeCpuGpuTime()
         commandBuffer.waitEvents(1, cpuReady.get().ptr(), VK_PIPELINE_STAGE_HOST_BIT,
                                  VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, nullptr, 0, nullptr, 0,
                                  nullptr);
-
-        commandBuffer.resetQueryPool(timestampQuery.getQueryPool()->getHandle(),
-                                     timestampQuery.getQuery(), 1);
-        commandBuffer.writeTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                                     timestampQuery.getQueryPool()->getHandle(),
-                                     timestampQuery.getQuery());
-
+        timestampQuery.writeTimestamp(&commandBuffer);
         commandBuffer.setEvent(gpuDone.get().getHandle(), VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
 
         ANGLE_VK_TRY(this, commandBuffer.end());
@@ -1643,12 +1638,8 @@ angle::Result ContextVk::synchronizeCpuGpuTime()
         // Get the query results
         ANGLE_TRY(finishToSerial(getLastSubmittedQueueSerial()));
 
-        constexpr VkQueryResultFlags queryFlags = VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT;
-
         uint64_t gpuTimestampCycles = 0;
-        ANGLE_VK_TRY(this, timestampQuery.getQueryPool()->getResults(
-                               device, timestampQuery.getQuery(), 1, sizeof(gpuTimestampCycles),
-                               &gpuTimestampCycles, sizeof(gpuTimestampCycles), queryFlags));
+        ANGLE_TRY(timestampQuery.getUint64Result(this, &gpuTimestampCycles));
 
         // Use the first timestamp queried as origin.
         if (mGpuEventTimestampOrigin == 0)
@@ -1688,22 +1679,14 @@ angle::Result ContextVk::traceGpuEventImpl(vk::PrimaryCommandBuffer *commandBuff
 {
     ASSERT(mGpuEventsEnabled);
 
-    GpuEventQuery event;
+    GpuEventQuery gpuEvent;
+    gpuEvent.name  = name;
+    gpuEvent.phase = phase;
+    ANGLE_TRY(mGpuEventQueryPool.allocateQuery(this, &gpuEvent.queryHelper));
 
-    event.name   = name;
-    event.phase  = phase;
-    event.serial = getCurrentQueueSerial();
+    gpuEvent.queryHelper.writeTimestamp(commandBuffer);
 
-    ANGLE_TRY(mGpuEventQueryPool.allocateQuery(this, &event.queryPoolIndex, &event.queryIndex));
-
-    commandBuffer->resetQueryPool(
-        mGpuEventQueryPool.getQueryPool(event.queryPoolIndex)->getHandle(), event.queryIndex, 1);
-    commandBuffer->writeTimestamp(
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        mGpuEventQueryPool.getQueryPool(event.queryPoolIndex)->getHandle(), event.queryIndex);
-
-    mInFlightGpuEventQueries.push_back(std::move(event));
-
+    mInFlightGpuEventQueries.push_back(std::move(gpuEvent));
     return angle::Result::Continue;
 }
 
@@ -1721,31 +1704,29 @@ angle::Result ContextVk::checkCompletedGpuEvents()
     for (GpuEventQuery &eventQuery : mInFlightGpuEventQueries)
     {
         // Only check the timestamp query if the submission has finished.
-        if (eventQuery.serial > lastCompletedSerial)
+        if (eventQuery.queryHelper.getStoredQueueSerial() > lastCompletedSerial)
         {
             break;
         }
 
         // See if the results are available.
         uint64_t gpuTimestampCycles = 0;
-        VkResult result             = mGpuEventQueryPool.getQueryPool(eventQuery.queryPoolIndex)
-                              ->getResults(getDevice(), eventQuery.queryIndex, 1,
-                                           sizeof(gpuTimestampCycles), &gpuTimestampCycles,
-                                           sizeof(gpuTimestampCycles), VK_QUERY_RESULT_64_BIT);
-        if (result == VK_NOT_READY)
+        bool available              = false;
+        ANGLE_TRY(eventQuery.queryHelper.getUint64ResultNonBlocking(this, &gpuTimestampCycles,
+                                                                    &available));
+        if (!available)
         {
             break;
         }
-        ANGLE_VK_TRY(this, result);
 
-        mGpuEventQueryPool.freeQuery(this, eventQuery.queryPoolIndex, eventQuery.queryIndex);
+        mGpuEventQueryPool.freeQuery(this, &eventQuery.queryHelper);
 
-        GpuEvent event;
-        event.gpuTimestampCycles = gpuTimestampCycles;
-        event.name               = eventQuery.name;
-        event.phase              = eventQuery.phase;
+        GpuEvent gpuEvent;
+        gpuEvent.gpuTimestampCycles = gpuTimestampCycles;
+        gpuEvent.name               = eventQuery.name;
+        gpuEvent.phase              = eventQuery.phase;
 
-        mGpuEvents.emplace_back(event);
+        mGpuEvents.emplace_back(gpuEvent);
 
         ++finishedCount;
     }
@@ -2142,7 +2123,7 @@ angle::Result ContextVk::drawElementsIndirect(const gl::Context *context,
         return angle::Result::Continue;
     }
 
-    if (type == gl::DrawElementsType::UnsignedByte && mGraphicsDirtyBits[DIRTY_BIT_INDEX_BUFFER])
+    if (shouldConvertUint8VkIndexType(type) && mGraphicsDirtyBits[DIRTY_BIT_INDEX_BUFFER])
     {
         vk::BufferHelper *dstIndirectBuf;
         VkDeviceSize dstIndirectBufOffset;
@@ -3805,13 +3786,7 @@ angle::Result ContextVk::getTimestamp(uint64_t *timestampOut)
     beginInfo.pInheritanceInfo         = nullptr;
 
     ANGLE_VK_TRY(this, commandBuffer.begin(beginInfo));
-
-    commandBuffer.resetQueryPool(timestampQuery.getQueryPool()->getHandle(),
-                                 timestampQuery.getQuery(), 1);
-    commandBuffer.writeTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                                 timestampQuery.getQueryPool()->getHandle(),
-                                 timestampQuery.getQuery());
-
+    timestampQuery.writeTimestamp(&commandBuffer);
     ANGLE_VK_TRY(this, commandBuffer.end());
 
     // Create fence for the submission
@@ -3842,12 +3817,7 @@ angle::Result ContextVk::getTimestamp(uint64_t *timestampOut)
     ANGLE_VK_TRY(this, fence.get().wait(device, mRenderer->getMaxFenceWaitTimeNs()));
 
     // Get the query results
-    constexpr VkQueryResultFlags queryFlags = VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT;
-
-    ANGLE_VK_TRY(this, timestampQuery.getQueryPool()->getResults(
-                           device, timestampQuery.getQuery(), 1, sizeof(*timestampOut),
-                           timestampOut, sizeof(*timestampOut), queryFlags));
-
+    ANGLE_TRY(timestampQuery.getUint64Result(this, timestampOut));
     timestampQueryPool.get().freeQuery(this, &timestampQuery);
 
     // Convert results to nanoseconds.
@@ -4084,6 +4054,38 @@ void ContextVk::dumpCommandStreamDiagnostics()
     mCommandBufferDiagnostics.clear();
 
     out << "}\n";
+}
+
+void ContextVk::initIndexTypeMap()
+{
+    // Init gles-vulkan index type map
+    mIndexTypeMap[gl::DrawElementsType::UnsignedByte] =
+        mRenderer->getFeatures().supportsIndexTypeUint8.enabled ? VK_INDEX_TYPE_UINT8_EXT
+                                                                : VK_INDEX_TYPE_UINT16;
+    mIndexTypeMap[gl::DrawElementsType::UnsignedShort] = VK_INDEX_TYPE_UINT16;
+    mIndexTypeMap[gl::DrawElementsType::UnsignedInt]   = VK_INDEX_TYPE_UINT32;
+}
+
+VkIndexType ContextVk::getVkIndexType(gl::DrawElementsType glIndexType) const
+{
+    return mIndexTypeMap[glIndexType];
+}
+
+size_t ContextVk::getVkIndexTypeSize(gl::DrawElementsType glIndexType) const
+{
+    gl::DrawElementsType elementsType = shouldConvertUint8VkIndexType(glIndexType)
+                                            ? gl::DrawElementsType::UnsignedShort
+                                            : glIndexType;
+    ASSERT(elementsType < gl::DrawElementsType::EnumCount);
+
+    // Use GetDrawElementsTypeSize() to get the size
+    return static_cast<size_t>(gl::GetDrawElementsTypeSize(elementsType));
+}
+
+bool ContextVk::shouldConvertUint8VkIndexType(gl::DrawElementsType glIndexType) const
+{
+    return (glIndexType == gl::DrawElementsType::UnsignedByte &&
+            !mRenderer->getFeatures().supportsIndexTypeUint8.enabled);
 }
 
 CommandBufferHelper::CommandBufferHelper()
