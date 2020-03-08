@@ -59,6 +59,8 @@ struct PlatformParameters
     EGLint minorVersion;
 };
 
+const char *GetRendererName(EGLint renderer);
+
 bool operator<(const PlatformParameters &a, const PlatformParameters &b);
 bool operator==(const PlatformParameters &a, const PlatformParameters &b);
 std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp);
@@ -107,6 +109,7 @@ EGLPlatformParameters OPENGLES(EGLint major, EGLint minor);
 EGLPlatformParameters OPENGLES_NULL();
 
 EGLPlatformParameters OPENGL_OR_GLES();
+EGLPlatformParameters OPENGL_OR_GLES(EGLint major, EGLint minor);
 EGLPlatformParameters OPENGL_OR_GLES_NULL();
 
 EGLPlatformParameters VULKAN();
