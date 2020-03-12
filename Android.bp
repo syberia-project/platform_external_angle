@@ -6,20 +6,9 @@
 // found in the LICENSE file.
 //
 
-package {
-    default_visibility: [
-        "//visibility:private",
-    ],
-}
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_jsoncpp",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "third_party/jsoncpp/generated/",
@@ -57,10 +46,6 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
 }
 cc_library_shared {
     generated_headers: [
@@ -76,9 +61,6 @@ cc_library_shared {
         "libdl",
         "liblog",
         "libm",
-    ],
-    visibility: [
-        "//visibility:public",
     ],
     local_include_dirs: [
         "",
@@ -98,7 +80,6 @@ cc_library_shared {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -121,21 +102,35 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_jsoncpp",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_libEGL_egl_loader",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "include/",
         "src/",
@@ -147,7 +142,6 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_EGL_LOADER",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -172,11 +166,31 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_shared {
     generated_headers: [
@@ -213,9 +227,6 @@ cc_library_shared {
         "liblog",
         "libm",
     ],
-    visibility: [
-        "//visibility:public",
-    ],
     local_include_dirs: [
         "",
         "include/",
@@ -231,7 +242,6 @@ cc_library_shared {
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DANGLE_EGL_LIBRARY_NAME=\"libEGL_angle\"",
         "-DANGLE_GLESV2_LIBRARY_NAME=\"libGLESv2_angle\"",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_EGL_LOADER",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -258,14 +268,34 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
         "angle_libEGL_egl_loader",
         "angle_system_utils",
         "angle_version",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_shared {
     generated_headers: [
@@ -301,9 +331,6 @@ cc_library_shared {
         "libdl",
         "libm",
     ],
-    visibility: [
-        "//visibility:public",
-    ],
     local_include_dirs: [
         "",
         "include/",
@@ -316,7 +343,6 @@ cc_library_shared {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DEGL_EGLEXT_PROTOTYPES",
@@ -342,24 +368,71 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
+    name: "angle_vulkan_headers",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/vulkan-headers/src/include/",
     ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DVK_USE_PLATFORM_ANDROID_KHR",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-missing-field-initializers",
+        "-Wno-range-loop-analysis",
+        "-Wno-undefined-var-template",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+}
+cc_defaults {
     name: "angle_volk",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "src/third_party/volk/",
+        "third_party/vulkan-headers/src/include/",
     ],
     srcs: [
         "src/third_party/volk/volk.c",
@@ -388,30 +461,20 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
+        "angle_vulkan_headers",
     ],
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_vulkan_entry_points",
     stl: "libc++_static",
-    static_libs: [
-    ],
     shared_libs: [
         "libvulkan",
     ],
-    local_include_dirs: [
-    ],
     sdk_version: "28",
-    cflags: [
-    ],
-    header_libs: [
-    ],
     defaults: [
         "angle_volk",
+        "angle_vulkan_headers",
     ],
 }
 cc_library_static {
@@ -434,8 +497,6 @@ cc_library_static {
     stl: "libc++_static",
     static_libs: [
         "angle_spvtools",
-    ],
-    shared_libs: [
     ],
     local_include_dirs: [
         "",
@@ -508,8 +569,6 @@ cc_library_static {
         "-Wno-undefined-var-template",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
-    ],
-    header_libs: [
     ],
     defaults: [
         "angle_spvtools_headers",
@@ -636,19 +695,11 @@ cc_genrule {
     ],
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_spvtools_headers",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "third_party/spirv-tools/src/include/",
-    ],
-    srcs: [
     ],
     sdk_version: "28",
     cflags: [
@@ -672,10 +723,6 @@ cc_defaults {
         "-Wno-undefined-var-template",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
-    ],
-    header_libs: [
-    ],
-    defaults: [
     ],
 }
 cc_genrule {
@@ -740,19 +787,11 @@ cc_genrule {
     ],
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_spv_headers",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "third_party/spirv-headers/src/include/",
-    ],
-    srcs: [
     ],
     sdk_version: "28",
     cflags: [
@@ -777,10 +816,6 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
 }
 cc_library_static {
     generated_headers: [
@@ -800,10 +835,6 @@ cc_library_static {
     ],
     name: "angle_spvtools",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "third_party/spirv-headers/src/include/",
@@ -860,8 +891,6 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_spv_headers",
         "angle_spvtools_headers",
@@ -887,8 +916,6 @@ cc_library_static {
     stl: "libc++_static",
     static_libs: [
         "angle_spvtools",
-    ],
-    shared_libs: [
     ],
     local_include_dirs: [
         "",
@@ -1024,8 +1051,6 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_spvtools_headers",
     ],
@@ -1052,8 +1077,6 @@ cc_defaults {
         "angle_spvtools",
         "angle_spvtools_opt",
         "angle_spvtools_val",
-    ],
-    shared_libs: [
     ],
     local_include_dirs: [
         "",
@@ -1138,10 +1161,6 @@ cc_defaults {
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
 }
 cc_defaults {
     generated_headers: [
@@ -1165,8 +1184,6 @@ cc_defaults {
         "angle_spvtools",
         "angle_spvtools_opt",
         "angle_spvtools_val",
-    ],
-    shared_libs: [
     ],
     local_include_dirs: [
         "",
@@ -1196,8 +1213,6 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
-    ],
-    header_libs: [
     ],
     defaults: [
         "angle_glslang_sources",
@@ -1248,7 +1263,6 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DENABLE_HLSL=1",
@@ -1270,8 +1284,6 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_glslang_default_resource_limits_sources",
         "angle_glslang_sources",
@@ -1279,6 +1291,28 @@ cc_defaults {
         "angle_spv_headers",
         "angle_spvtools_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -1319,6 +1353,7 @@ cc_defaults {
         "src/common/third_party/base/",
         "src/third_party/volk/",
         "third_party/spirv-tools/src/include/",
+        "third_party/vulkan-headers/src/include/",
     ],
     srcs: [
         "src/libANGLE/renderer/vulkan/BufferVk.cpp",
@@ -1369,7 +1404,6 @@ cc_defaults {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DANGLE_VK_LAYERS_DIR=\"angledata\"",
         "-DANGLE_VK_MOCK_ICD_JSON=\"angledata/VkICD_mock_icd.json\"",
@@ -1394,13 +1428,34 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_glslang_wrapper",
         "angle_libANGLE_headers",
         "angle_vulkan_entry_points",
+        "angle_vulkan_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -1437,7 +1492,6 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1457,11 +1511,31 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_translator_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -1555,6 +1629,7 @@ cc_library_static {
         "src/compiler/translator/tree_ops/RecordConstantPrecision.cpp",
         "src/compiler/translator/tree_ops/RegenerateStructNames.cpp",
         "src/compiler/translator/tree_ops/RemoveArrayLengthMethod.cpp",
+        "src/compiler/translator/tree_ops/RemoveAtomicCounterBuiltins.cpp",
         "src/compiler/translator/tree_ops/RemoveDynamicIndexing.cpp",
         "src/compiler/translator/tree_ops/RemoveInactiveInterfaceVariables.cpp",
         "src/compiler/translator/tree_ops/RemoveInvariantDeclaration.cpp",
@@ -1599,7 +1674,6 @@ cc_library_static {
         "-DANGLE_ENABLE_ESSL",
         "-DANGLE_ENABLE_GLSL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1618,34 +1692,45 @@ cc_library_static {
         "-Wno-undefined-var-template",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
-    ],
-    header_libs: [
     ],
     defaults: [
         "angle_includes",
         "angle_translator_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_translator_headers",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "include/",
         "src/",
-    ],
-    srcs: [
     ],
     sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1665,11 +1750,31 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -1700,7 +1805,6 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1721,11 +1825,31 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_translator_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -1745,13 +1869,10 @@ cc_defaults {
         "src/",
         "src/common/third_party/base/",
     ],
-    srcs: [
-    ],
     sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1771,10 +1892,28 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -1804,7 +1943,6 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1824,11 +1962,31 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_image_util_headers",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -1860,7 +2018,6 @@ cc_library_static {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -1881,20 +2038,32 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_xxhash",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "include/",
         "src/",
@@ -1906,7 +2075,6 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1926,20 +2094,32 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_system_utils",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "include/",
         "src/",
@@ -1953,7 +2133,6 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -1973,10 +2152,28 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -1984,8 +2181,6 @@ cc_library_static {
     ],
     name: "angle_common",
     stl: "libc++_static",
-    static_libs: [
-    ],
     shared_libs: [
         "liblog",
     ],
@@ -2020,7 +2215,6 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -2040,14 +2234,34 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
         "angle_system_utils",
         "angle_version",
         "angle_xxhash",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -2238,7 +2452,6 @@ cc_defaults {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -2260,14 +2473,34 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
         "angle_libANGLE_headers",
         "angle_version",
         "angle_vulkan_backend",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -2320,7 +2553,6 @@ cc_defaults {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -2342,32 +2574,43 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_libANGLE_base",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_defaults {
-    generated_headers: [
-    ],
     name: "angle_includes",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "include/",
         "src/",
-    ],
-    srcs: [
     ],
     sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -2387,16 +2630,32 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_genrule {
     tool_files: [
         "src/commit_id.py",
-    ],
-    srcs: [
     ],
     cmd: "$(location) gen $(location commit.h)",
     name: "angle_commit_id",
@@ -2410,22 +2669,15 @@ cc_defaults {
     ],
     name: "angle_version",
     stl: "libc++_static",
-    static_libs: [
-    ],
-    shared_libs: [
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
     ],
-    srcs: [
-    ],
     sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
@@ -2445,10 +2697,28 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
-    defaults: [
-    ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
 cc_library_shared {
     generated_headers: [
@@ -2486,9 +2756,6 @@ cc_library_shared {
         "libnativewindow",
         "libvulkan",
     ],
-    visibility: [
-        "//visibility:public",
-    ],
     local_include_dirs: [
         "",
         "include/",
@@ -2516,7 +2783,6 @@ cc_library_shared {
         "-DANGLE_ENABLE_OPENGL",
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DANGLE_IS_64_BIT_CPU",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
         "-DCR_CLANG_REVISION=\"n341867-c2900381-1\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
@@ -2545,44 +2811,90 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    header_libs: [
-    ],
     defaults: [
         "angle_includes",
         "angle_libANGLE",
         "angle_version",
     ],
+    arch: {
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+    },
 }
-android_app {
+filegroup {
+    srcs: [
+        "src/**/*.java",
+    ],
+    name: "ANGLE_srcs",
+}
+java_defaults {
     jni_libs: [
         "libEGL_angle",
         "libGLESv1_CM_angle",
         "libGLESv2_angle",
         "libfeature_support_angle",
     ],
-    static_libs: [
-        "androidx.preference_preference",
-    ],
-    resource_dirs: [
-        "src/android_system_settings/res",
-    ],
     srcs: [
-        "src/android_system_settings/src/com/android/angle/*.java",
-        "src/android_system_settings/src/com/android/angle/common/*.java",
+        ":ANGLE_srcs",
     ],
-    asset_dirs: [
-        "src/android_system_settings/assets",
-    ],
-    owner: "google",
-    name: "ANGLE",
-    use_embedded_native_libs: true,
-    min_sdk_version: "28",
-    manifest: "src/android_system_settings/src/com/android/angle/AndroidManifest.xml",
     sdk_version: "system_current",
+    name: "ANGLE_java_defaults",
     aaptflags: [
         "--extra-packages com.android.angle.common",
         "-0 .json",
     ],
+    use_embedded_native_libs: true,
+    owner: "google",
     compile_multilib: "both",
+    min_sdk_version: "28",
     privileged: true,
+}
+android_library {
+    sdk_version: "system_current",
+    name: "ANGLE_library",
+    aaptflags: [
+        "-0 .json",
+    ],
+    manifest: "src/android_system_settings/src/com/android/angle/AndroidManifest.xml",
+    static_libs: [
+        "androidx.preference_preference",
+    ],
+    min_sdk_version: "28",
+    resource_dirs: [
+        "src/android_system_settings/res",
+    ],
+    asset_dirs: [
+        "src/android_system_settings/assets",
+    ],
+}
+android_app {
+    static_libs: [
+        "ANGLE_library",
+    ],
+    required: [
+        "privapp_whitelist_com.android.angle",
+    ],
+    name: "ANGLE",
+    defaults: [
+        "ANGLE_java_defaults",
+    ],
+    manifest: "src/android_system_settings/src/com/android/angle/AndroidManifest.xml",
 }

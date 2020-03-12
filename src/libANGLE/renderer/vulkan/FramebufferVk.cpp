@@ -151,19 +151,7 @@ angle::Result FramebufferVk::invalidate(const gl::Context *context,
                                         size_t count,
                                         const GLenum *attachments)
 {
-    ContextVk *contextVk = vk::GetImpl(context);
-
-    if (mFramebuffer != nullptr)
-    {
-        ASSERT(mFramebuffer->valid());
-        mFramebuffer->retain(&contextVk->getResourceUseList());
-
-        if (contextVk->hasStartedRenderPass())
-        {
-            ANGLE_TRY(invalidateImpl(contextVk, count, attachments));
-        }
-    }
-
+    // TODO(jmadill): Re-enable. See http://anglebug.com/4444
     return angle::Result::Continue;
 }
 
@@ -172,22 +160,7 @@ angle::Result FramebufferVk::invalidateSub(const gl::Context *context,
                                            const GLenum *attachments,
                                            const gl::Rectangle &area)
 {
-    ContextVk *contextVk = vk::GetImpl(context);
-
-    // RenderPass' storeOp cannot be made conditional to a specific region, so we only apply this
-    // hint if the requested area encompasses the render area.
-    if (mFramebuffer != nullptr)
-    {
-        ASSERT(mFramebuffer->valid());
-        mFramebuffer->retain(&contextVk->getResourceUseList());
-
-        if (contextVk->hasStartedRenderPass() &&
-            area.encloses(contextVk->getStartedRenderPassCommands().getRenderArea()))
-        {
-            ANGLE_TRY(invalidateImpl(contextVk, count, attachments));
-        }
-    }
-
+    // TODO(jmadill): Re-enable. See http://anglebug.com/4444
     return angle::Result::Continue;
 }
 
@@ -1064,9 +1037,18 @@ angle::Result FramebufferVk::syncState(const gl::Context *context,
             case gl::Framebuffer::DIRTY_BIT_READ_BUFFER:
                 ANGLE_TRY(mRenderTargetCache.update(context, mState, dirtyBits));
                 break;
+            case gl::Framebuffer::DIRTY_BIT_DRAW_BUFFERS:
+                // Force update of serial for enabled draw buffers
+                mCurrentFramebufferDesc.reset();
+                for (size_t colorIndexGL : mState.getEnabledDrawBuffers())
+                {
+                    mCurrentFramebufferDesc.update(
+                        static_cast<uint32_t>(colorIndexGL),
+                        mRenderTargetCache.getColors()[colorIndexGL]->getAssignSerial(contextVk));
+                }
+                break;
             case gl::Framebuffer::DIRTY_BIT_DEFAULT_WIDTH:
             case gl::Framebuffer::DIRTY_BIT_DEFAULT_HEIGHT:
-            case gl::Framebuffer::DIRTY_BIT_DRAW_BUFFERS:
             case gl::Framebuffer::DIRTY_BIT_DEFAULT_SAMPLES:
             case gl::Framebuffer::DIRTY_BIT_DEFAULT_FIXED_SAMPLE_LOCATIONS:
                 // Invalidate the cache. If we have performance critical code hitting this path we
@@ -1081,7 +1063,8 @@ angle::Result FramebufferVk::syncState(const gl::Context *context,
                     size_t colorIndexGL = static_cast<size_t>(
                         dirtyBit - gl::Framebuffer::DIRTY_BIT_COLOR_ATTACHMENT_0);
                     ANGLE_TRY(updateColorAttachment(context, colorIndexGL));
-                    if (mRenderTargetCache.getColors()[colorIndexGL] != nullptr)
+                    if (mRenderTargetCache.getColors()[colorIndexGL] != nullptr &&
+                        mState.getEnabledDrawBuffers()[colorIndexGL])
                     {
                         mCurrentFramebufferDesc.update(
                             static_cast<uint32_t>(colorIndexGL),

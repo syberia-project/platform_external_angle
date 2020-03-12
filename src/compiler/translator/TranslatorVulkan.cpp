@@ -19,6 +19,7 @@
 #include "compiler/translator/OutputVulkanGLSL.h"
 #include "compiler/translator/StaticType.h"
 #include "compiler/translator/tree_ops/NameEmbeddedUniformStructs.h"
+#include "compiler/translator/tree_ops/RemoveAtomicCounterBuiltins.h"
 #include "compiler/translator/tree_ops/RemoveInactiveInterfaceVariables.h"
 #include "compiler/translator/tree_ops/RewriteAtomicCounters.h"
 #include "compiler/translator/tree_ops/RewriteCubeMapSamplersAs2DArray.h"
@@ -864,6 +865,16 @@ bool TranslatorVulkan::translateImpl(TIntermBlock *root,
             return false;
         }
     }
+    else if (getShaderVersion() >= 310)
+    {
+        // Vulkan doesn't support Atomic Storage as a Storage Class, but we've seen
+        // cases where builtins are using it even with no active atomic counters.
+        // This pass simply removes those builtins in that scenario.
+        if (!RemoveAtomicCounterBuiltins(this, root))
+        {
+            return false;
+        }
+    }
 
     if (getShaderType() != GL_COMPUTE_SHADER)
     {
@@ -1043,9 +1054,17 @@ bool TranslatorVulkan::translate(TIntermBlock *root,
 {
 
     TInfoSinkBase &sink = getInfoSink().obj;
+
+    bool precisionEmulation = false;
+    if (!emulatePrecisionIfNeeded(root, sink, &precisionEmulation, SH_GLSL_VULKAN_OUTPUT))
+        return false;
+
+    bool enablePrecision = ((compileOptions & SH_IGNORE_PRECISION_QUALIFIERS) == 0);
+
     TOutputVulkanGLSL outputGLSL(sink, getArrayIndexClampingStrategy(), getHashFunction(),
                                  getNameMap(), &getSymbolTable(), getShaderType(),
-                                 getShaderVersion(), getOutputType(), compileOptions);
+                                 getShaderVersion(), getOutputType(), precisionEmulation,
+                                 enablePrecision, compileOptions);
 
     if (!translateImpl(root, compileOptions, perfDiagnostics, nullptr, &outputGLSL))
     {
