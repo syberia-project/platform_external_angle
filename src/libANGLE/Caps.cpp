@@ -608,7 +608,7 @@ static bool DetermineDepthTextureANGLESupport(const TextureCapsMap &textureCaps)
         GL_DEPTH24_STENCIL8_OES,
     };
 
-    return GetFormatSupport(textureCaps, requiredFormats, true, true, true, true, false);
+    return GetFormatSupport(textureCaps, requiredFormats, true, true, true, false, false);
 }
 
 // Check for GL_OES_depth_texture support
@@ -943,8 +943,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_OES_vertex_type_10_10_10_2"] = enableableExtension(&Extensions::vertexAttribType1010102OES);
         map["GL_KHR_debug"] = esOnlyExtension(&Extensions::debug);
         map["GL_OES_texture_border_clamp"] = enableableExtension(&Extensions::textureBorderClampOES);
-        // TODO(jmadill): Enable this when complete.
-        //map["GL_KHR_no_error"] = esOnlyExtension(&Extensions::noError);
+        map["GL_KHR_no_error"] = esOnlyExtension(&Extensions::noError);
         map["GL_ANGLE_lossy_etc_decode"] = enableableExtension(&Extensions::lossyETCDecode);
         map["GL_CHROMIUM_bind_uniform_location"] = esOnlyExtension(&Extensions::bindUniformLocation);
         map["GL_CHROMIUM_sync_query"] = enableableExtension(&Extensions::syncQuery);
@@ -1355,8 +1354,7 @@ std::vector<std::string> DisplayExtensions::getStrings() const
     InsertExtensionString("EGL_ANGLE_create_context_backwards_compatible",       createContextBackwardsCompatible,   &extensionStrings);
     InsertExtensionString("EGL_KHR_no_config_context",                           noConfigContext,                    &extensionStrings);
     InsertExtensionString("EGL_IMG_context_priority",                            contextPriority,                    &extensionStrings);
-    // TODO(jmadill): Enable this when complete.
-    //InsertExtensionString("KHR_create_context_no_error",                       createContextNoError,               &extensionStrings);
+    InsertExtensionString("EGL_KHR_create_context_no_error",                     createContextNoError,               &extensionStrings);
     // clang-format on
 
     return extensionStrings;
@@ -1392,7 +1390,6 @@ std::vector<std::string> ClientExtensions::getStrings() const
     InsertExtensionString("EGL_ANGLE_platform_angle",                         platformANGLE,                      &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_d3d",                     platformANGLED3D,                   &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_d3d11on12",               platformANGLED3D11ON12,             &extensionStrings);
-    InsertExtensionString("EGL_ANGLE_platform_angle_device_type_egl_angle",   platformANGLEDeviceTypeEGLANGLE,    &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_device_type_swiftshader", platformANGLEDeviceTypeSwiftShader, &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_opengl",                  platformANGLEOpenGL,                &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_null",                    platformANGLENULL,                  &extensionStrings);
