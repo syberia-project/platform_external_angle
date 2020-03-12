@@ -251,11 +251,8 @@ TEST_P(StateChangeTest, FramebufferIncompleteStencilAttachment)
 }
 
 // Test that Framebuffer completeness caching works when depth-stencil attachments change.
-TEST_P(StateChangeTest, FramebufferIncompleteDepthStencilAttachment)
+TEST_P(StateChangeTestES3, FramebufferIncompleteDepthStencilAttachment)
 {
-    ANGLE_SKIP_TEST_IF(getClientMajorVersion() < 3 &&
-                       !IsGLExtensionEnabled("GL_OES_packed_depth_stencil"));
-
     glBindFramebuffer(GL_FRAMEBUFFER, mFramebuffer);
     glBindTexture(GL_TEXTURE_2D, mTextures[0]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 16, 16, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -1837,8 +1834,9 @@ TEST_P(SimpleStateChangeTest, DrawElementsUBYTEX2ThenDrawElementsUSHORT)
 // verify all the rendering results are the same.
 TEST_P(SimpleStateChangeTest, DrawRepeatUnalignedVboChange)
 {
-    // http://anglebug.com/4092
-    ANGLE_SKIP_TEST_IF(isSwiftshader() && IsWindows());
+    // http://anglebug.com/4470
+    ANGLE_SKIP_TEST_IF(isSwiftshader() && (IsWindows() || IsLinux()));
+
     const int kRepeat = 2;
 
     // set up VBO, colorVBO is unaligned
