@@ -58,16 +58,49 @@ size_t CalculateStagingBufferSize(gl::BufferBinding target, size_t size, size_t 
             return kStagingBufferBaseSize;
     }
 }
+
+// Buffers that have a static usage pattern will be allocated in
+// device local memory to speed up access to and from the GPU.
+// Dynamic usage patterns or that are frequently mapped
+// will now request host cached memory to speed up access from the CPU.
+ANGLE_INLINE VkMemoryPropertyFlags GetPreferredMemoryType(gl::BufferBinding target,
+                                                          gl::BufferUsage usage)
+{
+    constexpr VkMemoryPropertyFlags kDeviceLocalFlags =
+        (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    constexpr VkMemoryPropertyFlags kHostCachedFlags =
+        (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+         VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
+    if (target == gl::BufferBinding::PixelUnpack)
+    {
+        return kHostCachedFlags;
+    }
+
+    switch (usage)
+    {
+        case gl::BufferUsage::StaticCopy:
+        case gl::BufferUsage::StaticDraw:
+        case gl::BufferUsage::StaticRead:
+            // For static usage, request a device local memory
+            return kDeviceLocalFlags;
+        default:
+            // For non-static usage, request a host cached memory
+            return kHostCachedFlags;
+    }
+}
 }  // namespace
 
 // ConversionBuffer implementation.
 ConversionBuffer::ConversionBuffer(RendererVk *renderer,
                                    VkBufferUsageFlags usageFlags,
                                    size_t initialSize,
-                                   size_t alignment)
+                                   size_t alignment,
+                                   bool hostVisible)
     : dirty(true), lastAllocationOffset(0)
 {
-    data.init(renderer, usageFlags, alignment, initialSize, true);
+    data.init(renderer, usageFlags, alignment, initialSize, hostVisible);
 }
 
 ConversionBuffer::~ConversionBuffer() = default;
@@ -78,11 +111,13 @@ ConversionBuffer::ConversionBuffer(ConversionBuffer &&other) = default;
 BufferVk::VertexConversionBuffer::VertexConversionBuffer(RendererVk *renderer,
                                                          angle::FormatID formatIDIn,
                                                          GLuint strideIn,
-                                                         size_t offsetIn)
+                                                         size_t offsetIn,
+                                                         bool hostVisible)
     : ConversionBuffer(renderer,
                        vk::kVertexBufferUsageFlags,
                        kConvertedArrayBufferInitialSize,
-                       vk::kVertexBufferAlignment),
+                       vk::kVertexBufferAlignment,
+                       hostVisible),
       formatID(formatIDIn),
       stride(strideIn),
       offset(offsetIn)
@@ -164,8 +199,7 @@ angle::Result BufferVk::setData(const gl::Context *context,
         createInfo.pQueueFamilyIndices   = nullptr;
 
         // Assume host visible/coherent memory available.
-        const VkMemoryPropertyFlags memoryPropertyFlags =
-            (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        VkMemoryPropertyFlags memoryPropertyFlags = GetPreferredMemoryType(target, usage);
 
         ANGLE_TRY(mBuffer.init(contextVk, createInfo, memoryPropertyFlags));
 
@@ -405,7 +439,8 @@ angle::Result BufferVk::copyToBuffer(ContextVk *contextVk,
 ConversionBuffer *BufferVk::getVertexConversionBuffer(RendererVk *renderer,
                                                       angle::FormatID formatID,
                                                       GLuint stride,
-                                                      size_t offset)
+                                                      size_t offset,
+                                                      bool hostVisible)
 {
     for (VertexConversionBuffer &buffer : mVertexConversionBuffers)
     {
@@ -415,7 +450,7 @@ ConversionBuffer *BufferVk::getVertexConversionBuffer(RendererVk *renderer,
         }
     }
 
-    mVertexConversionBuffers.emplace_back(renderer, formatID, stride, offset);
+    mVertexConversionBuffers.emplace_back(renderer, formatID, stride, offset, hostVisible);
     return &mVertexConversionBuffers.back();
 }
 
