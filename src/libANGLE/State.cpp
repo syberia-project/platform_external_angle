@@ -544,14 +544,34 @@ void State::reset(const Context *context)
     setAllDirtyBits();
 }
 
+ANGLE_INLINE void State::unsetActiveTexture(size_t textureIndex)
+{
+    if (mActiveTexturesCache[textureIndex])
+    {
+        mActiveTexturesCache[textureIndex]->onUnbindAsSamplerTexture();
+        mActiveTexturesCache[textureIndex] = nullptr;
+    }
+}
+
 ANGLE_INLINE void State::unsetActiveTextures(ActiveTextureMask textureMask)
 {
     // Unset any relevant bound textures.
     for (size_t textureIndex : mProgram->getActiveSamplersMask())
     {
-        mActiveTexturesCache[textureIndex] = nullptr;
+        unsetActiveTexture(textureIndex);
         mCompleteTextureBindings[textureIndex].reset();
     }
+}
+
+ANGLE_INLINE void State::setActiveTexture(size_t textureIndex, Texture *texture)
+{
+    if (mActiveTexturesCache[textureIndex])
+    {
+        mActiveTexturesCache[textureIndex]->onUnbindAsSamplerTexture();
+    }
+
+    texture->onBindAsSamplerTexture();
+    mActiveTexturesCache[textureIndex] = texture;
 }
 
 ANGLE_INLINE void State::updateActiveTextureState(const Context *context,
@@ -561,11 +581,11 @@ ANGLE_INLINE void State::updateActiveTextureState(const Context *context,
 {
     if (!texture->isSamplerComplete(context, sampler))
     {
-        mActiveTexturesCache[textureIndex] = nullptr;
+        unsetActiveTexture(textureIndex);
     }
     else
     {
-        mActiveTexturesCache[textureIndex] = texture;
+        setActiveTexture(textureIndex, texture);
 
         if (texture->hasAnyDirtyBit())
         {
@@ -605,7 +625,7 @@ ANGLE_INLINE void State::updateActiveTexture(const Context *context,
 
     if (!texture)
     {
-        mActiveTexturesCache[textureIndex] = nullptr;
+        unsetActiveTexture(textureIndex);
         mDirtyBits.set(DIRTY_BIT_TEXTURE_BINDINGS);
         return;
     }
@@ -1023,17 +1043,24 @@ void State::setMultisampling(bool enabled)
 
 void State::setScissorTest(bool enabled)
 {
-    mScissorTest = enabled;
-    mDirtyBits.set(DIRTY_BIT_SCISSOR_TEST_ENABLED);
+    if (mScissorTest != enabled)
+    {
+        mScissorTest = enabled;
+        mDirtyBits.set(DIRTY_BIT_SCISSOR_TEST_ENABLED);
+    }
 }
 
 void State::setScissorParams(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-    mScissor.x      = x;
-    mScissor.y      = y;
-    mScissor.width  = width;
-    mScissor.height = height;
-    mDirtyBits.set(DIRTY_BIT_SCISSOR);
+    // Skip if same scissor info
+    if (mScissor.x != x || mScissor.y != y || mScissor.width != width || mScissor.height != height)
+    {
+        mScissor.x      = x;
+        mScissor.y      = y;
+        mScissor.width  = width;
+        mScissor.height = height;
+        mDirtyBits.set(DIRTY_BIT_SCISSOR);
+    }
 }
 
 void State::setDither(bool enabled)
@@ -1321,11 +1348,16 @@ void State::setFragmentShaderDerivativeHint(GLenum hint)
 
 void State::setViewportParams(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-    mViewport.x      = x;
-    mViewport.y      = y;
-    mViewport.width  = width;
-    mViewport.height = height;
-    mDirtyBits.set(DIRTY_BIT_VIEWPORT);
+    // Skip if same viewport info
+    if (mViewport.x != x || mViewport.y != y || mViewport.width != width ||
+        mViewport.height != height)
+    {
+        mViewport.x      = x;
+        mViewport.y      = y;
+        mViewport.width  = width;
+        mViewport.height = height;
+        mDirtyBits.set(DIRTY_BIT_VIEWPORT);
+    }
 }
 
 void State::setActiveSampler(unsigned int active)
@@ -3124,18 +3156,24 @@ void State::setImageUnit(const Context *context,
                          GLenum access,
                          GLenum format)
 {
-    mImageUnits[unit].texture.set(context, texture);
-    mImageUnits[unit].level   = level;
-    mImageUnits[unit].layered = layered;
-    mImageUnits[unit].layer   = layer;
-    mImageUnits[unit].access  = access;
-    mImageUnits[unit].format  = format;
-    mDirtyBits.set(DIRTY_BIT_IMAGE_BINDINGS);
+    ImageUnit &imageUnit = mImageUnits[unit];
 
+    if (imageUnit.texture.get())
+    {
+        imageUnit.texture->onUnbindAsImageTexture();
+    }
     if (texture)
     {
-        texture->onBindImageTexture();
+        texture->onBindAsImageTexture();
     }
+    imageUnit.texture.set(context, texture);
+    imageUnit.level   = level;
+    imageUnit.layered = layered;
+    imageUnit.layer   = layer;
+    imageUnit.access  = access;
+    imageUnit.format  = format;
+    mDirtyBits.set(DIRTY_BIT_IMAGE_BINDINGS);
+
     onImageStateChange(context, unit);
 }
 

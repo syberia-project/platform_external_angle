@@ -40,7 +40,6 @@ namespace
 const uint32_t kMockVendorID                              = 0xba5eba11;
 const uint32_t kMockDeviceID                              = 0xf005ba11;
 constexpr char kMockDeviceName[]                          = "Vulkan Mock Device";
-const uint32_t kSwiftShaderDeviceID                       = 0xC0DE;
 constexpr char kSwiftShaderDeviceName[]                   = "SwiftShader Device";
 constexpr VkFormatFeatureFlags kInvalidFormatFeatureFlags = static_cast<VkFormatFeatureFlags>(-1);
 }  // anonymous namespace
@@ -497,8 +496,7 @@ ICDFilterFunc GetFilterForICD(vk::ICD preferredICD)
             };
         case vk::ICD::SwiftShader:
             return [](const VkPhysicalDeviceProperties &deviceProperties) {
-                return ((deviceProperties.vendorID == VENDOR_ID_GOOGLE) &&
-                        (deviceProperties.deviceID == kSwiftShaderDeviceID) &&
+                return (IsSwiftshader(deviceProperties.vendorID, deviceProperties.deviceID) &&
                         (strncmp(deviceProperties.deviceName, kSwiftShaderDeviceName,
                                  strlen(kSwiftShaderDeviceName)) == 0));
             };
@@ -1536,8 +1534,8 @@ void RendererVk::initFeatures(DisplayVk *displayVk, const ExtensionNameList &dev
     bool isIntel    = IsIntel(mPhysicalDeviceProperties.vendorID);
     bool isNvidia   = IsNvidia(mPhysicalDeviceProperties.vendorID);
     bool isQualcomm = IsQualcomm(mPhysicalDeviceProperties.vendorID);
-    bool isSwS      = (IsGoogle(mPhysicalDeviceProperties.vendorID) &&
-                  (mPhysicalDeviceProperties.deviceID == kSwiftShaderDeviceID));
+    bool isSwS =
+        IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID);
 
     if (mLineRasterizationFeatures.bresenhamLines == VK_TRUE)
     {
@@ -2125,7 +2123,7 @@ angle::Result RendererVk::getCommandBufferOneOff(vk::Context *context,
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags                    = 0;
+    beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     beginInfo.pInheritanceInfo         = nullptr;
     ANGLE_VK_TRY(context, commandBufferOut->begin(beginInfo));
 

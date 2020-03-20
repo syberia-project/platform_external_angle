@@ -51,6 +51,7 @@ struct TraceEvent final
     const char *categoryName = nullptr;
     char name[kMaxNameLen]   = {};
     double timestamp         = 0;
+    uint32_t tid             = 0;
 };
 
 class ANGLEPerfTest : public testing::Test, angle::NonCopyable
@@ -60,7 +61,7 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
                   const std::string &backend,
                   const std::string &story,
                   unsigned int iterationsPerStep);
-    virtual ~ANGLEPerfTest();
+    ~ANGLEPerfTest() override;
 
     virtual void step() = 0;
 
@@ -88,6 +89,7 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     std::string mStory;
     Timer mTimer;
     uint64_t mGPUTimeNs;
+    bool mIgnoreErrors;
     bool mSkipTest;
     std::unique_ptr<perf_test::PerfResultReporter> mReporter;
 
@@ -118,7 +120,7 @@ class ANGLERenderTest : public ANGLEPerfTest
 {
   public:
     ANGLERenderTest(const std::string &name, const RenderTestParams &testParams);
-    ~ANGLERenderTest();
+    ~ANGLERenderTest() override;
 
     void addExtensionPrerequisite(const char *extensionName);
 

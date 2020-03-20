@@ -29,6 +29,9 @@
 #include "libANGLE/queryconversions.h"
 #include "libANGLE/queryutils.h"
 
+#define USE_SYSTEM_ZLIB
+#include "compression_utils_portable.h"
+
 #if !ANGLE_CAPTURE_ENABLED
 #    error Frame capture must be enbled to include this file.
 #endif  // !ANGLE_CAPTURE_ENABLED
@@ -43,6 +46,7 @@ constexpr char kOutDirectoryVarName[] = "ANGLE_CAPTURE_OUT_DIR";
 constexpr char kFrameStartVarName[]   = "ANGLE_CAPTURE_FRAME_START";
 constexpr char kFrameEndVarName[]     = "ANGLE_CAPTURE_FRAME_END";
 constexpr char kCaptureLabel[]        = "ANGLE_CAPTURE_LABEL";
+constexpr char kCompression[]         = "ANGLE_CAPTURE_COMPRESSION";
 
 #if defined(ANGLE_PLATFORM_ANDROID)
 
@@ -51,6 +55,7 @@ constexpr char kAndroidOutDir[]         = "debug.angle.capture.out_dir";
 constexpr char kAndroidFrameStart[]     = "debug.angle.capture.frame_start";
 constexpr char kAndroidFrameEnd[]       = "debug.angle.capture.frame_end";
 constexpr char kAndroidCaptureLabel[]   = "debug.angle.capture.label";
+constexpr char kAndroidCompression[]    = "debug.angle.capture.compression";
 
 constexpr int kStreamSize = 64;
 
@@ -110,8 +115,15 @@ void PrimeAndroidEnvironmentVariables()
     std::string captureLabel = AndroidGetEnvFromProp(kAndroidCaptureLabel);
     if (!captureLabel.empty())
     {
-        INFO() << "Capture label read " << captureLabel << " from " << kAndroidCaptureLabel;
+        INFO() << "Frame capture read " << captureLabel << " from " << kAndroidCaptureLabel;
         setenv(kCaptureLabel, captureLabel.c_str(), 1);
+    }
+
+    std::string compression = AndroidGetEnvFromProp(kAndroidCompression);
+    if (!compression.empty())
+    {
+        INFO() << "Frame capture read " << compression << " from " << kAndroidCompression;
+        setenv(kCompression, compression.c_str(), 1);
     }
 }
 #endif
@@ -604,33 +616,71 @@ struct SaveFileHelper
     std::string filePath;
 };
 
-void SaveBinaryData(const std::string &outDir,
-                    std::ostream &out,
-                    int contextId,
-                    const std::string &captureLabel,
-                    uint32_t frameIndex,
-                    const char *suffix,
-                    const std::vector<uint8_t> &binaryData)
+std::string GetBinaryDataFilePath(bool compression, int contextId, const std::string &captureLabel)
 {
-    std::string binaryDataFileName =
-        GetCaptureFileName(contextId, captureLabel, frameIndex, suffix);
-
-    out << "    LoadBinaryData(\"" << binaryDataFileName << "\", "
-        << static_cast<int>(binaryData.size()) << ");\n";
-
-    std::string dataFilepath =
-        GetCaptureFilePath(outDir, contextId, captureLabel, frameIndex, suffix);
-
-    SaveFileHelper saveData(dataFilepath, std::ios::binary);
-    saveData.ofs.write(reinterpret_cast<const char *>(binaryData.data()), binaryData.size());
+    std::stringstream fnameStream;
+    fnameStream << FmtCapturePrefix(contextId, captureLabel) << ".angledata";
+    if (compression)
+    {
+        fnameStream << ".gz";
+    }
+    return fnameStream.str();
 }
 
-void WriteCppReplay(const std::string &outDir,
+void SaveBinaryData(bool compression,
+                    const std::string &outDir,
+                    int contextId,
+                    const std::string &captureLabel,
+                    const std::vector<uint8_t> &binaryData)
+{
+    std::string binaryDataFileName = GetBinaryDataFilePath(compression, contextId, captureLabel);
+    std::string dataFilepath       = outDir + binaryDataFileName;
+
+    SaveFileHelper saveData(dataFilepath, std::ios::binary);
+
+    if (compression)
+    {
+        // Save compressed data.
+        uLong uncompressedSize       = static_cast<uLong>(binaryData.size());
+        uLong expectedCompressedSize = zlib_internal::GzipExpectedCompressedSize(uncompressedSize);
+
+        std::vector<uint8_t> compressedData(expectedCompressedSize, 0);
+
+        uLong compressedSize = expectedCompressedSize;
+        int zResult = zlib_internal::GzipCompressHelper(compressedData.data(), &compressedSize,
+                                                        binaryData.data(), uncompressedSize,
+                                                        nullptr, nullptr);
+
+        if (zResult != Z_OK)
+        {
+            FATAL() << "Error compressing binary data: " << zResult;
+        }
+
+        saveData.ofs.write(reinterpret_cast<const char *>(compressedData.data()), compressedSize);
+    }
+    else
+    {
+        saveData.ofs.write(reinterpret_cast<const char *>(binaryData.data()), binaryData.size());
+    }
+}
+
+void WriteLoadBinaryDataCall(bool compression,
+                             std::ostream &out,
+                             int contextId,
+                             const std::string &captureLabel)
+{
+    std::string binaryDataFileName = GetBinaryDataFilePath(compression, contextId, captureLabel);
+    out << "    LoadBinaryData(\"" << binaryDataFileName << "\");\n";
+}
+
+void WriteCppReplay(bool compression,
+                    const std::string &outDir,
                     int contextId,
                     const std::string &captureLabel,
                     uint32_t frameIndex,
                     const std::vector<CallCapture> &frameCalls,
-                    const std::vector<CallCapture> &setupCalls)
+                    const std::vector<CallCapture> &setupCalls,
+                    std::vector<uint8_t> *binaryData)
 {
     DataCounters counters;
 
@@ -655,19 +705,14 @@ void WriteCppReplay(const std::string &outDir,
         out << "{\n";
 
         std::stringstream setupCallStream;
-        std::vector<uint8_t> setupBinaryData;
+
+        WriteLoadBinaryDataCall(compression, setupCallStream, contextId, captureLabel);
 
         for (const CallCapture &call : setupCalls)
         {
             setupCallStream << "    ";
-            WriteCppReplayForCall(call, &counters, setupCallStream, header, &setupBinaryData);
+            WriteCppReplayForCall(call, &counters, setupCallStream, header, binaryData);
             setupCallStream << ";\n";
-        }
-
-        if (!setupBinaryData.empty())
-        {
-            SaveBinaryData(outDir, out, contextId, captureLabel, frameIndex, ".setup.angledata",
-                           setupBinaryData);
         }
 
         out << setupCallStream.str();
@@ -680,18 +725,12 @@ void WriteCppReplay(const std::string &outDir,
     out << "{\n";
 
     std::stringstream callStream;
-    std::vector<uint8_t> binaryData;
 
     for (const CallCapture &call : frameCalls)
     {
         callStream << "    ";
-        WriteCppReplayForCall(call, &counters, callStream, header, &binaryData);
+        WriteCppReplayForCall(call, &counters, callStream, header, binaryData);
         callStream << ";\n";
-    }
-
-    if (!binaryData.empty())
-    {
-        SaveBinaryData(outDir, out, contextId, captureLabel, frameIndex, ".angledata", binaryData);
     }
 
     out << callStream.str();
@@ -716,7 +755,8 @@ void WriteCppReplay(const std::string &outDir,
     }
 }
 
-void WriteCppReplayIndexFiles(const std::string &outDir,
+void WriteCppReplayIndexFiles(bool compression,
+                              const std::string &outDir,
                               int contextId,
                               const std::string &captureLabel,
                               uint32_t frameStart,
@@ -738,6 +778,7 @@ void WriteCppReplayIndexFiles(const std::string &outDir,
     header << "#include <cstdio>\n";
     header << "#include <cstring>\n";
     header << "#include <limits>\n";
+    header << "#include <vector>\n";
     header << "#include <unordered_map>\n";
     header << "\n";
 
@@ -778,8 +819,13 @@ void WriteCppReplayIndexFiles(const std::string &outDir,
         header << "void " << FmtReplayFunction(contextId, frameIndex) << ";\n";
     }
     header << "\n";
+    header << "constexpr bool kIsBinaryDataCompressed = " << (compression ? "true" : "false")
+           << ";\n";
+    header << "\n";
+    header << "using DecompressCallback = uint8_t *(*)(const std::vector<uint8_t> &);\n";
+    header << "void SetBinaryDataDecompressCallback(DecompressCallback callback);\n";
     header << "void SetBinaryDataDir(const char *dataDir);\n";
-    header << "void LoadBinaryData(const char *fileName, size_t size);\n";
+    header << "void LoadBinaryData(const char *fileName);\n";
     header << "\n";
     header << "// Global state\n";
     header << "\n";
@@ -803,10 +849,11 @@ void WriteCppReplayIndexFiles(const std::string &outDir,
     source << "    GLuint returnedID;\n";
     std::string captureNamespace = !captureLabel.empty() ? captureLabel + "::" : "";
     source << "    memcpy(&returnedID, &" << captureNamespace
-           << "gReadBuffer[readBufferOffset], sizeof(GLuint));\n ";
+           << "gReadBuffer[readBufferOffset], sizeof(GLuint));\n";
     source << "    (*resourceMap)[id] = returnedID;\n";
     source << "}\n";
     source << "\n";
+    source << "DecompressCallback gDecompressCallback;\n";
     source << "const char *gBinaryDataDir = \".\";\n";
     source << "FramebufferChangeCallback gFramebufferChangeCallback;\n";
     source << "void *gFramebufferChangeCallbackUserData;\n";
@@ -885,22 +932,44 @@ void WriteCppReplayIndexFiles(const std::string &outDir,
     source << "    }\n";
     source << "}\n";
     source << "\n";
+    source << "void SetBinaryDataDecompressCallback(DecompressCallback callback)\n";
+    source << "{\n";
+    source << "    gDecompressCallback = callback;\n";
+    source << "}\n";
+    source << "\n";
     source << "void SetBinaryDataDir(const char *dataDir)\n";
     source << "{\n";
     source << "    gBinaryDataDir = dataDir;\n";
     source << "}\n";
     source << "\n";
-    source << "void LoadBinaryData(const char *fileName, size_t size)\n";
+    source << "void LoadBinaryData(const char *fileName)\n";
     source << "{\n";
     source << "    if (gBinaryData != nullptr)\n";
     source << "    {\n";
     source << "        delete [] gBinaryData;\n";
     source << "    }\n";
-    source << "    gBinaryData = new uint8_t[size];\n";
     source << "    char pathBuffer[1000] = {};\n";
     source << "    sprintf(pathBuffer, \"%s/%s\", gBinaryDataDir, fileName);\n";
     source << "    FILE *fp = fopen(pathBuffer, \"rb\");\n";
-    source << "    (void)fread(gBinaryData, 1, size, fp);\n";
+    source << "    if (fp == 0)\n";
+    source << "    {\n";
+    source << "        fprintf(stderr, \"Error loading binary data file: %s\\n\", fileName);\n";
+    source << "        exit(1);\n";
+    source << "    }\n";
+    source << "    fseek(fp, 0, SEEK_END);\n";
+    source << "    long size = ftell(fp);\n";
+    source << "    fseek(fp, 0, SEEK_SET);\n";
+    source << "    if (gDecompressCallback)\n";
+    source << "    {\n";
+    source << "        std::vector<uint8_t> compressedData(size);\n";
+    source << "        (void)fread(compressedData.data(), 1, size, fp);\n";
+    source << "        gBinaryData = gDecompressCallback(compressedData);\n";
+    source << "    }\n";
+    source << "    else\n";
+    source << "    {\n";
+    source << "        gBinaryData = new uint8_t[size];\n";
+    source << "        (void)fread(gBinaryData, 1, size, fp);\n";
+    source << "    }\n";
     source << "    fclose(fp);\n";
     source << "}\n";
 
@@ -913,7 +982,7 @@ void WriteCppReplayIndexFiles(const std::string &outDir,
         source << "void UpdateClientArrayPointer(int arrayIndex, const void *data, uint64_t size)"
                << "\n";
         source << "{\n";
-        source << "    memcpy(gClientArrays[arrayIndex], data, size);\n";
+        source << "    memcpy(gClientArrays[arrayIndex], data, static_cast<size_t>(size));\n";
         source << "}\n";
     }
 
@@ -1928,19 +1997,22 @@ void CaptureMidExecutionSetup(const gl::Context *context,
 
     // TODO(http://anglebug.com/3662): ES 3.x objects.
 
-    // Create existing queries
+    // Create existing queries. Note that queries may be genned and not yet started. In that
+    // case the queries will exist in the query map as nullptr entries.
     const gl::QueryMap &queryMap = context->getQueriesForCapture();
-    for (const auto &queryIter : queryMap)
+    for (gl::QueryMap::Iterator queryIter = queryMap.beginWithNull();
+         queryIter != queryMap.endWithNull(); ++queryIter)
     {
-        ASSERT(queryIter.first);
-        gl::QueryID queryID = {queryIter.first};
+        ASSERT(queryIter->first);
+        gl::QueryID queryID = {queryIter->first};
 
         cap(CaptureGenQueries(replayState, true, 1, &queryID));
         MaybeCaptureUpdateResourceIDs(setupCalls);
 
-        if (queryIter.second)
+        gl::Query *query = queryIter->second;
+        if (query)
         {
-            gl::QueryType queryType = queryIter.second->getType();
+            gl::QueryType queryType = query->getType();
 
             // Begin the query to generate the object
             cap(CaptureBeginQuery(replayState, true, queryType, queryID));
@@ -2485,6 +2557,7 @@ ReplayContext::~ReplayContext() {}
 
 FrameCapture::FrameCapture()
     : mEnabled(true),
+      mCompression(true),
       mClientVertexArrayMap{},
       mFrameIndex(0),
       mFrameStart(0),
@@ -2539,6 +2612,12 @@ FrameCapture::FrameCapture()
         // Optional label to provide unique file names and namespaces
         mCaptureLabel = labelFromEnv;
     }
+
+    std::string compressionFromEnv = angle::GetEnvironmentVar(kCompression);
+    if (compressionFromEnv == "0")
+    {
+        mCompression = false;
+    }
 }
 
 FrameCapture::~FrameCapture() = default;
@@ -2551,20 +2630,41 @@ void FrameCapture::captureCompressedTextureData(const gl::Context *context, cons
 
     // Storing the compressed data is handled the same for all entry points,
     // they just have slightly different parameter locations
-    int32_t paramOffset = 0;
+    int dataParamOffset    = -1;
+    int xoffsetParamOffset = -1;
+    int yoffsetParamOffset = -1;
+    int zoffsetParamOffset = -1;
+    int widthParamOffset   = -1;
+    int heightParamOffset  = -1;
+    int depthParamOffset   = -1;
     switch (call.entryPoint)
     {
         case gl::EntryPoint::CompressedTexSubImage3D:
-            paramOffset = 3;
+            xoffsetParamOffset = 2;
+            yoffsetParamOffset = 3;
+            zoffsetParamOffset = 4;
+            widthParamOffset   = 5;
+            heightParamOffset  = 6;
+            depthParamOffset   = 7;
+            dataParamOffset    = 10;
             break;
         case gl::EntryPoint::CompressedTexImage3D:
-            paramOffset = 2;
+            widthParamOffset  = 4;
+            heightParamOffset = 5;
+            depthParamOffset  = 6;
+            dataParamOffset   = 9;
             break;
         case gl::EntryPoint::CompressedTexSubImage2D:
-            paramOffset = 1;
+            xoffsetParamOffset = 2;
+            yoffsetParamOffset = 3;
+            widthParamOffset   = 4;
+            heightParamOffset  = 5;
+            dataParamOffset    = 8;
             break;
         case gl::EntryPoint::CompressedTexImage2D:
-            paramOffset = 0;
+            widthParamOffset  = 3;
+            heightParamOffset = 4;
+            dataParamOffset   = 7;
             break;
         default:
             // There should be no other callers of this function
@@ -2576,13 +2676,13 @@ void FrameCapture::captureCompressedTextureData(const gl::Context *context, cons
         context->getState().getTargetBuffer(gl::BufferBinding::PixelUnpack);
 
     const uint8_t *data = static_cast<const uint8_t *>(
-        call.params.getParam("data", ParamType::TvoidConstPointer, 7 + paramOffset)
+        call.params.getParam("data", ParamType::TvoidConstPointer, dataParamOffset)
             .value.voidConstPointerVal);
 
-    GLsizei imageSize =
-        call.params.getParam("imageSize", ParamType::TGLsizei, 6 + paramOffset).value.GLsizeiVal;
+    GLsizei imageSize = call.params.getParam("imageSize", ParamType::TGLsizei, dataParamOffset - 1)
+                            .value.GLsizeiVal;
 
-    const uint8_t *readData = nullptr;
+    const uint8_t *pixelData = nullptr;
 
     if (pixelUnpackBuffer)
     {
@@ -2591,14 +2691,14 @@ void FrameCapture::captureCompressedTextureData(const gl::Context *context, cons
         (void)pixelUnpackBuffer->mapRange(context, reinterpret_cast<GLintptr>(data), imageSize,
                                           GL_MAP_READ_BIT);
 
-        readData = reinterpret_cast<const uint8_t *>(pixelUnpackBuffer->getMapPointer());
+        pixelData = reinterpret_cast<const uint8_t *>(pixelUnpackBuffer->getMapPointer());
     }
     else
     {
-        readData = data;
+        pixelData = data;
     }
 
-    if (!readData)
+    if (!pixelData)
     {
         // If no pointer was provided and we weren't able to map the buffer, there is no data to
         // capture
@@ -2612,27 +2712,110 @@ void FrameCapture::captureCompressedTextureData(const gl::Context *context, cons
 
     // Create a copy of the incoming data
     std::vector<uint8_t> compressedData;
-    compressedData.assign(readData, readData + imageSize);
+    compressedData.assign(pixelData, pixelData + imageSize);
 
     // Look up the currently bound texture
     gl::Texture *texture = context->getState().getTargetTexture(textureType);
+    ASSERT(texture);
 
     // Record the data, indexed by textureID and level
-    GLint level = call.params.getParam("level", ParamType::TGLint, 1).value.GLintVal;
-    const auto &foundTextureLevels = mCachedTextureLevelData.find(texture->id());
-    if (foundTextureLevels != mCachedTextureLevelData.end())
+    GLint level             = call.params.getParam("level", ParamType::TGLint, 1).value.GLintVal;
+    auto foundTextureLevels = mCachedTextureLevelData.find(texture->id());
+    if (foundTextureLevels == mCachedTextureLevelData.end())
     {
-        // If we've already got a map to track this texture's levels, use it
-        foundTextureLevels->second[level] = std::move(compressedData);
+        // Initialize the texture ID data.
+        auto emplaceResult = mCachedTextureLevelData.emplace(texture->id(), TextureLevels());
+        ASSERT(emplaceResult.second);
+        foundTextureLevels = emplaceResult.first;
     }
-    else
-    {
-        // If this is a new texture, create a map for its levels
-        TextureLevels textureLevels;
-        textureLevels[level] = std::move(compressedData);
 
-        // Then add it into our data map
-        mCachedTextureLevelData[texture->id()] = std::move(textureLevels);
+    // Get the format of the texture for use with the compressed block size math.
+    const gl::InternalFormat &format = *texture->getFormat(targetPacked, level).info;
+
+    TextureLevels &foundLevels = foundTextureLevels->second;
+    auto foundLevel            = foundLevels.find(level);
+
+    // Divide dimensions according to block size.
+    const gl::Extents &levelExtents = texture->getExtents(targetPacked, level);
+
+    if (foundLevel == foundLevels.end())
+    {
+        // Initialize texture rectangle data. Default init to zero for stability.
+        GLuint sizeInBytes;
+        bool result = format.computeCompressedImageSize(levelExtents, &sizeInBytes);
+        ASSERT(result);
+
+        std::vector<uint8_t> newPixelData(sizeInBytes, 0);
+        auto emplaceResult = foundLevels.emplace(level, std::move(newPixelData));
+        ASSERT(emplaceResult.second);
+        foundLevel = emplaceResult.first;
+    }
+
+    // Unpack the various pixel rectangle parameters.
+    ASSERT(widthParamOffset != -1);
+    ASSERT(heightParamOffset != -1);
+    GLsizei pixelWidth =
+        call.params.getParam("width", ParamType::TGLsizei, widthParamOffset).value.GLsizeiVal;
+    GLsizei pixelHeight =
+        call.params.getParam("height", ParamType::TGLsizei, heightParamOffset).value.GLsizeiVal;
+    GLsizei pixelDepth = 1;
+    if (depthParamOffset != -1)
+    {
+        pixelDepth =
+            call.params.getParam("depth", ParamType::TGLsizei, depthParamOffset).value.GLsizeiVal;
+    }
+
+    GLint xoffset = 0;
+    GLint yoffset = 0;
+    GLint zoffset = 0;
+
+    if (xoffsetParamOffset != -1)
+    {
+        xoffset =
+            call.params.getParam("xoffset", ParamType::TGLint, xoffsetParamOffset).value.GLintVal;
+    }
+
+    if (yoffsetParamOffset != -1)
+    {
+        yoffset =
+            call.params.getParam("yoffset", ParamType::TGLint, yoffsetParamOffset).value.GLintVal;
+    }
+
+    if (zoffsetParamOffset != -1)
+    {
+        zoffset =
+            call.params.getParam("zoffset", ParamType::TGLint, zoffsetParamOffset).value.GLintVal;
+    }
+
+    // Since we're dealing in 4x4 blocks, scale down the width/height pixel offsets.
+    ASSERT(format.compressedBlockWidth == 4);
+    ASSERT(format.compressedBlockHeight == 4);
+    ASSERT(format.compressedBlockDepth == 1);
+    pixelWidth >>= 2;
+    pixelHeight >>= 2;
+    xoffset >>= 2;
+    yoffset >>= 2;
+
+    // Update pixel data.
+    std::vector<uint8_t> &levelData = foundLevel->second;
+
+    GLint pixelBytes = static_cast<GLint>(format.pixelBytes);
+
+    GLint pixelRowPitch   = pixelWidth * pixelBytes;
+    GLint pixelDepthPitch = pixelRowPitch * pixelHeight;
+    GLint levelRowPitch   = (levelExtents.width >> 2) * pixelBytes;
+    GLint levelDepthPitch = levelRowPitch * (levelExtents.height >> 2);
+
+    for (GLint zindex = 0; zindex < pixelDepth; ++zindex)
+    {
+        GLint z = zindex + zoffset;
+        for (GLint yindex = 0; yindex < pixelHeight; ++yindex)
+        {
+            GLint y           = yindex + yoffset;
+            GLint pixelOffset = zindex * pixelDepthPitch + yindex * pixelRowPitch;
+            GLint levelOffset = z * levelDepthPitch + y * levelRowPitch + xoffset * pixelBytes;
+            memcpy(&levelData[levelOffset], &pixelData[pixelOffset], pixelRowPitch);
+        }
     }
 
     if (pixelUnpackBuffer)
@@ -2982,15 +3165,22 @@ void FrameCapture::onEndFrame(const gl::Context *context)
     // Note that we currently capture before the start frame to collect shader and program sources.
     if (!mFrameCalls.empty() && mFrameIndex >= mFrameStart)
     {
-        WriteCppReplay(mOutDirectory, context->id(), mCaptureLabel, mFrameIndex, mFrameCalls,
-                       mSetupCalls);
+        WriteCppReplay(mCompression, mOutDirectory, context->id(), mCaptureLabel, mFrameIndex,
+                       mFrameCalls, mSetupCalls, &mBinaryData);
 
         // Save the index files after the last frame.
         if (mFrameIndex == mFrameEnd)
         {
-            WriteCppReplayIndexFiles(mOutDirectory, context->id(), mCaptureLabel, mFrameStart,
-                                     mFrameEnd, mReadBufferSize, mClientArraySizes,
+            WriteCppReplayIndexFiles(mCompression, mOutDirectory, context->id(), mCaptureLabel,
+                                     mFrameStart, mFrameEnd, mReadBufferSize, mClientArraySizes,
                                      mHasResourceType);
+
+            if (!mBinaryData.empty())
+            {
+                SaveBinaryData(mCompression, mOutDirectory, context->id(), mCaptureLabel,
+                               mBinaryData);
+                mBinaryData.clear();
+            }
         }
     }
 
