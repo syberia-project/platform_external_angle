@@ -14,6 +14,7 @@
 #include "common/utilities.h"
 #include "libANGLE/Caps.h"
 #include "libANGLE/formatutils.h"
+#include "libANGLE/renderer/driver_utils.h"
 #include "libANGLE/renderer/vulkan/DisplayVk.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "vk_format_utils.h"
@@ -70,7 +71,8 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.copyTexture            = true;
     mNativeExtensions.copyCompressedTexture  = true;
     mNativeExtensions.debugMarker            = true;
-    mNativeExtensions.robustness             = true;
+    mNativeExtensions.robustness =
+        !IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID);
     mNativeExtensions.textureBorderClampOES  = false;  // not implemented yet
     mNativeExtensions.translatedShaderSource = true;
     mNativeExtensions.discardFramebuffer     = true;
@@ -88,9 +90,10 @@ void RendererVk::ensureCapsInitialized() const
     // Enable EXT_blend_minmax
     mNativeExtensions.blendMinMax = true;
 
-    mNativeExtensions.eglImageOES              = true;
-    mNativeExtensions.eglImageExternalOES      = true;
-    mNativeExtensions.eglImageExternalEssl3OES = true;
+    mNativeExtensions.eglImageOES                  = true;
+    mNativeExtensions.eglImageExternalOES          = true;
+    mNativeExtensions.eglImageExternalWrapModesEXT = true;
+    mNativeExtensions.eglImageExternalEssl3OES     = true;
 
     mNativeExtensions.memoryObject   = true;
     mNativeExtensions.memoryObjectFd = getFeatures().supportsExternalMemoryFd.enabled;
@@ -610,7 +613,7 @@ egl::Config GenerateDefaultConfig(const RendererVk *renderer,
     config.maxSwapInterval    = 1;
     config.minSwapInterval    = 0;
     config.nativeRenderable   = EGL_TRUE;
-    config.nativeVisualID     = 0;
+    config.nativeVisualID     = static_cast<EGLint>(GetNativeVisualID(colorFormat));
     config.nativeVisualType   = EGL_NONE;
     config.renderableType     = es2Support | es3Support;
     config.sampleBuffers      = (sampleCount > 0) ? 1 : 0;

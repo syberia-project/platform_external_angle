@@ -14,14 +14,14 @@
 #include "tests/perf_tests/DrawCallPerfParams.h"
 #include "util/egl_loader_autogen.h"
 
-#include "restricted_traces/trex_1300_1310/trex_1300_1310_capture_context1.h"
-#include "restricted_traces/trex_200_210/trex_200_210_capture_context1.h"
-#include "restricted_traces/trex_800_810/trex_800_810_capture_context1.h"
-#include "restricted_traces/trex_900_910/trex_900_910_capture_context1.h"
+#include "restricted_traces/trex_200/trex_200_capture_context1.h"
 
 #include <cassert>
 #include <functional>
 #include <sstream>
+
+#define USE_SYSTEM_ZLIB
+#include "compression_utils_portable.h"
 
 using namespace angle;
 using namespace egl_platform;
@@ -30,12 +30,31 @@ namespace
 {
 void FramebufferChangeCallback(void *userData, GLenum target, GLuint framebuffer);
 
+ANGLE_MAYBE_UNUSED uint8_t *DecompressBinaryData(const std::vector<uint8_t> &compressedData)
+{
+    uint32_t uncompressedSize =
+        zlib_internal::GetGzipUncompressedSize(compressedData.data(), compressedData.size());
+
+    std::unique_ptr<uint8_t[]> uncompressedData(new uint8_t[uncompressedSize]);
+    uLong destLen = uncompressedSize;
+    int zResult =
+        zlib_internal::GzipUncompressHelper(uncompressedData.get(), &destLen, compressedData.data(),
+                                            static_cast<uLong>(compressedData.size()));
+
+    if (zResult != Z_OK)
+    {
+        std::cerr << "Failure to decompressed binary data: " << zResult << "\n";
+        return nullptr;
+    }
+
+    return uncompressedData.release();
+}
+
+// TODO (anglebug.com/4496)
+// Temporarily limit the tests to a single trace to get the bots going
 enum class TracePerfTestID
 {
     TRex200,
-    TRex800,
-    TRex900,
-    TRex1300,
     InvalidEnum,
 };
 
@@ -44,7 +63,7 @@ struct TracePerfParams final : public RenderTestParams
     // Common default options
     TracePerfParams()
     {
-        majorVersion = 2;
+        majorVersion = 3;
         minorVersion = 0;
         windowWidth  = 1920;
         windowHeight = 1080;
@@ -64,15 +83,6 @@ struct TracePerfParams final : public RenderTestParams
         {
             case TracePerfTestID::TRex200:
                 strstr << "_trex_200";
-                break;
-            case TracePerfTestID::TRex800:
-                strstr << "_trex_800";
-                break;
-            case TracePerfTestID::TRex900:
-                strstr << "_trex_900";
-                break;
-            case TracePerfTestID::TRex1300:
-                strstr << "_trex_1300";
                 break;
             default:
                 assert(0);
@@ -134,42 +144,30 @@ TracePerfTest::TracePerfTest()
     : ANGLERenderTest("TracePerf", GetParam()), mStartFrame(0), mEndFrame(0)
 {}
 
+// TODO(jmadill/cnorthrop): Use decompression path. http://anglebug.com/3630
+#define TRACE_TEST_CASE(NAME)                            \
+    mStartFrame = NAME::kReplayFrameStart;               \
+    mEndFrame   = NAME::kReplayFrameEnd;                 \
+    mReplayFunc = NAME::ReplayContext1Frame;             \
+    NAME::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_##NAME); \
+    NAME::SetupContext1Replay()
+
 void TracePerfTest::initializeBenchmark()
 {
     const auto &params = GetParam();
 
-    // TODO: Note the start and end frames in the trace
-    //       i.e. mStartFrame = trex_200_210::kReplayFrameStart
+    // To load the trace data path correctly we set the CWD to the executable dir.
+    if (!IsAndroid())
+    {
+        std::string exeDir = angle::GetExecutableDirectory();
+        angle::SetCWD(exeDir.c_str());
+    }
+
     switch (params.testID)
     {
-        // For each case, bootstrap the trace
         case TracePerfTestID::TRex200:
-            mStartFrame = 200;
-            mEndFrame   = 210;
-            mReplayFunc = trex_200_210::ReplayContext1Frame;
-            trex_200_210::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_trex_200_210);
-            trex_200_210::SetupContext1Replay();
-            break;
-        case TracePerfTestID::TRex800:
-            mStartFrame = 800;
-            mEndFrame   = 810;
-            mReplayFunc = trex_800_810::ReplayContext1Frame;
-            trex_800_810::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_trex_800_810);
-            trex_800_810::SetupContext1Replay();
-            break;
-        case TracePerfTestID::TRex900:
-            mStartFrame = 900;
-            mEndFrame   = 910;
-            mReplayFunc = trex_900_910::ReplayContext1Frame;
-            trex_900_910::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_trex_900_910);
-            trex_900_910::SetupContext1Replay();
-            break;
-        case TracePerfTestID::TRex1300:
-            mStartFrame = 1300;
-            mEndFrame   = 1310;
-            mReplayFunc = trex_1300_1310::ReplayContext1Frame;
-            trex_1300_1310::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_trex_1300_1310);
-            trex_1300_1310::SetupContext1Replay();
+            trex_200::SetBinaryDataDecompressCallback(DecompressBinaryData);
+            TRACE_TEST_CASE(trex_200);
             break;
         default:
             assert(0);
@@ -179,7 +177,11 @@ void TracePerfTest::initializeBenchmark()
     ASSERT_TRUE(mEndFrame > mStartFrame);
 
     getWindow()->setVisible(true);
+
+    mIgnoreErrors = true;
 }
+
+#undef TRACE_TEST_CASE
 
 void TracePerfTest::destroyBenchmark() {}
 
@@ -346,7 +348,7 @@ using namespace params;
 using P = TracePerfParams;
 
 std::vector<P> gTestsWithID = CombineWithValues({P()}, AllEnums<TracePerfTestID>(), CombineTestID);
-std::vector<P> gTestsWithRenderer = CombineWithFuncs(gTestsWithID, {GL<P>, Vulkan<P>});
+std::vector<P> gTestsWithRenderer = CombineWithFuncs(gTestsWithID, {Vulkan<P>});
 ANGLE_INSTANTIATE_TEST_ARRAY(TracePerfTest, gTestsWithRenderer);
 
 }  // anonymous namespace
