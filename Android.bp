@@ -2137,6 +2137,7 @@ cc_library_static {
     ],
     shared_libs: [
         "liblog",
+        "libvulkan",
     ],
     local_include_dirs: [
         "",
