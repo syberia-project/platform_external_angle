@@ -365,8 +365,6 @@ def action_target_to_blueprint(target, build_info):
                                                              target_info['args'])
     bp['cmd'] = ' '.join(cmd)
 
-    bp['sdk_version'] = sdk_version
-
     return (blueprint_type, bp)
 
 
