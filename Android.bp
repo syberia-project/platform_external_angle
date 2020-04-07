@@ -633,7 +633,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.spv-amd-shader-trinary-minmax.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-trinary-minmax.grammar.json) --vendor-insts-output $(location spv-amd-shader-trinary-minmax.insts.inc) --vendor-operand-kind-prefix ...nil...",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
     out: [
         "spv-amd-shader-trinary-minmax.insts.inc",
@@ -647,7 +646,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json) --vendor-insts-output $(location spv-amd-shader-explicit-vertex-parameter.insts.inc) --vendor-operand-kind-prefix ...nil...",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
     out: [
         "spv-amd-shader-explicit-vertex-parameter.insts.inc",
@@ -661,7 +659,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.spv-amd-shader-ballot.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-ballot.grammar.json) --vendor-insts-output $(location spv-amd-shader-ballot.insts.inc) --vendor-operand-kind-prefix ...nil...",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_spv-amd-shader-ballot",
     out: [
         "spv-amd-shader-ballot.insts.inc",
@@ -675,7 +672,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.spv-amd-gcn-shader.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-gcn-shader.grammar.json) --vendor-insts-output $(location spv-amd-gcn-shader.insts.inc) --vendor-operand-kind-prefix ...nil...",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_spv-amd-gcn-shader",
     out: [
         "spv-amd-gcn-shader.insts.inc",
@@ -689,7 +685,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --vendor-insts-output $(location opencl.debuginfo.100.insts.inc) --vendor-operand-kind-prefix CLDEBUG100_",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_opencl.debuginfo.100",
     out: [
         "opencl.debuginfo.100.insts.inc",
@@ -703,7 +698,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
     ],
     cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --vendor-insts-output $(location debuginfo.insts.inc) --vendor-operand-kind-prefix ...nil...",
-    sdk_version: "28",
     name: "angle_spvtools_vendor_tables_debuginfo",
     out: [
         "debuginfo.insts.inc",
@@ -720,7 +714,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-opencl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.opencl.std.100.grammar.json) --opencl-insts-output $(location opencl.std.insts.inc)",
-    sdk_version: "28",
     name: "angle_spvtools_opencl_tables_opencl1-0",
     out: [
         "opencl.std.insts.inc",
@@ -734,7 +727,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
     ],
     cmd: "$(location) --extinst-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-output-path $(location DebugInfo.h)",
-    sdk_version: "28",
     name: "angle_spvtools_language_header_debuginfo",
     out: [
         "DebugInfo.h",
@@ -748,7 +740,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --extinst-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-output-path $(location OpenCLDebugInfo100.h)",
-    sdk_version: "28",
     name: "angle_spvtools_language_header_cldebuginfo100",
     out: [
         "OpenCLDebugInfo100.h",
@@ -802,7 +793,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-glsl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.glsl.std.450.grammar.json) --glsl-insts-output $(location glsl.std.450.insts.inc)",
-    sdk_version: "28",
     name: "angle_spvtools_glsl_tables_glsl1-0",
     out: [
         "glsl.std.450.insts.inc",
@@ -816,7 +806,6 @@ cc_genrule {
         "third_party/spirv-headers/src/include/spirv/spir-v.xml",
     ],
     cmd: "$(location) --xml $(location third_party/spirv-headers/src/include/spirv/spir-v.xml) --generator $(location generators.inc)",
-    sdk_version: "28",
     name: "angle_spvtools_generators_inc",
     out: [
         "generators.inc",
@@ -832,7 +821,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --core-insts-output $(location core.insts-unified1.inc) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --operand-kinds-output $(location operand.kinds-unified1.inc)",
-    sdk_version: "28",
     name: "angle_spvtools_core_tables_unified1",
     out: [
         "core.insts-unified1.inc",
@@ -849,7 +837,6 @@ cc_genrule {
         "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extension-enum-output $(location extension_enum.inc) --enum-string-mapping-output $(location enum_string_mapping.inc)",
-    sdk_version: "28",
     name: "angle_spvtools_core_enums_unified1",
     out: [
         "enum_string_mapping.inc",
@@ -2851,7 +2838,6 @@ cc_genrule {
         "src/commit_id.py",
     ],
     cmd: "$(location) gen $(location commit.h)",
-    sdk_version: "28",
     name: "angle_commit_id",
     out: [
         "commit.h",
