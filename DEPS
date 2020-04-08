@@ -25,7 +25,7 @@ vars = {
   'vk_gl_cts_revision': 'a6b249819f7177821d4b7eefff36af07fef71825',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': '4b2483ee88ab2ce904f6bac27c7796823c45564c',
+  'glslang_revision': '9c3204a1fde09ba7b98b1779047bf8d3491244a5',
 
   # Current revision of googletest.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -46,19 +46,19 @@ vars = {
   'spirv_headers_revision': 'f8bf11a0253a32375c32cad92c841237b96696c0',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': '60104cd97446877dad8ed1010a635218937a2f18',
+  'spirv_tools_revision': '4af38c49bfeeac536b9bf9b25be2d4bbec356972',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '74556a131735598a5ae7a94ec5500a9d9f908b3a',
+  'vulkan_headers_revision': 'b4b0f994204e4fd1223260856a9fb4b738ed6b4e',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': '64c36933d4f28b1609a087a94baec56bd6338215',
+  'vulkan_loader_revision': '122067a02a253746e7778d18026869ca271ff9ea',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': '94ed4c384c3425963b459a735045706e5f83f01b',
+  'vulkan_tools_revision': '1fbefe048387b827a8f9859c0754bce2f09d1985',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': 'caeb15a056a0e6af7f9f99d089e6db460f1050d7',
+  'vulkan_validation_revision': '004b2914bfe30adc696327565e9b85bc671da10b',
 
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
@@ -182,7 +182,7 @@ deps = {
   },
 
   'third_party/SwiftShader': {
-    'url': '{swiftshader_git}/SwiftShader@1c9f24263e6c39591d821a2ebb09a11e55cd957c',
+    'url': '{swiftshader_git}/SwiftShader@bdb6807825ac8479b9dc3fe5fdc58caae294f21b',
     'condition': 'not build_with_chromium',
   },
 

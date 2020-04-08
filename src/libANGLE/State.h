@@ -19,6 +19,7 @@
 #include "libANGLE/GLES1State.h"
 #include "libANGLE/Overlay.h"
 #include "libANGLE/Program.h"
+#include "libANGLE/ProgramExecutable.h"
 #include "libANGLE/ProgramPipeline.h"
 #include "libANGLE/RefCountObject.h"
 #include "libANGLE/Renderbuffer.h"
@@ -36,7 +37,6 @@ struct Caps;
 class Context;
 class FramebufferManager;
 class MemoryObjectManager;
-class PathManager;
 class ProgramPipelineManager;
 class Query;
 class RenderbufferManager;
@@ -64,11 +64,27 @@ using TextureBindingVector = std::vector<BindingPointer<Texture>>;
 using TextureBindingMap    = angle::PackedEnumMap<TextureType, TextureBindingVector>;
 using ActiveQueryMap       = angle::PackedEnumMap<QueryType, BindingPointer<Query>>;
 
+class ActiveTexturesCache final : angle::NonCopyable
+{
+  public:
+    ActiveTexturesCache();
+    ~ActiveTexturesCache();
+
+    Texture *operator[](size_t textureIndex) const { return mTextures[textureIndex]; }
+
+    void clear(ContextID contextID);
+    void set(ContextID contextID, size_t textureIndex, Texture *texture);
+    void reset(ContextID contextID, size_t textureIndex);
+    bool empty() const;
+
+  private:
+    ActiveTextureArray<Texture *> mTextures;
+};
+
 class State : angle::NonCopyable
 {
   public:
-    State(ContextID contextIn,
-          const State *shareContextState,
+    State(const State *shareContextState,
           TextureManager *shareTextures,
           const OverlayType *overlay,
           const EGLenum clientType,
@@ -81,13 +97,11 @@ class State : angle::NonCopyable
           EGLenum contextPriority);
     ~State();
 
-    int id() const { return mID; }
-
     void initialize(Context *context);
     void reset(const Context *context);
 
     // Getters
-    ContextID getContextID() const { return mContext; }
+    ContextID getContextID() const { return mID; }
     EGLenum getClientType() const { return mClientType; }
     EGLenum getContextPriority() const { return mContextPriority; }
     GLint getClientMajorVersion() const { return mClientVersion.major; }
@@ -313,6 +327,10 @@ class State : angle::NonCopyable
         return mVertexArray;
     }
 
+    // If both a Program and a ProgramPipeline are bound, the Program will
+    // always override the ProgramPipeline.
+    const ProgramExecutable *getProgramExecutable() const { return mExecutable; }
+
     // Program binding manipulation
     angle::Result setProgram(const Context *context, Program *newProgram);
 
@@ -501,14 +519,6 @@ class State : angle::NonCopyable
     void setCoverageModulation(GLenum components);
     GLenum getCoverageModulation() const { return mCoverageModulation; }
 
-    // CHROMIUM_path_rendering
-    void loadPathRenderingMatrix(GLenum matrixMode, const GLfloat *matrix);
-    const GLfloat *getPathRenderingMatrix(GLenum which) const;
-    void setPathStencilFunc(GLenum func, GLint ref, GLuint mask);
-    GLenum getPathStencilFunc() const { return mPathStencilFunc; }
-    GLint getPathStencilRef() const { return mPathStencilRef; }
-    GLuint getPathStencilMask() const { return mPathStencilMask; }
-
     // GL_EXT_sRGB_write_control
     void setFramebufferSRGB(bool sRGB);
     bool getFramebufferSRGB() const { return mFramebufferSRGB; }
@@ -598,8 +608,7 @@ class State : angle::NonCopyable
         DIRTY_BIT_MULTISAMPLING,
         DIRTY_BIT_SAMPLE_ALPHA_TO_ONE,
         DIRTY_BIT_COVERAGE_MODULATION,  // CHROMIUM_framebuffer_mixed_samples
-        DIRTY_BIT_PATH_RENDERING,
-        DIRTY_BIT_FRAMEBUFFER_SRGB,  // GL_EXT_sRGB_write_control
+        DIRTY_BIT_FRAMEBUFFER_SRGB,     // GL_EXT_sRGB_write_control
         DIRTY_BIT_CURRENT_VALUES,
         DIRTY_BIT_PROVOKING_VERTEX,
         DIRTY_BIT_INVALID,
@@ -671,7 +680,7 @@ class State : angle::NonCopyable
                       GLenum format);
 
     const ImageUnit &getImageUnit(size_t unit) const { return mImageUnits[unit]; }
-    const ActiveTexturePointerArray &getActiveTexturesCache() const { return mActiveTexturesCache; }
+    const ActiveTexturesCache &getActiveTexturesCache() const { return mActiveTexturesCache; }
     ComponentTypeMask getCurrentValuesTypeMask() const { return mCurrentValuesTypeMask; }
 
     // "onActiveTextureChange" is called when a texture binding changes.
@@ -705,7 +714,7 @@ class State : angle::NonCopyable
 
     ANGLE_INLINE bool validateSamplerFormats() const
     {
-        return (mTexturesIncompatibleWithSamplers & mProgram->getActiveSamplersMask()).none();
+        return (mTexturesIncompatibleWithSamplers & mExecutable->getActiveSamplersMask()).none();
     }
 
     ProvokingVertexConvention getProvokingVertex() const { return mProvokingVertex; }
@@ -759,9 +768,7 @@ class State : angle::NonCopyable
   private:
     friend class Context;
 
-    void unsetActiveTexture(size_t textureIndex);
     void unsetActiveTextures(ActiveTextureMask textureMask);
-    void setActiveTexture(size_t textureIndex, Texture *texture);
     void updateActiveTexture(const Context *context, size_t textureIndex, Texture *texture);
     void updateActiveTextureState(const Context *context,
                                   size_t textureIndex,
@@ -814,12 +821,11 @@ class State : angle::NonCopyable
     // Dispatch table for buffer update functions.
     static const angle::PackedEnumMap<BufferBinding, BufferBindingSetter> kBufferSetters;
 
-    int mID;
+    ContextID mID;
 
     EGLenum mClientType;
     EGLenum mContextPriority;
     Version mClientVersion;
-    ContextID mContext;
 
     // Caps to use for validation
     Caps mCaps;
@@ -834,7 +840,6 @@ class State : angle::NonCopyable
     RenderbufferManager *mRenderbufferManager;
     SamplerManager *mSamplerManager;
     SyncManager *mSyncManager;
-    PathManager *mPathManager;
     FramebufferManager *mFramebufferManager;
     ProgramPipelineManager *mProgramPipelineManager;
     MemoryObjectManager *mMemoryObjectManager;
@@ -883,6 +888,7 @@ class State : angle::NonCopyable
     BindingPointer<Renderbuffer> mRenderbuffer;
     Program *mProgram;
     BindingPointer<ProgramPipeline> mProgramPipeline;
+    ProgramExecutable *mExecutable;
 
     // GL_ANGLE_provoking_vertex
     ProvokingVertexConvention mProvokingVertex;
@@ -911,7 +917,7 @@ class State : angle::NonCopyable
     // A cache of complete textures. nullptr indicates unbound or incomplete.
     // Don't use BindingPointer because this cache is only valid within a draw call.
     // Also stores a notification channel to the texture itself to handle texture change events.
-    ActiveTexturePointerArray mActiveTexturesCache;
+    ActiveTexturesCache mActiveTexturesCache;
     std::vector<angle::ObserverBinding> mCompleteTextureBindings;
 
     ActiveTextureMask mTexturesIncompatibleWithSamplers;
@@ -946,13 +952,6 @@ class State : angle::NonCopyable
     bool mSampleAlphaToOne;
 
     GLenum mCoverageModulation;
-
-    // CHROMIUM_path_rendering
-    GLfloat mPathMatrixMV[16];
-    GLfloat mPathMatrixProj[16];
-    GLenum mPathStencilFunc;
-    GLint mPathStencilRef;
-    GLuint mPathStencilMask;
 
     // GL_EXT_sRGB_write_control
     bool mFramebufferSRGB;

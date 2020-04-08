@@ -13,15 +13,14 @@
 #include "tests/perf_tests/ANGLEPerfTest.h"
 #include "tests/perf_tests/DrawCallPerfParams.h"
 #include "util/egl_loader_autogen.h"
+#include "util/frame_capture_utils.h"
 
+#include "restricted_traces/manhattan_10/manhattan_10_capture_context1.h"
 #include "restricted_traces/trex_200/trex_200_capture_context1.h"
 
 #include <cassert>
 #include <functional>
 #include <sstream>
-
-#define USE_SYSTEM_ZLIB
-#include "compression_utils_portable.h"
 
 using namespace angle;
 using namespace egl_platform;
@@ -30,30 +29,9 @@ namespace
 {
 void FramebufferChangeCallback(void *userData, GLenum target, GLuint framebuffer);
 
-ANGLE_MAYBE_UNUSED uint8_t *DecompressBinaryData(const std::vector<uint8_t> &compressedData)
-{
-    uint32_t uncompressedSize =
-        zlib_internal::GetGzipUncompressedSize(compressedData.data(), compressedData.size());
-
-    std::unique_ptr<uint8_t[]> uncompressedData(new uint8_t[uncompressedSize]);
-    uLong destLen = uncompressedSize;
-    int zResult =
-        zlib_internal::GzipUncompressHelper(uncompressedData.get(), &destLen, compressedData.data(),
-                                            static_cast<uLong>(compressedData.size()));
-
-    if (zResult != Z_OK)
-    {
-        std::cerr << "Failure to decompressed binary data: " << zResult << "\n";
-        return nullptr;
-    }
-
-    return uncompressedData.release();
-}
-
-// TODO (anglebug.com/4496)
-// Temporarily limit the tests to a single trace to get the bots going
 enum class TracePerfTestID
 {
+    Manhattan10,
     TRex200,
     InvalidEnum,
 };
@@ -81,6 +59,9 @@ struct TracePerfParams final : public RenderTestParams
 
         switch (testID)
         {
+            case TracePerfTestID::Manhattan10:
+                strstr << "_manhattan_10";
+                break;
             case TracePerfTestID::TRex200:
                 strstr << "_trex_200";
                 break;
@@ -138,23 +119,36 @@ class TracePerfTest : public ANGLERenderTest, public ::testing::WithParamInterfa
     QueryInfo mCurrentQuery = {};
     std::vector<QueryInfo> mRunningQueries;
     std::vector<TimeSample> mTimeline;
+
+    std::string mStartingDirectory;
 };
 
 TracePerfTest::TracePerfTest()
     : ANGLERenderTest("TracePerf", GetParam()), mStartFrame(0), mEndFrame(0)
-{}
+{
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    if (IsWindows() && IsIntel() &&
+        GetParam().getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE &&
+        GetParam().testID == TracePerfTestID::Manhattan10)
+    {
+        mSkipTest = true;
+    }
+}
 
 // TODO(jmadill/cnorthrop): Use decompression path. http://anglebug.com/3630
-#define TRACE_TEST_CASE(NAME)                            \
-    mStartFrame = NAME::kReplayFrameStart;               \
-    mEndFrame   = NAME::kReplayFrameEnd;                 \
-    mReplayFunc = NAME::ReplayContext1Frame;             \
-    NAME::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_##NAME); \
+#define TRACE_TEST_CASE(NAME)                                    \
+    mStartFrame = NAME::kReplayFrameStart;                       \
+    mEndFrame   = NAME::kReplayFrameEnd;                         \
+    mReplayFunc = NAME::ReplayContext1Frame;                     \
+    NAME::SetBinaryDataDecompressCallback(DecompressBinaryData); \
+    NAME::SetBinaryDataDir(ANGLE_TRACE_DATA_DIR_##NAME);         \
     NAME::SetupContext1Replay()
 
 void TracePerfTest::initializeBenchmark()
 {
     const auto &params = GetParam();
+
+    mStartingDirectory = angle::GetCWD().value();
 
     // To load the trace data path correctly we set the CWD to the executable dir.
     if (!IsAndroid())
@@ -165,8 +159,10 @@ void TracePerfTest::initializeBenchmark()
 
     switch (params.testID)
     {
+        case TracePerfTestID::Manhattan10:
+            TRACE_TEST_CASE(manhattan_10);
+            break;
         case TracePerfTestID::TRex200:
-            trex_200::SetBinaryDataDecompressCallback(DecompressBinaryData);
             TRACE_TEST_CASE(trex_200);
             break;
         default:
@@ -177,13 +173,15 @@ void TracePerfTest::initializeBenchmark()
     ASSERT_TRUE(mEndFrame > mStartFrame);
 
     getWindow()->setVisible(true);
-
-    mIgnoreErrors = true;
 }
 
 #undef TRACE_TEST_CASE
 
-void TracePerfTest::destroyBenchmark() {}
+void TracePerfTest::destroyBenchmark()
+{
+    // In order for the next test to load, restore the working directory
+    angle::SetCWD(mStartingDirectory.c_str());
+}
 
 void TracePerfTest::sampleTime()
 {
@@ -310,8 +308,8 @@ void TracePerfTest::onFramebufferChange(GLenum target, GLuint framebuffer)
     if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER)
         return;
 
-    // We have at most one active timestamp query at a time. This code will end the current query
-    // and immediately start a new one.
+    // We have at most one active timestamp query at a time. This code will end the current
+    // query and immediately start a new one.
     if (mCurrentQuery.beginTimestampQuery != 0)
     {
         glGenQueriesEXT(1, &mCurrentQuery.endTimestampQuery);

@@ -26,6 +26,7 @@ struct FeaturesVk;
 
 namespace rx
 {
+class ProgramExecutableVk;
 class RendererVk;
 class WindowSurfaceVk;
 
@@ -80,7 +81,7 @@ class CommandQueue final : angle::NonCopyable
     angle::Result releasePrimaryCommandBuffer(vk::Context *context,
                                               vk::PrimaryCommandBuffer &&commandBuffer);
 
-    void clearAllGarbage(VkDevice device);
+    void clearAllGarbage(RendererVk *renderer);
 
     angle::Result finishToSerial(vk::Context *context, Serial serial, uint64_t timeout);
 
@@ -425,9 +426,6 @@ class ContextVk : public ContextImpl, public vk::Context
     // Program Pipeline object creation
     ProgramPipelineImpl *createProgramPipeline(const gl::ProgramPipelineState &data) override;
 
-    // Path object creation
-    std::vector<PathImpl *> createPaths(GLsizei) override;
-
     // Memory object creation.
     MemoryObjectImpl *createMemoryObject() override;
 
@@ -650,6 +648,7 @@ class ContextVk : public ContextImpl, public vk::Context
     }
 
     egl::ContextPriority getContextPriority() const override { return mContextPriority; }
+    angle::Result startRenderPass(gl::Rectangle renderArea);
     angle::Result endRenderPass();
 
     angle::Result syncExternalMemory();
@@ -659,6 +658,15 @@ class ContextVk : public ContextImpl, public vk::Context
     VkIndexType getVkIndexType(gl::DrawElementsType glIndexType) const;
     size_t getVkIndexTypeSize(gl::DrawElementsType glIndexType) const;
     bool shouldConvertUint8VkIndexType(gl::DrawElementsType glIndexType) const;
+
+    const ProgramExecutableVk *getExecutable() const { return mExecutable; }
+    ProgramExecutableVk *getExecutable() { return mExecutable; }
+
+    ProgramVk *getShaderProgram(const gl::State &glState, gl::ShaderType shaderType) const;
+
+    // occlusion query
+    void beginOcclusionQuery(QueryVk *queryVk);
+    void endOcclusionQuery(QueryVk *queryVk);
 
   private:
     // Dirty bits.
@@ -953,6 +961,11 @@ class ContextVk : public ContextImpl, public vk::Context
     VertexArrayVk *mVertexArray;
     FramebufferVk *mDrawFramebuffer;
     ProgramVk *mProgram;
+    ProgramExecutableVk *mExecutable;
+
+    // occlusion query
+    QueryVk *mActiveQueryAnySamples;
+    QueryVk *mActiveQueryAnySamplesConservative;
 
     // Graph resource used to record dispatch commands and hold resource dependencies.
     vk::DispatchHelper mDispatcher;

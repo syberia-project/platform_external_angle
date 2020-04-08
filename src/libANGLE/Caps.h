@@ -213,6 +213,9 @@ struct Extensions
     // GL_OES_texture_compression_astc
     bool textureCompressionASTCOES = false;
 
+    // GL_KHR_texture_compression_astc_sliced_3d
+    bool textureCompressionSliced3dASTCKHR = false;
+
     // GL_EXT_texture_compression_bptc
     bool textureCompressionBPTC = false;
 
@@ -222,6 +225,9 @@ struct Extensions
     // GL_OES_compressed_ETC1_RGB8_texture
     // Implies that TextureCaps for GL_ETC1_RGB8_OES exist
     bool compressedETC1RGB8TextureOES = false;
+
+    // GL_EXT_compressed_ETC1_RGB8_sub_texture
+    bool compressedETC1RGB8SubTexture = false;
 
     // OES_compressed_ETC2_RGB8_texture
     bool compressedETC2RGB8TextureOES = false;
@@ -425,6 +431,9 @@ struct Extensions
     // NV_pack_subimage
     bool packSubimage = false;
 
+    // GL_NV_shader_noperspective_interpolation
+    bool noperspectiveInterpolationNV = false;
+
     // GL_OES_vertex_half_float
     bool vertexHalfFloatOES = false;
 
@@ -504,9 +513,6 @@ struct Extensions
     // GL_EXT_texture_norm16
     // written against ES 3.1 but can apply to ES 3.0 as well.
     bool textureNorm16 = false;
-
-    // GL_CHROMIUM_path_rendering
-    bool pathRendering = false;
 
     // GL_OES_surfaceless_context
     bool surfacelessContextOES = false;
@@ -594,6 +600,9 @@ struct Extensions
     {
         return (drawElementsBaseVertexOES || drawElementsBaseVertexEXT);
     }
+
+    // GL_EXT_shader_non_constant_global_initializers
+    bool shaderNonConstGlobalInitializersEXT = false;
 
     // GL_EXT_gpu_shader5
     bool gpuShader5EXT = false;
@@ -943,6 +952,9 @@ struct DisplayExtensions
 
     // EGL_CHROMIUM_sync_control
     bool syncControlCHROMIUM = false;
+
+    // EGL_ANGLE_sync_control_rate
+    bool syncControlRateANGLE = false;
 
     // EGL_KHR_swap_buffers_with_damage
     bool swapBuffersWithDamage = false;

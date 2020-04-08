@@ -57,6 +57,10 @@ void InitExtensionBehavior(const ShBuiltInResources &resources, TExtensionBehavi
     {
         extBehavior[TExtension::NV_shader_framebuffer_fetch] = EBhUndefined;
     }
+    if (resources.NV_shader_noperspective_interpolation)
+    {
+        extBehavior[TExtension::NV_shader_noperspective_interpolation] = EBhUndefined;
+    }
     if (resources.ARM_shader_framebuffer_fetch)
     {
         extBehavior[TExtension::ARM_shader_framebuffer_fetch] = EBhUndefined;
@@ -80,6 +84,10 @@ void InitExtensionBehavior(const ShBuiltInResources &resources, TExtensionBehavi
     if (resources.EXT_gpu_shader5)
     {
         extBehavior[TExtension::EXT_gpu_shader5] = EBhUndefined;
+    }
+    if (resources.EXT_shader_non_constant_global_initializers)
+    {
+        extBehavior[TExtension::EXT_shader_non_constant_global_initializers] = EBhUndefined;
     }
     if (resources.OES_texture_storage_multisample_2d_array)
     {

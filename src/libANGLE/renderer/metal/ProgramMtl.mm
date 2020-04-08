@@ -312,7 +312,7 @@ angle::Result ProgramMtl::linkImpl(const gl::Context *glContext,
 
     // Gather variable info and transform sources.
     gl::ShaderMap<std::string> shaderSources;
-    ShaderInterfaceVariableInfoMap variableInfoMap;
+    ShaderMapInterfaceVariableInfoMap variableInfoMap;
     mtl::GlslangGetShaderSource(mState, resources, &shaderSources, &variableInfoMap);
 
     // Convert GLSL to spirv code
@@ -782,14 +782,6 @@ void ProgramMtl::setUniformMatrix4x3fv(GLint location,
     setUniformMatrixfv<4, 3>(location, count, transpose, value);
 }
 
-void ProgramMtl::setPathFragmentInputGen(const std::string &inputName,
-                                         GLenum genMode,
-                                         GLint components,
-                                         const GLfloat *coeffs)
-{
-    UNIMPLEMENTED();
-}
-
 void ProgramMtl::getUniformfv(const gl::Context *context, GLint location, GLfloat *params) const
 {
     getUniformImpl(location, params, GL_FLOAT);
@@ -877,7 +869,7 @@ angle::Result ProgramMtl::updateTextures(const gl::Context *glContext,
 {
     const auto &glState = glContext->getState();
 
-    const gl::ActiveTexturePointerArray &completeTextures = glState.getActiveTexturesCache();
+    const gl::ActiveTexturesCache &completeTextures = glState.getActiveTexturesCache();
 
     for (gl::ShaderType shaderType : gl::AllGLES2ShaderTypes())
     {

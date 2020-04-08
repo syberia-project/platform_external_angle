@@ -11,6 +11,8 @@
 #define LIBANGLE_RENDERER_VULKAN_TRANSFORMFEEDBACKVK_H_
 
 #include "libANGLE/renderer/TransformFeedbackImpl.h"
+
+#include "libANGLE/renderer/glslang_wrapper_utils.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 
 namespace gl
@@ -54,7 +56,8 @@ class TransformFeedbackVk : public TransformFeedbackImpl
                                     const gl::OffsetBindingPointer<gl::Buffer> &binding) override;
 
     void updateDescriptorSetLayout(ContextVk *contextVk,
-                                   const gl::ProgramState &programState,
+                                   ShaderInterfaceVariableInfoMap &vsVariableInfoMap,
+                                   size_t xfbBufferCount,
                                    vk::DescriptorSetLayoutDesc *descSetLayoutOut) const;
     void initDescriptorSet(ContextVk *contextVk,
                            size_t xfbBufferCount,
@@ -64,7 +67,6 @@ class TransformFeedbackVk : public TransformFeedbackImpl
                              const gl::ProgramState &programState,
                              VkDescriptorSet descSet) const;
     void getBufferOffsets(ContextVk *contextVk,
-                          const gl::ProgramState &programState,
                           GLint drawCallFirstVertex,
                           int32_t *offsetsOut,
                           size_t offsetsSize) const;
