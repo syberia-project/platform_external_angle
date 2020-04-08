@@ -949,6 +949,7 @@ bool Renderer9::supportsFastCopyBufferToTexture(GLenum internalFormat) const
 
 angle::Result Renderer9::fastCopyBufferToTexture(const gl::Context *context,
                                                  const gl::PixelUnpackState &unpack,
+                                                 gl::Buffer *unpackBuffer,
                                                  unsigned int offset,
                                                  RenderTargetD3D *destRenderTarget,
                                                  GLenum destinationFormat,
@@ -3184,7 +3185,7 @@ angle::Result Renderer9::applyTextures(const gl::Context *context, gl::ShaderTyp
     ASSERT(!programD3D->isSamplerMappingDirty());
 
     // TODO(jmadill): Use the Program's sampler bindings.
-    const gl::ActiveTexturePointerArray &activeTextures = glState.getActiveTexturesCache();
+    const gl::ActiveTexturesCache &activeTextures = glState.getActiveTexturesCache();
 
     const gl::RangeUI samplerRange = programD3D->getUsedSamplerRange(shaderType);
     for (unsigned int samplerIndex = samplerRange.low(); samplerIndex < samplerRange.high();

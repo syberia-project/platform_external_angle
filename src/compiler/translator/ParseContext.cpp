@@ -530,6 +530,7 @@ bool TParseContext::checkCanBeLValue(const TSourceLoc &line, const char *op, TIn
         case EvqVertexIn:
         case EvqGeometryIn:
         case EvqFlatIn:
+        case EvqNoPerspectiveIn:
         case EvqSmoothIn:
         case EvqCentroidIn:
             message = "can't modify an input";
@@ -2038,10 +2039,13 @@ bool TParseContext::executeInitializer(const TSourceLoc &line,
         return false;
     }
 
+    bool nonConstGlobalInitializers =
+        IsExtensionEnabled(mDirectiveHandler.extensionBehavior(),
+                           TExtension::EXT_shader_non_constant_global_initializers);
     bool globalInitWarning = false;
     if (symbolTable.atGlobalLevel() &&
         !ValidateGlobalInitializer(initializer, mShaderVersion, sh::IsWebGLBasedSpec(mShaderSpec),
-                                   &globalInitWarning))
+                                   nonConstGlobalInitializers, &globalInitWarning))
     {
         // Error message does not completely match behavior with ESSL 1.00, but
         // we want to steer developers towards only using constant expressions.

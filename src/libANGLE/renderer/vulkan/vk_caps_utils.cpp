@@ -55,9 +55,19 @@ void RendererVk::ensureCapsInitialized() const
         (mPhysicalDeviceFeatures.textureCompressionETC2 == VK_TRUE) &&
         gl::DetermineCompressedTextureETCSupport(mNativeTextureCaps);
 
-    // Vulkan technically only supports the LDR profile but driver all appear to support the HDR
-    // profile as well. http://anglebug.com/1185#c8
-    mNativeExtensions.textureCompressionASTCHDRKHR = mNativeExtensions.textureCompressionASTCLDRKHR;
+    // Vulkan doesn't support ASTC 3D block textures, which are required by
+    // GL_OES_texture_compression_astc.
+    mNativeExtensions.textureCompressionASTCOES = false;
+
+    // Vulkan doesn't guarantee HDR blocks decoding without VK_EXT_texture_compression_astc_hdr.
+    mNativeExtensions.textureCompressionASTCHDRKHR = false;
+
+    // Vulkan supports sliced 3D ASTC texture uploads when ASTC is supported.
+    mNativeExtensions.textureCompressionSliced3dASTCKHR =
+        mNativeExtensions.textureCompressionASTCLDRKHR;
+
+    // Enable EXT_compressed_ETC1_RGB8_sub_texture
+    mNativeExtensions.compressedETC1RGB8SubTexture = mNativeExtensions.compressedETC1RGB8TextureOES;
 
     // Enable this for simple buffer readback testing, but some functionality is missing.
     // TODO(jmadill): Support full mapBufferRange extension.
@@ -147,6 +157,9 @@ void RendererVk::ensureCapsInitialized() const
     // Vulkan natively supports standard derivatives
     mNativeExtensions.standardDerivativesOES = true;
 
+    // Vulkan natively supports noperspective interpolation
+    mNativeExtensions.noperspectiveInterpolationNV = true;
+
     // Vulkan natively supports 32-bit indices, entry in kIndexTypeMap
     mNativeExtensions.elementIndexUintOES = true;
 
@@ -154,6 +167,9 @@ void RendererVk::ensureCapsInitialized() const
 
     // We support getting image data for Textures and Renderbuffers.
     mNativeExtensions.getImageANGLE = true;
+
+    // Implemented in the translator
+    mNativeExtensions.shaderNonConstGlobalInitializersEXT = true;
 
     // Vulkan has no restrictions of the format of cubemaps, so if the proper formats are supported,
     // creating a cube of any of these formats should be implicitly supported.

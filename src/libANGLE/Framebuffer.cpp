@@ -303,8 +303,9 @@ bool IsClearBufferMaskedOut(const Context *context, GLenum buffer, GLint drawbuf
 }  // anonymous namespace
 
 // This constructor is only used for default framebuffers.
-FramebufferState::FramebufferState()
+FramebufferState::FramebufferState(ContextID owningContextID)
     : mId(Framebuffer::kDefaultDrawFramebufferHandle),
+      mOwningContextID(owningContextID),
       mLabel(),
       mColorAttachments(1),
       mDrawBufferStates(1, GL_BACK),
@@ -318,14 +319,16 @@ FramebufferState::FramebufferState()
       mWebGLDepthStencilConsistent(true),
       mDepthBufferFeedbackLoop(false),
       mStencilBufferFeedbackLoop(false),
+      mHasRenderingFeedbackLoop(false),
       mDefaultFramebufferReadAttachmentInitialized(false)
 {
     ASSERT(mDrawBufferStates.size() > 0);
     mEnabledDrawBuffers.set(0);
 }
 
-FramebufferState::FramebufferState(const Caps &caps, FramebufferID id)
+FramebufferState::FramebufferState(const Caps &caps, FramebufferID id, ContextID owningContextID)
     : mId(id),
+      mOwningContextID(owningContextID),
       mLabel(),
       mColorAttachments(caps.maxColorAttachments),
       mDrawBufferStates(caps.maxDrawBuffers, GL_NONE),
@@ -339,6 +342,7 @@ FramebufferState::FramebufferState(const Caps &caps, FramebufferID id)
       mWebGLDepthStencilConsistent(true),
       mDepthBufferFeedbackLoop(false),
       mStencilBufferFeedbackLoop(false),
+      mHasRenderingFeedbackLoop(false),
       mDefaultFramebufferReadAttachmentInitialized(false)
 {
     ASSERT(mId != Framebuffer::kDefaultDrawFramebufferHandle);
@@ -428,6 +432,19 @@ const FramebufferAttachment *FramebufferState::getReadAttachment() const
         isDefault() ? mDefaultFramebufferReadAttachment : mColorAttachments[readIndex];
 
     return framebufferAttachment.isAttached() ? &framebufferAttachment : nullptr;
+}
+
+const FramebufferAttachment *FramebufferState::getReadPixelsAttachment(GLenum readFormat) const
+{
+    switch (readFormat)
+    {
+        case GL_DEPTH_COMPONENT:
+            return getDepthAttachment();
+        case GL_STENCIL_INDEX_OES:
+            return getStencilOrDepthStencilAttachment();
+        default:
+            return getReadAttachment();
+    }
 }
 
 const FramebufferAttachment *FramebufferState::getFirstNonNullAttachment() const
@@ -677,31 +694,61 @@ bool FramebufferState::isDefault() const
     return mId == Framebuffer::kDefaultDrawFramebufferHandle;
 }
 
-bool FramebufferState::updateAttachmentFeedbackLoop(size_t dirtyBit)
+bool FramebufferState::updateAttachmentFeedbackLoopAndReturnIfChanged(size_t dirtyBit)
 {
+    bool previous;
+    bool loop;
+
     switch (dirtyBit)
     {
         case Framebuffer::DIRTY_BIT_DEPTH_ATTACHMENT:
-            mDepthBufferFeedbackLoop = mDepthAttachment.isBoundAsSamplerOrImage();
-            return mDepthBufferFeedbackLoop;
+            previous                 = mDepthBufferFeedbackLoop;
+            loop                     = mDepthAttachment.isBoundAsSamplerOrImage(mOwningContextID);
+            mDepthBufferFeedbackLoop = loop;
+            break;
 
         case Framebuffer::DIRTY_BIT_STENCIL_ATTACHMENT:
-            mStencilBufferFeedbackLoop = mStencilAttachment.isBoundAsSamplerOrImage();
-            return mStencilBufferFeedbackLoop;
+            previous = mStencilBufferFeedbackLoop;
+            loop     = mStencilAttachment.isBoundAsSamplerOrImage(mOwningContextID);
+            mStencilBufferFeedbackLoop = loop;
+            break;
 
         default:
+        {
             ASSERT(dirtyBit <= Framebuffer::DIRTY_BIT_COLOR_ATTACHMENT_MAX);
-            mDrawBufferFeedbackLoops[dirtyBit] =
-                mColorAttachments[dirtyBit].isBoundAsSamplerOrImage();
-            return mDrawBufferFeedbackLoops.test(dirtyBit);
+            previous = mDrawBufferFeedbackLoops.test(dirtyBit);
+            loop     = mColorAttachments[dirtyBit].isBoundAsSamplerOrImage(mOwningContextID);
+            mDrawBufferFeedbackLoops[dirtyBit] = loop;
+            break;
+        }
     }
+
+    updateHasRenderingFeedbackLoop();
+    return previous != loop;
+}
+
+void FramebufferState::updateHasRenderingFeedbackLoop()
+{
+    // We don't handle tricky cases where the default FBO is bound as a sampler.
+    // We also don't handle tricky cases with EGLImages and mipmap selection.
+    // TODO(http://anglebug.com/4500): Tricky rendering feedback loop cases.
+    if (isDefault())
+    {
+        return;
+    }
+
+    mHasRenderingFeedbackLoop =
+        mDrawBufferFeedbackLoops.any() || mDepthBufferFeedbackLoop || mStencilBufferFeedbackLoop;
 }
 
 const FramebufferID Framebuffer::kDefaultDrawFramebufferHandle = {0};
 
-Framebuffer::Framebuffer(const Caps &caps, rx::GLImplFactory *factory, FramebufferID id)
+Framebuffer::Framebuffer(const Caps &caps,
+                         rx::GLImplFactory *factory,
+                         FramebufferID id,
+                         ContextID owningContextID)
     : mSerial(factory->generateSerial()),
-      mState(caps, id),
+      mState(caps, id, owningContextID),
       mImpl(factory->createFramebuffer(mState)),
       mCachedStatus(),
       mDirtyDepthAttachmentBinding(this, DIRTY_BIT_DEPTH_ATTACHMENT),
@@ -720,7 +767,7 @@ Framebuffer::Framebuffer(const Caps &caps, rx::GLImplFactory *factory, Framebuff
 
 Framebuffer::Framebuffer(const Context *context, egl::Surface *surface, egl::Surface *readSurface)
     : mSerial(context->getImplementation()->generateSerial()),
-      mState(),
+      mState(context->id()),
       mImpl(surface->getImplementation()->createDefaultFramebuffer(context, mState)),
       mCachedStatus(GL_FRAMEBUFFER_COMPLETE),
       mDirtyDepthAttachmentBinding(this, DIRTY_BIT_DEPTH_ATTACHMENT),
@@ -760,7 +807,7 @@ Framebuffer::Framebuffer(const Context *context, egl::Surface *surface, egl::Sur
 Framebuffer::Framebuffer(const Context *context,
                          rx::GLImplFactory *factory,
                          egl::Surface *readSurface)
-    : mState(),
+    : mState(context->id()),
       mImpl(factory->createFramebuffer(mState)),
       mCachedStatus(GL_FRAMEBUFFER_UNDEFINED_OES),
       mDirtyDepthAttachmentBinding(this, DIRTY_BIT_DEPTH_ATTACHMENT),
@@ -1919,7 +1966,7 @@ void Framebuffer::updateAttachment(const Context *context,
     mState.mResourceNeedsInit.set(dirtyBit, attachment->initState() == InitState::MayNeedInit);
     onDirtyBinding->bind(resource);
 
-    mState.updateAttachmentFeedbackLoop(dirtyBit);
+    mState.updateAttachmentFeedbackLoopAndReturnIfChanged(dirtyBit);
     invalidateCompletenessCache();
 }
 
@@ -1955,7 +2002,7 @@ void Framebuffer::onSubjectStateChange(angle::SubjectIndex index, angle::Subject
         // Triggered by changes to Texture feedback loops.
         if (message == angle::SubjectMessage::BindingChanged)
         {
-            if (mState.updateAttachmentFeedbackLoop(index))
+            if (mState.updateAttachmentFeedbackLoopAndReturnIfChanged(index))
             {
                 mDirtyBits.set(index);
                 onStateChange(angle::SubjectMessage::DirtyBitsFlagged);
@@ -2001,20 +2048,6 @@ FramebufferAttachment *Framebuffer::getAttachmentFromSubjectIndex(angle::Subject
             ASSERT(colorIndex < mState.mColorAttachments.size());
             return &mState.mColorAttachments[colorIndex];
     }
-}
-
-bool Framebuffer::formsRenderingFeedbackLoopWith(const Context *context) const
-{
-    // We don't handle tricky cases where the default FBO is bound as a sampler.
-    // We also don't handle tricky cases with EGLImages and mipmap selection.
-    // TODO(http://anglebug.com/4500): Tricky rendering feedback loop cases.
-    if (mState.isDefault())
-    {
-        return false;
-    }
-
-    return mState.mDrawBufferFeedbackLoops.any() || mState.mDepthBufferFeedbackLoop ||
-           mState.mStencilBufferFeedbackLoop;
 }
 
 bool Framebuffer::formsCopyingFeedbackLoopWith(TextureID copyTextureID,

@@ -164,6 +164,10 @@ class FramebufferVk : public FramebufferImpl
     angle::Result invalidateImpl(ContextVk *contextVk, size_t count, const GLenum *attachments);
     // Release all FramebufferVk objects in the cache and clear cache
     void clearCache(ContextVk *contextVk);
+    void updateDepthStencilAttachmentSerial(ContextVk *contextVk);
+
+    RenderTargetVk *getReadPixelsRenderTarget(GLenum format) const;
+    VkImageAspectFlagBits getReadPixelsAspectFlags(GLenum format) const;
 
     WindowSurfaceVk *mBackbuffer;
 
@@ -185,6 +189,7 @@ class FramebufferVk : public FramebufferImpl
 
     vk::FramebufferDesc mCurrentFramebufferDesc;
     std::unordered_map<vk::FramebufferDesc, vk::FramebufferHelper> mFramebufferCache;
+    bool mSupportDepthStencilFeedbackLoops;
 };
 }  // namespace rx
 

@@ -28,7 +28,6 @@
 #include "libANGLE/Framebuffer.h"
 #include "libANGLE/FramebufferAttachment.h"
 #include "libANGLE/MemoryObject.h"
-#include "libANGLE/Path.h"
 #include "libANGLE/Program.h"
 #include "libANGLE/ProgramPipeline.h"
 #include "libANGLE/Query.h"
@@ -51,58 +50,6 @@ namespace gl
 {
 namespace
 {
-template <typename T>
-std::vector<Path *> GatherPaths(PathManager &resourceManager,
-                                GLsizei numPaths,
-                                const void *paths,
-                                PathID pathBase)
-{
-    std::vector<Path *> ret;
-    ret.reserve(numPaths);
-
-    const auto *nameArray = static_cast<const T *>(paths);
-
-    for (GLsizei i = 0; i < numPaths; ++i)
-    {
-        const GLuint pathName = nameArray[i] + pathBase.value;
-
-        ret.push_back(resourceManager.getPath({pathName}));
-    }
-
-    return ret;
-}
-
-std::vector<Path *> GatherPaths(PathManager &resourceManager,
-                                GLsizei numPaths,
-                                GLenum pathNameType,
-                                const void *paths,
-                                PathID pathBase)
-{
-    switch (pathNameType)
-    {
-        case GL_UNSIGNED_BYTE:
-            return GatherPaths<GLubyte>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_BYTE:
-            return GatherPaths<GLbyte>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_UNSIGNED_SHORT:
-            return GatherPaths<GLushort>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_SHORT:
-            return GatherPaths<GLshort>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_UNSIGNED_INT:
-            return GatherPaths<GLuint>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_INT:
-            return GatherPaths<GLint>(resourceManager, numPaths, paths, pathBase);
-    }
-
-    UNREACHABLE();
-    return std::vector<Path *>();
-}
-
 template <typename T>
 angle::Result GetQueryObjectParameter(const Context *context, Query *query, GLenum pname, T *params)
 {
@@ -308,8 +255,7 @@ Context::Context(egl::Display *display,
                  const egl::AttributeMap &attribs,
                  const egl::DisplayExtensions &displayExtensions,
                  const egl::ClientExtensions &clientExtensions)
-    : mState(reinterpret_cast<ContextID>(this),
-             shareContext ? &shareContext->mState : nullptr,
+    : mState(shareContext ? &shareContext->mState : nullptr,
              shareTextures,
              &mOverlay,
              clientType,
@@ -498,11 +444,6 @@ void Context::initialize()
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_SAMPLERS);
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_IMAGES);
 
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_DRAW_FRAMEBUFFER);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_VERTEX_ARRAY);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_TEXTURES);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_SAMPLERS);
-
     mTexImageDirtyBits.set(State::DIRTY_BIT_UNPACK_STATE);
     mTexImageDirtyBits.set(State::DIRTY_BIT_UNPACK_BUFFER_BINDING);
     // No dirty objects.
@@ -627,7 +568,6 @@ egl::Error Context::onDestroy(const egl::Display *display)
     mState.mRenderbufferManager->release(this);
     mState.mSamplerManager->release(this);
     mState.mSyncManager->release(this);
-    mState.mPathManager->release(this);
     mState.mFramebufferManager->release(this);
     mState.mProgramPipelineManager->release(this);
     mState.mMemoryObjectManager->release(this);
@@ -747,18 +687,6 @@ RenderbufferID Context::createRenderbuffer()
     return mState.mRenderbufferManager->createRenderbuffer();
 }
 
-void Context::tryGenPaths(GLsizei range, PathID *createdOut)
-{
-    ANGLE_CONTEXT_TRY(mState.mPathManager->createPaths(this, range, createdOut));
-}
-
-GLuint Context::genPaths(GLsizei range)
-{
-    PathID created = {0};
-    tryGenPaths(range, &created);
-    return created.value;
-}
-
 // Returns an unused framebuffer name
 FramebufferID Context::createFramebuffer()
 {
@@ -864,110 +792,6 @@ void Context::deleteMemoryObject(MemoryObjectID memoryObject)
 void Context::deleteSemaphore(SemaphoreID semaphore)
 {
     mState.mSemaphoreManager->deleteSemaphore(this, semaphore);
-}
-
-void Context::deletePaths(PathID first, GLsizei range)
-{
-    mState.mPathManager->deletePaths(first, range);
-}
-
-GLboolean Context::isPath(PathID path) const
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (pathObj == nullptr)
-        return false;
-
-    return pathObj->hasPathData();
-}
-
-bool Context::isPathGenerated(PathID path) const
-{
-    return mState.mPathManager->hasPath(path);
-}
-
-void Context::pathCommands(PathID path,
-                           GLsizei numCommands,
-                           const GLubyte *commands,
-                           GLsizei numCoords,
-                           GLenum coordType,
-                           const void *coords)
-{
-    auto *pathObject = mState.mPathManager->getPath(path);
-
-    ANGLE_CONTEXT_TRY(pathObject->setCommands(numCommands, commands, numCoords, coordType, coords));
-}
-
-void Context::pathParameterf(PathID path, GLenum pname, GLfloat value)
-{
-    Path *pathObj = mState.mPathManager->getPath(path);
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-            pathObj->setStrokeWidth(value);
-            break;
-        case GL_PATH_END_CAPS_CHROMIUM:
-            pathObj->setEndCaps(static_cast<GLenum>(value));
-            break;
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-            pathObj->setJoinStyle(static_cast<GLenum>(value));
-            break;
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-            pathObj->setMiterLimit(value);
-            break;
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            pathObj->setStrokeBound(value);
-            break;
-        default:
-            UNREACHABLE();
-            break;
-    }
-}
-
-void Context::pathParameteri(PathID path, GLenum pname, GLint value)
-{
-    // TODO(jmadill): Should use proper clamping/casting.
-    pathParameterf(path, pname, static_cast<GLfloat>(value));
-}
-
-void Context::getPathParameterfv(PathID path, GLenum pname, GLfloat *value)
-{
-    const Path *pathObj = mState.mPathManager->getPath(path);
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-            *value = pathObj->getStrokeWidth();
-            break;
-        case GL_PATH_END_CAPS_CHROMIUM:
-            *value = static_cast<GLfloat>(pathObj->getEndCaps());
-            break;
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-            *value = static_cast<GLfloat>(pathObj->getJoinStyle());
-            break;
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-            *value = pathObj->getMiterLimit();
-            break;
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            *value = pathObj->getStrokeBound();
-            break;
-        default:
-            UNREACHABLE();
-            break;
-    }
-}
-
-void Context::getPathParameteriv(PathID path, GLenum pname, GLint *value)
-{
-    GLfloat val = 0.0f;
-    getPathParameterfv(path, pname, value != nullptr ? &val : nullptr);
-    if (value)
-        *value = static_cast<GLint>(val);
-}
-
-void Context::pathStencilFunc(GLenum func, GLint ref, GLuint mask)
-{
-    mState.setPathStencilFunc(func, ref, mask);
 }
 
 // GL_CHROMIUM_lose_context
@@ -1153,7 +977,7 @@ void Context::bindTexture(TextureType target, TextureID handle)
 void Context::bindReadFramebuffer(FramebufferID framebufferHandle)
 {
     Framebuffer *framebuffer = mState.mFramebufferManager->checkFramebufferAllocation(
-        mImplementation.get(), mState.mCaps, framebufferHandle);
+        mImplementation.get(), mState.mCaps, framebufferHandle, mState.getContextID());
     mState.setReadFramebufferBinding(framebuffer);
     mReadFramebufferObserverBinding.bind(framebuffer);
 }
@@ -1161,7 +985,7 @@ void Context::bindReadFramebuffer(FramebufferID framebufferHandle)
 void Context::bindDrawFramebuffer(FramebufferID framebufferHandle)
 {
     Framebuffer *framebuffer = mState.mFramebufferManager->checkFramebufferAllocation(
-        mImplementation.get(), mState.mCaps, framebufferHandle);
+        mImplementation.get(), mState.mCaps, framebufferHandle, mState.getContextID());
     mState.setDrawFramebufferBinding(framebuffer);
     mDrawFramebufferObserverBinding.bind(framebuffer);
     mStateCache.onDrawFramebufferChange(this);
@@ -1480,25 +1304,6 @@ void Context::getFloatvImpl(GLenum pname, GLfloat *params) const
         case GL_MAX_TEXTURE_LOD_BIAS:
             *params = mState.mCaps.maxLODBias;
             break;
-
-        case GL_PATH_MODELVIEW_MATRIX_CHROMIUM:
-        case GL_PATH_PROJECTION_MATRIX_CHROMIUM:
-        {
-            // GLES1 emulation: // GL_PATH_(MODELVIEW|PROJECTION)_MATRIX_CHROMIUM collides with the
-            // GLES1 constants for modelview/projection matrix.
-            if (getClientVersion() < Version(2, 0))
-            {
-                mState.getFloatv(pname, params);
-            }
-            else
-            {
-                ASSERT(mState.mExtensions.pathRendering);
-                const GLfloat *m = mState.getPathRenderingMatrix(pname);
-                memcpy(params, m, 16 * sizeof(GLfloat));
-            }
-        }
-        break;
-
         default:
             mState.getFloatv(pname, params);
             break;
@@ -2486,215 +2291,6 @@ void Context::coverageModulation(GLenum components)
     mState.setCoverageModulation(components);
 }
 
-void Context::matrixLoadf(GLenum matrixMode, const GLfloat *matrix)
-{
-    mState.loadPathRenderingMatrix(matrixMode, matrix);
-}
-
-void Context::matrixLoadIdentity(GLenum matrixMode)
-{
-    GLfloat I[16];
-    angle::Matrix<GLfloat>::setToIdentity(I);
-
-    mState.loadPathRenderingMatrix(matrixMode, I);
-}
-
-void Context::stencilFillPath(PathID path, GLenum fillMode, GLuint mask)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilFillPath(pathObj, fillMode, mask);
-}
-
-void Context::stencilStrokePath(PathID path, GLint reference, GLuint mask)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilStrokePath(pathObj, reference, mask);
-}
-
-void Context::coverFillPath(PathID path, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverFillPath(pathObj, coverMode);
-}
-
-void Context::coverStrokePath(PathID path, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverStrokePath(pathObj, coverMode);
-}
-
-void Context::stencilThenCoverFillPath(PathID path, GLenum fillMode, GLuint mask, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverFillPath(pathObj, fillMode, mask, coverMode);
-}
-
-void Context::stencilThenCoverStrokePath(PathID path,
-                                         GLint reference,
-                                         GLuint mask,
-                                         GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverStrokePath(pathObj, reference, mask, coverMode);
-}
-
-void Context::coverFillPathInstanced(GLsizei numPaths,
-                                     GLenum pathNameType,
-                                     const void *paths,
-                                     PathID pathBase,
-                                     GLenum coverMode,
-                                     GLenum transformType,
-                                     const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverFillPathInstanced(pathObjects, coverMode, transformType, transformValues);
-}
-
-void Context::coverStrokePathInstanced(GLsizei numPaths,
-                                       GLenum pathNameType,
-                                       const void *paths,
-                                       PathID pathBase,
-                                       GLenum coverMode,
-                                       GLenum transformType,
-                                       const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverStrokePathInstanced(pathObjects, coverMode, transformType,
-                                              transformValues);
-}
-
-void Context::stencilFillPathInstanced(GLsizei numPaths,
-                                       GLenum pathNameType,
-                                       const void *paths,
-                                       PathID pathBase,
-                                       GLenum fillMode,
-                                       GLuint mask,
-                                       GLenum transformType,
-                                       const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilFillPathInstanced(pathObjects, fillMode, mask, transformType,
-                                              transformValues);
-}
-
-void Context::stencilStrokePathInstanced(GLsizei numPaths,
-                                         GLenum pathNameType,
-                                         const void *paths,
-                                         PathID pathBase,
-                                         GLint reference,
-                                         GLuint mask,
-                                         GLenum transformType,
-                                         const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilStrokePathInstanced(pathObjects, reference, mask, transformType,
-                                                transformValues);
-}
-
-void Context::stencilThenCoverFillPathInstanced(GLsizei numPaths,
-                                                GLenum pathNameType,
-                                                const void *paths,
-                                                PathID pathBase,
-                                                GLenum fillMode,
-                                                GLuint mask,
-                                                GLenum coverMode,
-                                                GLenum transformType,
-                                                const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverFillPathInstanced(pathObjects, coverMode, fillMode, mask,
-                                                       transformType, transformValues);
-}
-
-void Context::stencilThenCoverStrokePathInstanced(GLsizei numPaths,
-                                                  GLenum pathNameType,
-                                                  const void *paths,
-                                                  PathID pathBase,
-                                                  GLint reference,
-                                                  GLuint mask,
-                                                  GLenum coverMode,
-                                                  GLenum transformType,
-                                                  const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverStrokePathInstanced(pathObjects, coverMode, reference, mask,
-                                                         transformType, transformValues);
-}
-
-void Context::bindFragmentInputLocation(ShaderProgramID program, GLint location, const GLchar *name)
-{
-    auto *programObject = getProgramResolveLink(program);
-
-    programObject->bindFragmentInputLocation(location, name);
-}
-
-void Context::programPathFragmentInputGen(ShaderProgramID program,
-                                          GLint location,
-                                          GLenum genMode,
-                                          GLint components,
-                                          const GLfloat *coeffs)
-{
-    auto *programObject = getProgramResolveLink(program);
-
-    programObject->pathFragmentInputGen(location, genMode, components, coeffs);
-}
-
 GLuint Context::getProgramResourceIndex(ShaderProgramID program,
                                         GLenum programInterface,
                                         const GLchar *name)
@@ -3543,7 +3139,8 @@ Extensions Context::generateSupportedExtensions() const
     supportedExtensions.loseContextCHROMIUM = true;
 
     // The ASTC texture extensions have dependency requirements.
-    if (supportedExtensions.textureCompressionASTCHDRKHR)
+    if (supportedExtensions.textureCompressionASTCHDRKHR ||
+        supportedExtensions.textureCompressionSliced3dASTCKHR)
     {
         // GL_KHR_texture_compression_astc_hdr cannot be exposed without also exposing
         // GL_KHR_texture_compression_astc_ldr
@@ -3583,6 +3180,16 @@ void Context::initCaps()
         mState.mCaps.maxSmoothPointSize            = 1.0f;
         mState.mCaps.minSmoothLineWidth            = 1.0f;
         mState.mCaps.maxSmoothLineWidth            = 1.0f;
+    }
+
+    // If we're capturing application calls for replay, don't expose any binary formats to prevent
+    // traces from trying to use cached results
+    if (getFrameCapture()->enabled())
+    {
+        INFO() << "Limiting binary format support count to zero while FrameCapture enabled"
+               << std::endl;
+        mState.mCaps.shaderBinaryFormats.clear();
+        mState.mCaps.programBinaryFormats.clear();
     }
 
 #if 0
@@ -4405,9 +4012,11 @@ void Context::texImage2D(TextureTarget target,
 {
     ANGLE_CONTEXT_TRY(syncStateForTexImage());
 
+    gl::Buffer *unpackBuffer = mState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
     Extents size(width, height, 1);
     Texture *texture = getTextureByTarget(target);
-    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), target, level,
+    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), unpackBuffer, target, level,
                                         internalformat, size, format, type,
                                         static_cast<const uint8_t *>(pixels)));
 }
@@ -4439,9 +4048,11 @@ void Context::texImage3D(TextureTarget target,
 {
     ANGLE_CONTEXT_TRY(syncStateForTexImage());
 
+    gl::Buffer *unpackBuffer = mState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
     Extents size(width, height, depth);
     Texture *texture = getTextureByTarget(target);
-    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), target, level,
+    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), unpackBuffer, target, level,
                                         internalformat, size, format, type,
                                         static_cast<const uint8_t *>(pixels)));
 }
@@ -4899,16 +4510,6 @@ angle::Result Context::syncStateForTexImage()
 angle::Result Context::syncStateForBlit()
 {
     return syncState(mBlitDirtyBits, mBlitDirtyObjects);
-}
-
-angle::Result Context::syncStateForPathOperation()
-{
-    ANGLE_TRY(syncDirtyObjects(mPathOperationDirtyObjects));
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_TRY(syncDirtyBits());
-
-    return angle::Result::Continue;
 }
 
 void Context::activeShaderProgram(ProgramPipelineID pipeline, ShaderProgramID program)
@@ -5556,7 +5157,7 @@ void Context::attachShader(ShaderProgramID program, ShaderProgramID shader)
     Program *programObject = mState.mShaderProgramManager->getProgram(program);
     Shader *shaderObject   = mState.mShaderProgramManager->getShader(shader);
     ASSERT(programObject && shaderObject);
-    programObject->attachShader(shaderObject);
+    programObject->attachShader(this, shaderObject);
 }
 
 void Context::copyBufferSubData(BufferBinding readTarget,
@@ -6538,7 +6139,7 @@ void Context::getProgramInfoLog(ShaderProgramID program,
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
-    programObject->getInfoLog(bufsize, length, infolog);
+    programObject->getExecutable().getInfoLog(bufsize, length, infolog);
 }
 
 void Context::getProgramPipelineInfoLog(ProgramPipelineID pipeline,
@@ -8074,16 +7675,18 @@ void Context::createMemoryObjects(GLsizei n, MemoryObjectID *memoryObjects)
     }
 }
 
-void Context::memoryObjectParameteriv(MemoryObjectID memoryObject,
-                                      GLenum pname,
-                                      const GLint *params)
+void Context::memoryObjectParameteriv(MemoryObjectID memory, GLenum pname, const GLint *params)
 {
-    UNIMPLEMENTED();
+    MemoryObject *memoryObject = getMemoryObject(memory);
+    ASSERT(memoryObject);
+    ANGLE_CONTEXT_TRY(SetMemoryObjectParameteriv(this, memoryObject, pname, params));
 }
 
-void Context::getMemoryObjectParameteriv(MemoryObjectID memoryObject, GLenum pname, GLint *params)
+void Context::getMemoryObjectParameteriv(MemoryObjectID memory, GLenum pname, GLint *params)
 {
-    UNIMPLEMENTED();
+    const MemoryObject *memoryObject = getMemoryObject(memory);
+    ASSERT(memoryObject);
+    QueryMemoryObjectParameteriv(memoryObject, pname, params);
 }
 
 void Context::texStorageMem2D(TextureType target,
@@ -8754,8 +8357,9 @@ void StateCache::updateActiveAttribsMask(Context *context)
         return;
     }
 
-    AttributesMask activeAttribs = isGLES1 ? glState.gles1().getActiveAttributesMask()
-                                           : glState.getProgram()->getActiveAttribLocationsMask();
+    AttributesMask activeAttribs =
+        isGLES1 ? glState.gles1().getActiveAttributesMask()
+                : glState.getProgramExecutable()->getActiveAttribLocationsMask();
 
     const VertexArray *vao = glState.getVertexArray();
     ASSERT(vao);
@@ -8795,7 +8399,7 @@ void StateCache::updateVertexElementLimitsImpl(Context *context)
 
         const VertexBinding &binding = vertexBindings[attrib.bindingIndex];
         ASSERT(context->isGLES1() ||
-               context->getState().getProgram()->isAttribLocationActive(attributeIndex));
+               context->getState().getProgramExecutable()->isAttribLocationActive(attributeIndex));
 
         GLint64 limit = attrib.getCachedElementLimit();
         if (binding.getDivisor() > 0)
@@ -8990,13 +8594,14 @@ void StateCache::updateValidDrawModes(Context *context)
         return;
     }
 
-    if (!program || !program->hasLinkedShaderStage(ShaderType::Geometry))
+    const ProgramExecutable *programExecutable = context->getState().getProgramExecutable();
+    if (!programExecutable || !programExecutable->hasLinkedShaderStage(ShaderType::Geometry))
     {
         mCachedValidDrawModes = kValidBasicDrawModes;
         return;
     }
 
-    ASSERT(program && program->hasLinkedShaderStage(ShaderType::Geometry));
+    ASSERT(programExecutable->hasLinkedShaderStage(ShaderType::Geometry));
     PrimitiveMode gsMode = program->getGeometryShaderInputPrimitiveType();
 
     bool pointsOK  = gsMode == PrimitiveMode::Points;

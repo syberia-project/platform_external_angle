@@ -1569,6 +1569,7 @@ void GenerateCaps(ID3D11Device *device,
     // Explicitly disable GL_OES_compressed_ETC1_RGB8_texture because it's emulated and never
     // becomes core. WebGL doesn't want to expose it unless there is native support.
     extensions->compressedETC1RGB8TextureOES = false;
+    extensions->compressedETC1RGB8SubTexture = false;
 
     extensions->elementIndexUintOES = true;
     extensions->getProgramBinaryOES = true;
@@ -1652,6 +1653,11 @@ void GenerateCaps(ID3D11Device *device,
     // D3D11 cannot support reading depth texture as a luminance texture.
     // It treats it as a red-channel-only texture.
     extensions->depthTextureOES = false;
+
+    // readPixels on depth & stencil not working with D3D11 backend.
+    extensions->readDepthNV         = false;
+    extensions->readStencilNV       = false;
+    extensions->depthBufferFloat2NV = false;
 
     // D3D11 Feature Level 10_0+ uses SV_IsFrontFace in HLSL to emulate gl_FrontFacing.
     // D3D11 Feature Level 9_3 doesn't support SV_IsFrontFace, and has no equivalent, so can't

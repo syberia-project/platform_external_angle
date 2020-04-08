@@ -358,7 +358,8 @@ static bool ValidateES3CompressedFormatForTexture3D(const Context *context, GLen
         return false;
     }
 
-    if (IsASTC2DFormat(format) && !context->getExtensions().textureCompressionASTCHDRKHR)
+    if (IsASTC2DFormat(format) && !(context->getExtensions().textureCompressionASTCHDRKHR ||
+                                    context->getExtensions().textureCompressionSliced3dASTCKHR))
     {
         // GL_KHR_texture_compression_astc_hdr, TEXTURE_3D is not supported without HDR profile
         context->validationError(GL_INVALID_OPERATION, kInternalFormatRequiresTexture2DArrayASTC);
@@ -556,7 +557,9 @@ bool ValidateES3TexImageParametersBase(const Context *context,
                 return false;
             }
 
-            if (actualInternalFormat == GL_ETC1_RGB8_OES)
+            // GL_EXT_compressed_ETC1_RGB8_sub_texture allows this format
+            if (actualInternalFormat == GL_ETC1_RGB8_OES &&
+                !context->getExtensions().compressedETC1RGB8SubTexture)
             {
                 context->validationError(GL_INVALID_OPERATION, kInvalidInternalFormat);
                 return false;
