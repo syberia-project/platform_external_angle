@@ -61,8 +61,8 @@ enum class AttachmentSampleType
 class FramebufferState final : angle::NonCopyable
 {
   public:
-    FramebufferState();
-    explicit FramebufferState(const Caps &caps, FramebufferID id);
+    explicit FramebufferState(ContextID owningContextID);
+    FramebufferState(const Caps &caps, FramebufferID id, ContextID owningContextID);
     ~FramebufferState();
 
     const std::string &getLabel();
@@ -78,6 +78,7 @@ class FramebufferState final : angle::NonCopyable
     const FramebufferAttachment *getDepthAttachment() const;
     const FramebufferAttachment *getStencilAttachment() const;
     const FramebufferAttachment *getDepthStencilAttachment() const;
+    const FramebufferAttachment *getReadPixelsAttachment(GLenum readFormat) const;
 
     const std::vector<GLenum> &getDrawBufferStates() const { return mDrawBufferStates; }
     DrawBufferMask getEnabledDrawBuffers() const { return mEnabledDrawBuffers; }
@@ -123,15 +124,24 @@ class FramebufferState final : angle::NonCopyable
 
     bool isDefault() const;
 
+    bool hasDepthStencilFeedbackLoop() const
+    {
+        return mDepthBufferFeedbackLoop || mStencilBufferFeedbackLoop;
+    }
+
   private:
     const FramebufferAttachment *getWebGLDepthStencilAttachment() const;
     const FramebufferAttachment *getWebGLDepthAttachment() const;
     const FramebufferAttachment *getWebGLStencilAttachment() const;
-    bool updateAttachmentFeedbackLoop(size_t dirtyBit);
+
+    // Returns true if there was a change in this attachments feedback-loop-ness.
+    bool updateAttachmentFeedbackLoopAndReturnIfChanged(size_t dirtyBit);
+    void updateHasRenderingFeedbackLoop();
 
     friend class Framebuffer;
 
     FramebufferID mId;
+    ContextID mOwningContextID;
     std::string mLabel;
 
     std::vector<FramebufferAttachment> mColorAttachments;
@@ -160,6 +170,7 @@ class FramebufferState final : angle::NonCopyable
     DrawBufferMask mDrawBufferFeedbackLoops;
     bool mDepthBufferFeedbackLoop;
     bool mStencilBufferFeedbackLoop;
+    bool mHasRenderingFeedbackLoop;
 
     // Tracks if we need to initialize the resources for each attachment.
     angle::BitSet<IMPLEMENTATION_MAX_FRAMEBUFFER_ATTACHMENTS + 2> mResourceNeedsInit;
@@ -174,7 +185,10 @@ class Framebuffer final : public angle::ObserverInterface,
 {
   public:
     // Constructor to build application-defined framebuffers
-    Framebuffer(const Caps &caps, rx::GLImplFactory *factory, FramebufferID id);
+    Framebuffer(const Caps &caps,
+                rx::GLImplFactory *factory,
+                FramebufferID id,
+                ContextID owningContextID);
     // Constructor to build default framebuffers for a surface and context pair
     Framebuffer(const Context *context, egl::Surface *surface, egl::Surface *readSurface);
     // Constructor to build a fake default framebuffer when surfaceless
@@ -381,7 +395,7 @@ class Framebuffer final : public angle::ObserverInterface,
     // Observer implementation
     void onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMessage message) override;
 
-    bool formsRenderingFeedbackLoopWith(const Context *context) const;
+    bool hasRenderingFeedbackLoop() const { return mState.mHasRenderingFeedbackLoop; }
     bool formsCopyingFeedbackLoopWith(TextureID copyTextureID,
                                       GLint copyTextureLevel,
                                       GLint copyTextureLayer) const;

@@ -1131,6 +1131,10 @@ void GenerateCaps(const FunctionsGL *functions,
     extensions->textureCompressionASTCHDRKHR =
         extensions->textureCompressionASTCLDRKHR &&
         functions->hasExtension("GL_KHR_texture_compression_astc_hdr");
+    extensions->textureCompressionSliced3dASTCKHR =
+        (extensions->textureCompressionASTCLDRKHR &&
+         functions->hasExtension("GL_KHR_texture_compression_astc_sliced_3d")) ||
+        extensions->textureCompressionASTCHDRKHR;
     extensions->elementIndexUintOES = functions->standard == STANDARD_GL_DESKTOP ||
                                       functions->isAtLeastGLES(gl::Version(3, 0)) ||
                                       functions->hasGLESExtension("GL_OES_element_index_uint");
@@ -1222,7 +1226,8 @@ void GenerateCaps(const FunctionsGL *functions,
     extensions->unpackSubimage     = functions->standard == STANDARD_GL_DESKTOP ||
                                  functions->isAtLeastGLES(gl::Version(3, 0)) ||
                                  functions->hasGLESExtension("GL_EXT_unpack_subimage");
-    extensions->packSubimage = functions->standard == STANDARD_GL_DESKTOP ||
+    extensions->noperspectiveInterpolationNV = functions->isAtLeastGL(gl::Version(3, 0));
+    extensions->packSubimage                 = functions->standard == STANDARD_GL_DESKTOP ||
                                functions->isAtLeastGLES(gl::Version(3, 0)) ||
                                functions->hasGLESExtension("GL_NV_pack_subimage");
     extensions->vertexArrayObjectOES = functions->isAtLeastGL(gl::Version(3, 0)) ||
@@ -1297,21 +1302,14 @@ void GenerateCaps(const FunctionsGL *functions,
     extensions->textureMultisample = functions->isAtLeastGL(gl::Version(3, 2)) ||
                                      functions->hasGLExtension("GL_ARB_texture_multisample");
 
-    // NV_path_rendering
-    // We also need interface query which is available in
-    // >= 4.3 core or ARB_interface_query or >= GLES 3.1
-    const bool canEnableGLPathRendering =
-        functions->hasGLExtension("GL_NV_path_rendering") &&
-        (functions->hasGLExtension("GL_ARB_program_interface_query") ||
-         functions->isAtLeastGL(gl::Version(4, 3)));
-
-    const bool canEnableESPathRendering = functions->hasGLESExtension("GL_NV_path_rendering") &&
-                                          functions->isAtLeastGLES(gl::Version(3, 1));
-
-    extensions->pathRendering = canEnableGLPathRendering || canEnableESPathRendering;
-
     extensions->textureSRGBDecode = functions->hasGLExtension("GL_EXT_texture_sRGB_decode") ||
                                     functions->hasGLESExtension("GL_EXT_texture_sRGB_decode");
+
+    // ANGLE treats ETC1 as ETC2 for ES 3.0 and higher because it becomes a core format, and they
+    // are backwards compatible.
+    extensions->compressedETC1RGB8SubTexture =
+        functions->isAtLeastGLES(gl::Version(3, 0)) ||
+        functions->hasGLESExtension("GL_EXT_compressed_ETC1_RGB8_sub_texture");
 
 #if defined(ANGLE_PLATFORM_MACOS) || defined(ANGLE_PLATFORM_MACCATALYST)
     VendorID vendor = GetVendorID(functions);
@@ -1624,7 +1622,10 @@ void InitializeFeatures(const FunctionsGL *functions, angle::FeaturesGL *feature
     bool limitMaxTextureSize = isIntel && IsLinux() && GetLinuxOSVersion() < OSVersion(5, 0, 0);
     ANGLE_FEATURE_CONDITION(features, limitMaxTextureSizeTo4096,
                             IsAndroid() || limitMaxTextureSize);
-    ANGLE_FEATURE_CONDITION(features, limitMaxMSAASamplesTo4, IsAndroid());
+    // On Apple switchable graphics, GL_MAX_SAMPLES may differ between the GPUs.
+    // 4 is a lowest common denominator that is always supported.
+    ANGLE_FEATURE_CONDITION(features, limitMaxMSAASamplesTo4,
+                            IsAndroid() || (IsApple() && (isIntel || isAMD || isNvidia)));
     ANGLE_FEATURE_CONDITION(features, limitMax3dArrayTextureSizeTo1024, limitMaxTextureSize);
 
     ANGLE_FEATURE_CONDITION(features, allowClearForRobustResourceInit, IsApple());

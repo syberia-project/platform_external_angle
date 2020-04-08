@@ -18,6 +18,7 @@
 #include "libANGLE/Fence.h"
 #include "libANGLE/Framebuffer.h"
 #include "libANGLE/GLES1State.h"
+#include "libANGLE/MemoryObject.h"
 #include "libANGLE/Program.h"
 #include "libANGLE/Renderbuffer.h"
 #include "libANGLE/Sampler.h"
@@ -1228,7 +1229,7 @@ void QueryProgramiv(Context *context, const Program *program, GLenum pname, GLin
             *params = program->isValidated();
             return;
         case GL_INFO_LOG_LENGTH:
-            *params = program->getInfoLogLength();
+            *params = program->getExecutable().getInfoLogLength();
             return;
         case GL_ATTACHED_SHADERS:
             *params = program->getAttachedShadersCount();
@@ -2068,6 +2069,37 @@ void QueryProgramInterfaceiv(const Program *program,
 
         case GL_MAX_NUM_ACTIVE_VARIABLES:
             *params = QueryProgramInterfaceMaxNumActiveVariables(program, programInterface);
+            break;
+
+        default:
+            UNREACHABLE();
+    }
+}
+
+angle::Result SetMemoryObjectParameteriv(const Context *context,
+                                         MemoryObject *memoryObject,
+                                         GLenum pname,
+                                         const GLint *params)
+{
+    switch (pname)
+    {
+        case GL_DEDICATED_MEMORY_OBJECT_EXT:
+            ANGLE_TRY(memoryObject->setDedicatedMemory(context, ConvertToBool(params[0])));
+            break;
+
+        default:
+            UNREACHABLE();
+    }
+
+    return angle::Result::Continue;
+}
+
+void QueryMemoryObjectParameteriv(const MemoryObject *memoryObject, GLenum pname, GLint *params)
+{
+    switch (pname)
+    {
+        case GL_DEDICATED_MEMORY_OBJECT_EXT:
+            *params = memoryObject->isDedicatedMemory();
             break;
 
         default:
@@ -3163,18 +3195,6 @@ bool GetQueryParameterInfo(const State &glState,
             case GL_SAMPLE_ALPHA_TO_ONE_EXT:
                 *type      = GL_BOOL;
                 *numParams = 1;
-                return true;
-        }
-    }
-
-    if (extensions.pathRendering)
-    {
-        switch (pname)
-        {
-            case GL_PATH_MODELVIEW_MATRIX_CHROMIUM:
-            case GL_PATH_PROJECTION_MATRIX_CHROMIUM:
-                *type      = GL_FLOAT;
-                *numParams = 16;
                 return true;
         }
     }

@@ -281,7 +281,7 @@ void FramebufferAttachment::setInitState(InitState initState) const
     mResource->setInitState(mTarget.textureIndex(), initState);
 }
 
-bool FramebufferAttachment::isBoundAsSamplerOrImage() const
+bool FramebufferAttachment::isBoundAsSamplerOrImage(ContextID contextID) const
 {
     if (mType != GL_TEXTURE)
     {
@@ -289,7 +289,8 @@ bool FramebufferAttachment::isBoundAsSamplerOrImage() const
     }
 
     const gl::TextureState &textureState = getTexture()->getTextureState();
-    return textureState.isBoundAsImageTexture() || textureState.isBoundAsSamplerTexture();
+    return textureState.isBoundAsImageTexture(contextID) ||
+           textureState.isBoundAsSamplerTexture(contextID);
 }
 
 ////// FramebufferAttachmentObject Implementation //////
@@ -318,8 +319,11 @@ angle::Result FramebufferAttachmentObject::initializeContents(const Context *con
     // initializing entire mip levels for 2D array textures.
     if (imageIndex.getType() == TextureType::_2DArray && imageIndex.hasLayer())
     {
-        ImageIndex fullMipIndex =
-            ImageIndex::Make2DArray(imageIndex.getLevelIndex(), ImageIndex::kEntireLevel);
+        // Compute the layer count so we get a correct 2D array index.
+        const gl::Extents &size = getAttachmentSize(imageIndex);
+
+        ImageIndex fullMipIndex = ImageIndex::Make2DArrayRange(
+            imageIndex.getLevelIndex(), ImageIndex::kEntireLevel, size.depth);
         return getAttachmentImpl()->initializeContents(context, fullMipIndex);
     }
     else if (imageIndex.getType() == TextureType::_2DMultisampleArray && imageIndex.hasLayer())

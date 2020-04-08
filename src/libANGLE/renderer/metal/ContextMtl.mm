@@ -718,8 +718,6 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
                 break;
             case gl::State::DIRTY_BIT_COVERAGE_MODULATION:
                 break;
-            case gl::State::DIRTY_BIT_PATH_RENDERING:
-                break;
             case gl::State::DIRTY_BIT_FRAMEBUFFER_SRGB:
                 break;
             case gl::State::DIRTY_BIT_CURRENT_VALUES:
@@ -864,13 +862,6 @@ ProgramPipelineImpl *ContextMtl::createProgramPipeline(const gl::ProgramPipeline
     // NOTE(hqle): ES 3.0
     UNIMPLEMENTED();
     return nullptr;
-}
-
-// Path object creation
-std::vector<PathImpl *> ContextMtl::createPaths(GLsizei)
-{
-    UNIMPLEMENTED();
-    return std::vector<PathImpl *>();
 }
 
 // Memory object creation.
@@ -1546,8 +1537,8 @@ angle::Result ContextMtl::handleDirtyActiveTextures(const gl::Context *context)
     const gl::State &glState   = mState;
     const gl::Program *program = glState.getProgram();
 
-    const gl::ActiveTexturePointerArray &textures = glState.getActiveTexturesCache();
-    const gl::ActiveTextureMask &activeTextures   = program->getActiveSamplersMask();
+    const gl::ActiveTexturesCache &textures     = glState.getActiveTexturesCache();
+    const gl::ActiveTextureMask &activeTextures = program->getExecutable().getActiveSamplersMask();
 
     for (size_t textureUnit : activeTextures)
     {
