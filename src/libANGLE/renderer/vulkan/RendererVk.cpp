@@ -129,6 +129,17 @@ constexpr const char *kSkippedMessages[] = {
     "UNASSIGNED-CoreValidation-Shader-InterfaceTypeMismatch",
     // http://anglebug.com/4510
     "VUID-vkQueuePresentKHR-pWaitSemaphores-03268",
+    // http://anglebug.com/4572
+    "VUID-vkCmdCopyImageToBuffer-srcImage-01998",
+    // http://anglebug.com/4577
+    "VUID-vkCmdClearColorImage-image-01993",
+    // http://anglebug.com/4578 for next two
+    "VUID-vkCmdBlitImage-srcImage-01999",
+    "VUID-vkCmdBlitImage-filter-02001",
+    // http://anglebug.com/4579
+    "VUID-vkCmdBlitImage-dstImage-02000",
+    // http://anglebug.com/4580
+    "VUID-vkCmdResolveImage-dstImage-02003",
 };
 
 // Suppress validation errors that are known
@@ -622,6 +633,8 @@ void RendererVk::onDestroy()
 
     mPipelineCache.destroy(mDevice);
 
+    vma::DestroyAllocator(mAllocator);
+
     if (mGlslangInitialized)
     {
         GlslangRelease();
@@ -923,6 +936,9 @@ angle::Result RendererVk::initialize(DisplayVk *displayVk,
     {
         ANGLE_TRY(initializeDevice(displayVk, firstGraphicsQueueFamily));
     }
+
+    // Create VMA allocator
+    ANGLE_VK_TRY(displayVk, vma::InitAllocator(mPhysicalDevice, mDevice, mInstance, &mAllocator));
 
     // Store the physical device memory properties so we can find the right memory pools.
     mMemoryProperties.init(mPhysicalDevice);
@@ -1536,6 +1552,7 @@ void RendererVk::initFeatures(DisplayVk *displayVk, const ExtensionNameList &dev
     bool isIntel    = IsIntel(mPhysicalDeviceProperties.vendorID);
     bool isNvidia   = IsNvidia(mPhysicalDeviceProperties.vendorID);
     bool isQualcomm = IsQualcomm(mPhysicalDeviceProperties.vendorID);
+    bool isARM      = IsARM(mPhysicalDeviceProperties.vendorID);
     bool isSwS =
         IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID);
 
@@ -1645,7 +1662,7 @@ void RendererVk::initFeatures(DisplayVk *displayVk, const ExtensionNameList &dev
     ANGLE_FEATURE_CONDITION(&mFeatures, forceOldRewriteStructSamplers, IsAndroid() && !isSwS);
 
     ANGLE_FEATURE_CONDITION(&mFeatures, perFrameWindowSizeQuery,
-                            isIntel || (IsWindows() && isAMD) || IsFuchsia());
+                            isIntel || (IsWindows() && isAMD) || IsFuchsia() || isARM);
 
     // Disabled on AMD/windows due to buggy behavior.
     ANGLE_FEATURE_CONDITION(&mFeatures, disallowSeamfulCubeMapEmulation, IsWindows() && isAMD);
@@ -1661,6 +1678,8 @@ void RendererVk::initFeatures(DisplayVk *displayVk, const ExtensionNameList &dev
     // Allocation sanitization disabled by default because of a heaveyweight implementation
     // that can cause OOM and timeouts.
     ANGLE_FEATURE_CONDITION(&mFeatures, allocateNonZeroMemory, false);
+
+    ANGLE_FEATURE_CONDITION(&mFeatures, persistentlyMappedBuffers, true);
 
     ANGLE_FEATURE_CONDITION(
         &mFeatures, supportsExternalMemoryHost,

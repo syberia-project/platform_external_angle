@@ -1140,7 +1140,9 @@ GLenum Framebuffer::checkStatusImpl(const Context *context) const
         // We can skip syncState on several back-ends.
         if (mImpl->shouldSyncStateBeforeCheckStatus())
         {
-            angle::Result err = syncState(context);
+            // This binding is not totally correct. It is ok because the parameter isn't used in
+            // the GL back-end and the GL back-end is the only user of syncStateBeforeCheckStatus.
+            angle::Result err = syncState(context, GL_FRAMEBUFFER);
             if (err != angle::Result::Continue)
             {
                 return 0;
@@ -1607,19 +1609,16 @@ angle::Result Framebuffer::clearBufferfi(const Context *context,
     return angle::Result::Continue;
 }
 
-angle::Result Framebuffer::getImplementationColorReadFormat(const Context *context,
-                                                            GLenum *formatOut)
+GLenum Framebuffer::getImplementationColorReadFormat(const Context *context)
 {
-    ANGLE_TRY(syncState(context));
-    *formatOut = mImpl->getImplementationColorReadFormat(context);
-    return angle::Result::Continue;
+    const gl::InternalFormat &format = mImpl->getImplementationColorReadFormat(context);
+    return format.getReadPixelsFormat(context->getExtensions());
 }
 
-angle::Result Framebuffer::getImplementationColorReadType(const Context *context, GLenum *typeOut)
+GLenum Framebuffer::getImplementationColorReadType(const Context *context)
 {
-    ANGLE_TRY(syncState(context));
-    *typeOut = mImpl->getImplementationColorReadType(context);
-    return angle::Result::Continue;
+    const gl::InternalFormat &format = mImpl->getImplementationColorReadFormat(context);
+    return format.getReadPixelsType(context->getClientVersion());
 }
 
 angle::Result Framebuffer::readPixels(const Context *context,
@@ -1975,12 +1974,12 @@ void Framebuffer::resetAttachment(const Context *context, GLenum binding)
     setAttachment(context, GL_NONE, binding, ImageIndex(), nullptr);
 }
 
-angle::Result Framebuffer::syncState(const Context *context) const
+angle::Result Framebuffer::syncState(const Context *context, GLenum framebufferBinding) const
 {
     if (mDirtyBits.any())
     {
         mDirtyBitsGuard = mDirtyBits;
-        ANGLE_TRY(mImpl->syncState(context, mDirtyBits));
+        ANGLE_TRY(mImpl->syncState(context, framebufferBinding, mDirtyBits));
         mDirtyBits.reset();
         mDirtyBitsGuard.reset();
     }

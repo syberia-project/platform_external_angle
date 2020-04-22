@@ -25,7 +25,7 @@ vars = {
   'vk_gl_cts_revision': 'a6b249819f7177821d4b7eefff36af07fef71825',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': '9c3204a1fde09ba7b98b1779047bf8d3491244a5',
+  'glslang_revision': 'c9b28b9f3388c607ea5506f5e6197b7150238ad3',
 
   # Current revision of googletest.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -46,19 +46,19 @@ vars = {
   'spirv_headers_revision': 'f8bf11a0253a32375c32cad92c841237b96696c0',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': '4af38c49bfeeac536b9bf9b25be2d4bbec356972',
+  'spirv_tools_revision': '67f4838659f475d618c120e13d1a196d7e00ba4b',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': 'b4b0f994204e4fd1223260856a9fb4b738ed6b4e',
+  'vulkan_headers_revision': '382bf3de06fc8c8961055afc37957fe65846c33b',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': '122067a02a253746e7778d18026869ca271ff9ea',
+  'vulkan_loader_revision': '4fb0e0374a3912263606d9ed0243bbef22e23597',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': '1fbefe048387b827a8f9859c0754bce2f09d1985',
+  'vulkan_tools_revision': '84463fe2902f4b50b54abe053684e6fcb7a60c4f',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': '004b2914bfe30adc696327565e9b85bc671da10b',
+  'vulkan_validation_revision': '36d7cca6fdc9ed86b01208bfb13721fdffb30af1',
 
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
@@ -87,6 +87,10 @@ deps = {
   'third_party/cherry': {
     'url': '{android_git}/platform/external/cherry@4f8fb08d33ca5ff05a1c638f04c85bbb8d8b52cc',
     'condition': 'not build_with_chromium',
+  },
+
+  'third_party/VulkanMemoryAllocator': {
+    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@ec44c3121c73ae243fe59acfcc0ce1ba19e43947',
   },
 
   'third_party/VK-GL-CTS/src': {
@@ -182,7 +186,7 @@ deps = {
   },
 
   'third_party/SwiftShader': {
-    'url': '{swiftshader_git}/SwiftShader@bdb6807825ac8479b9dc3fe5fdc58caae294f21b',
+    'url': '{swiftshader_git}/SwiftShader@ceb6258ae1016ebaffb7036561e0cba14c8cc2a7',
     'condition': 'not build_with_chromium',
   },
 

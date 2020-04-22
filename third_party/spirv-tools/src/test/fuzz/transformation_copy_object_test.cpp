@@ -56,7 +56,7 @@ TEST(TransformationCopyObjectTest, CopyBooleanConstants) {
                                                validator_options);
 
   ASSERT_EQ(0, transformation_context.GetFactManager()
-                   ->GetIdsForWhichSynonymsAreKnown(context.get())
+                   ->GetIdsForWhichSynonymsAreKnown()
                    .size());
 
   {
@@ -66,18 +66,17 @@ TEST(TransformationCopyObjectTest, CopyBooleanConstants) {
     copy_true.Apply(context.get(), &transformation_context);
 
     std::vector<uint32_t> ids_for_which_synonyms_are_known =
-        transformation_context.GetFactManager()->GetIdsForWhichSynonymsAreKnown(
-            context.get());
+        transformation_context.GetFactManager()
+            ->GetIdsForWhichSynonymsAreKnown();
     ASSERT_EQ(2, ids_for_which_synonyms_are_known.size());
     ASSERT_TRUE(std::find(ids_for_which_synonyms_are_known.begin(),
                           ids_for_which_synonyms_are_known.end(),
                           7) != ids_for_which_synonyms_are_known.end());
-    ASSERT_EQ(2, transformation_context.GetFactManager()
-                     ->GetSynonymsForId(7, context.get())
-                     .size());
+    ASSERT_EQ(
+        2, transformation_context.GetFactManager()->GetSynonymsForId(7).size());
     protobufs::DataDescriptor descriptor_100 = MakeDataDescriptor(100, {});
     ASSERT_TRUE(transformation_context.GetFactManager()->IsSynonymous(
-        MakeDataDescriptor(7, {}), descriptor_100, context.get()));
+        MakeDataDescriptor(7, {}), descriptor_100));
   }
 
   {
@@ -86,18 +85,17 @@ TEST(TransformationCopyObjectTest, CopyBooleanConstants) {
     ASSERT_TRUE(copy_false.IsApplicable(context.get(), transformation_context));
     copy_false.Apply(context.get(), &transformation_context);
     std::vector<uint32_t> ids_for_which_synonyms_are_known =
-        transformation_context.GetFactManager()->GetIdsForWhichSynonymsAreKnown(
-            context.get());
+        transformation_context.GetFactManager()
+            ->GetIdsForWhichSynonymsAreKnown();
     ASSERT_EQ(4, ids_for_which_synonyms_are_known.size());
     ASSERT_TRUE(std::find(ids_for_which_synonyms_are_known.begin(),
                           ids_for_which_synonyms_are_known.end(),
                           8) != ids_for_which_synonyms_are_known.end());
-    ASSERT_EQ(2, transformation_context.GetFactManager()
-                     ->GetSynonymsForId(8, context.get())
-                     .size());
+    ASSERT_EQ(
+        2, transformation_context.GetFactManager()->GetSynonymsForId(8).size());
     protobufs::DataDescriptor descriptor_101 = MakeDataDescriptor(101, {});
     ASSERT_TRUE(transformation_context.GetFactManager()->IsSynonymous(
-        MakeDataDescriptor(8, {}), descriptor_101, context.get()));
+        MakeDataDescriptor(8, {}), descriptor_101));
   }
 
   {
@@ -107,18 +105,18 @@ TEST(TransformationCopyObjectTest, CopyBooleanConstants) {
         copy_false_again.IsApplicable(context.get(), transformation_context));
     copy_false_again.Apply(context.get(), &transformation_context);
     std::vector<uint32_t> ids_for_which_synonyms_are_known =
-        transformation_context.GetFactManager()->GetIdsForWhichSynonymsAreKnown(
-            context.get());
+        transformation_context.GetFactManager()
+            ->GetIdsForWhichSynonymsAreKnown();
     ASSERT_EQ(5, ids_for_which_synonyms_are_known.size());
     ASSERT_TRUE(std::find(ids_for_which_synonyms_are_known.begin(),
                           ids_for_which_synonyms_are_known.end(),
                           101) != ids_for_which_synonyms_are_known.end());
-    ASSERT_EQ(3, transformation_context.GetFactManager()
-                     ->GetSynonymsForId(101, context.get())
-                     .size());
+    ASSERT_EQ(
+        3,
+        transformation_context.GetFactManager()->GetSynonymsForId(101).size());
     protobufs::DataDescriptor descriptor_102 = MakeDataDescriptor(102, {});
     ASSERT_TRUE(transformation_context.GetFactManager()->IsSynonymous(
-        MakeDataDescriptor(101, {}), descriptor_102, context.get()));
+        MakeDataDescriptor(101, {}), descriptor_102));
   }
 
   {
@@ -128,18 +126,17 @@ TEST(TransformationCopyObjectTest, CopyBooleanConstants) {
         copy_true_again.IsApplicable(context.get(), transformation_context));
     copy_true_again.Apply(context.get(), &transformation_context);
     std::vector<uint32_t> ids_for_which_synonyms_are_known =
-        transformation_context.GetFactManager()->GetIdsForWhichSynonymsAreKnown(
-            context.get());
+        transformation_context.GetFactManager()
+            ->GetIdsForWhichSynonymsAreKnown();
     ASSERT_EQ(6, ids_for_which_synonyms_are_known.size());
     ASSERT_TRUE(std::find(ids_for_which_synonyms_are_known.begin(),
                           ids_for_which_synonyms_are_known.end(),
                           7) != ids_for_which_synonyms_are_known.end());
-    ASSERT_EQ(3, transformation_context.GetFactManager()
-                     ->GetSynonymsForId(7, context.get())
-                     .size());
+    ASSERT_EQ(
+        3, transformation_context.GetFactManager()->GetSynonymsForId(7).size());
     protobufs::DataDescriptor descriptor_103 = MakeDataDescriptor(103, {});
     ASSERT_TRUE(transformation_context.GetFactManager()->IsSynonymous(
-        MakeDataDescriptor(7, {}), descriptor_103, context.get()));
+        MakeDataDescriptor(7, {}), descriptor_103));
   }
 
   std::string after_transformation = R"(
@@ -716,6 +713,64 @@ TEST(TransformationCopyObjectTest, PropagateIrrelevantPointeeFact) {
       transformation_context.GetFactManager()->PointeeValueIsIrrelevant(9));
   ASSERT_FALSE(
       transformation_context.GetFactManager()->PointeeValueIsIrrelevant(101));
+}
+
+TEST(TransformationCopyObject, DoNotCopyOpSampledImage) {
+  // This checks that we do not try to copy the result id of an OpSampledImage
+  // instruction.
+  std::string shader = R"(
+               OpCapability Shader
+               OpCapability SampledBuffer
+               OpCapability ImageBuffer
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %2 "main" %40 %41
+               OpExecutionMode %2 OriginUpperLeft
+               OpSource GLSL 450
+               OpDecorate %40 DescriptorSet 0
+               OpDecorate %40 Binding 69
+               OpDecorate %41 DescriptorSet 0
+               OpDecorate %41 Binding 1
+         %54 = OpTypeFloat 32
+         %76 = OpTypeVector %54 4
+         %55 = OpConstant %54 0
+         %56 = OpTypeVector %54 3
+         %94 = OpTypeVector %54 2
+        %112 = OpConstantComposite %94 %55 %55
+         %57 = OpConstantComposite %56 %55 %55 %55
+         %15 = OpTypeImage %54 2D 2 0 0 1 Unknown
+        %114 = OpTypePointer UniformConstant %15
+         %38 = OpTypeSampler
+        %125 = OpTypePointer UniformConstant %38
+        %132 = OpTypeVoid
+        %133 = OpTypeFunction %132
+         %45 = OpTypeSampledImage %15
+         %40 = OpVariable %114 UniformConstant
+         %41 = OpVariable %125 UniformConstant
+          %2 = OpFunction %132 None %133
+        %164 = OpLabel
+        %184 = OpLoad %15 %40
+        %213 = OpLoad %38 %41
+        %216 = OpSampledImage %45 %184 %213
+        %217 = OpImageSampleImplicitLod %76 %216 %112 Bias %55
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+
+  FactManager fact_manager;
+  spvtools::ValidatorOptions validator_options;
+  TransformationContext transformation_context(&fact_manager,
+                                               validator_options);
+
+  ASSERT_FALSE(
+      TransformationCopyObject(
+          216, MakeInstructionDescriptor(217, SpvOpImageSampleImplicitLod, 0),
+          500)
+          .IsApplicable(context.get(), transformation_context));
 }
 
 }  // namespace

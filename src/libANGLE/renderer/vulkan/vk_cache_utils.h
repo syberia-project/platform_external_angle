@@ -21,6 +21,7 @@ namespace rx
 namespace vk
 {
 class ImageHelper;
+enum class ImageLayout;
 
 using RenderPassAndSerial = ObjectAndSerial<RenderPass>;
 using PipelineAndSerial   = ObjectAndSerial<Pipeline>;
@@ -152,9 +153,12 @@ class AttachmentOpsArray final
     PackedAttachmentOpsDesc &operator[](size_t index);
 
     // Initializes an attachment op with whatever values. Used for compatible RenderPass checks.
-    void initDummyOp(size_t index, VkImageLayout initialLayout, VkImageLayout finalLayout);
-    // Initialize an attachment op with all load and store operations.
-    void initWithLoadStore(size_t index, VkImageLayout initialLayout, VkImageLayout finalLayout);
+    void initDummyOp(size_t index, ImageLayout initialLayout, ImageLayout finalLayout);
+    // Initialize an attachment op with store operations.
+    void initWithStore(size_t index,
+                       VkAttachmentLoadOp loadOp,
+                       ImageLayout initialLayout,
+                       ImageLayout finalLayout);
 
     size_t hash() const;
 

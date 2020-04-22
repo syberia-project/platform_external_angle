@@ -70,12 +70,13 @@ angle::Result OverlayVk::init(const gl::Context *context)
 
 void OverlayVk::onDestroy(const gl::Context *context)
 {
-    VkDevice device = vk::GetImpl(context)->getDevice();
+    RendererVk *renderer = vk::GetImpl(context)->getRenderer();
+    VkDevice device      = renderer->getDevice();
 
-    mCulledWidgets.destroy(device);
+    mCulledWidgets.destroy(renderer);
     mCulledWidgetsView.destroy(device);
 
-    mFontImage.destroy(device);
+    mFontImage.destroy(renderer);
     mFontImageView.destroy(device);
 }
 
@@ -101,8 +102,8 @@ angle::Result OverlayVk::createFont(ContextVk *contextVk)
 
     mState.initFontData(fontData);
 
-    ANGLE_TRY(fontDataBuffer.get().flush(contextVk, 0, fontDataBuffer.get().getSize()));
-    fontDataBuffer.get().unmap(contextVk->getDevice());
+    ANGLE_TRY(fontDataBuffer.get().flush(renderer, 0, fontDataBuffer.get().getSize()));
+    fontDataBuffer.get().unmap(renderer);
 
     fontDataBuffer.get().onExternalWrite(VK_ACCESS_HOST_WRITE_BIT);
 
@@ -170,8 +171,8 @@ angle::Result OverlayVk::cullWidgets(ContextVk *contextVk)
     gl::Extents presentImageExtents(mPresentImageExtent.width, mPresentImageExtent.height, 1);
     mState.fillEnabledWidgetCoordinates(presentImageExtents, enabledWidgets);
 
-    ANGLE_TRY(enabledWidgetsBuffer.get().flush(contextVk, 0, enabledWidgetsBuffer.get().getSize()));
-    enabledWidgetsBuffer.get().unmap(contextVk->getDevice());
+    ANGLE_TRY(enabledWidgetsBuffer.get().flush(renderer, 0, enabledWidgetsBuffer.get().getSize()));
+    enabledWidgetsBuffer.get().unmap(renderer);
 
     enabledWidgetsBuffer.get().onExternalWrite(VK_ACCESS_HOST_WRITE_BIT);
 
@@ -260,10 +261,10 @@ angle::Result OverlayVk::onPresent(ContextVk *contextVk,
     gl::Extents presentImageExtents(mPresentImageExtent.width, mPresentImageExtent.height, 1);
     mState.fillWidgetData(presentImageExtents, textData, graphData);
 
-    ANGLE_TRY(textDataBuffer.get().flush(contextVk, 0, textDataBuffer.get().getSize()));
-    ANGLE_TRY(graphDataBuffer.get().flush(contextVk, 0, graphDataBuffer.get().getSize()));
-    textDataBuffer.get().unmap(contextVk->getDevice());
-    graphDataBuffer.get().unmap(contextVk->getDevice());
+    ANGLE_TRY(textDataBuffer.get().flush(renderer, 0, textDataBuffer.get().getSize()));
+    ANGLE_TRY(graphDataBuffer.get().flush(renderer, 0, graphDataBuffer.get().getSize()));
+    textDataBuffer.get().unmap(renderer);
+    graphDataBuffer.get().unmap(renderer);
 
     UtilsVk::OverlayDrawParameters params;
     params.subgroupSize[0] = mSubgroupSize[0];

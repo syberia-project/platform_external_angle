@@ -94,7 +94,7 @@ class DynamicBuffer : angle::NonCopyable
     void releaseInFlightBuffers(ContextVk *contextVk);
 
     // This frees resources immediately.
-    void destroy(VkDevice device);
+    void destroy(RendererVk *renderer);
 
     BufferHelper *getCurrentBuffer() { return mBuffer; }
 
@@ -107,7 +107,7 @@ class DynamicBuffer : angle::NonCopyable
     void reset();
     angle::Result allocateNewBuffer(ContextVk *contextVk);
     void releaseBufferListToRenderer(RendererVk *renderer, std::vector<BufferHelper *> *buffers);
-    void destroyBufferList(VkDevice device, std::vector<BufferHelper *> *buffers);
+    void destroyBufferList(RendererVk *renderer, std::vector<BufferHelper *> *buffers);
 
     VkBufferUsageFlags mUsage;
     bool mHostVisible;
@@ -527,7 +527,7 @@ class LineLoopHelper final : angle::NonCopyable
                                       VkDeviceSize *indexIndirectBufferOffsetOut);
 
     void release(ContextVk *contextVk);
-    void destroy(VkDevice device);
+    void destroy(RendererVk *renderer);
 
     static void Draw(uint32_t count, uint32_t baseVertex, CommandBuffer *commandBuffer);
 
@@ -547,13 +547,12 @@ class BufferHelper final : public Resource
     angle::Result init(ContextVk *contextVk,
                        const VkBufferCreateInfo &createInfo,
                        VkMemoryPropertyFlags memoryPropertyFlags);
-    void destroy(VkDevice device);
+    void destroy(RendererVk *renderer);
 
     void release(RendererVk *renderer);
 
     bool valid() const { return mBuffer.valid(); }
     const Buffer &getBuffer() const { return mBuffer; }
-    const DeviceMemory &getDeviceMemory() const { return mDeviceMemory; }
     VkDeviceSize getSize() const { return mSize; }
     bool isHostVisible() const
     {
@@ -595,13 +594,22 @@ class BufferHelper final : public Resource
         *ptrOut = mMappedMemory;
         return angle::Result::Continue;
     }
-    void unmap(VkDevice device);
+
+    angle::Result mapWithOffset(ContextVk *contextVk, uint8_t **ptrOut, size_t offset)
+    {
+        uint8_t *mapBufPointer;
+        ANGLE_TRY(map(contextVk, &mapBufPointer));
+        *ptrOut = mapBufPointer + offset;
+        return angle::Result::Continue;
+    }
+
+    void unmap(RendererVk *renderer);
 
     // After a sequence of writes, call flush to ensure the data is visible to the device.
-    angle::Result flush(ContextVk *contextVk, VkDeviceSize offset, VkDeviceSize size);
+    angle::Result flush(RendererVk *renderer, VkDeviceSize offset, VkDeviceSize size);
 
     // After a sequence of writes, call invalidate to ensure the data is visible to the host.
-    angle::Result invalidate(ContextVk *contextVk, VkDeviceSize offset, VkDeviceSize size);
+    angle::Result invalidate(RendererVk *renderer, VkDeviceSize offset, VkDeviceSize size);
 
     void changeQueue(uint32_t newQueueFamilyIndex, CommandBuffer *commandBuffer);
 
@@ -641,7 +649,7 @@ class BufferHelper final : public Resource
     // Vulkan objects.
     Buffer mBuffer;
     BufferView mBufferView;
-    DeviceMemory mDeviceMemory;
+    Allocation mAllocation;
 
     // Cached properties.
     VkMemoryPropertyFlags mMemoryPropertyFlags;
@@ -710,6 +718,8 @@ enum class ImageLayout
     InvalidEnum = 19,
     EnumCount   = 19,
 };
+
+VkImageLayout ConvertImageLayoutToVkImageLayout(ImageLayout imageLayout);
 
 class ImageHelper final : public Resource, public angle::Subject
 {
@@ -790,9 +800,11 @@ class ImageHelper final : public Resource, public angle::Subject
     VkImageAspectFlags getAspectFlags() const;
     // True if image contains both depth & stencil aspects
     bool isCombinedDepthStencilFormat() const;
-    void destroy(VkDevice device);
+    void destroy(RendererVk *renderer);
+    void release(RendererVk *renderer) { destroy(renderer); }
 
-    void init2DWeakReference(VkImage handle,
+    void init2DWeakReference(Context *context,
+                             VkImage handle,
                              const gl::Extents &glExtents,
                              const Format &format,
                              GLint samples);
@@ -801,12 +813,14 @@ class ImageHelper final : public Resource, public angle::Subject
     const Image &getImage() const { return mImage; }
     const DeviceMemory &getDeviceMemory() const { return mDeviceMemory; }
 
+    VkImageType getType() const { return mImageType; }
     const VkExtent3D &getExtents() const { return mExtents; }
     uint32_t getLayerCount() const { return mLayerCount; }
     uint32_t getLevelCount() const { return mLevelCount; }
     const Format &getFormat() const { return *mFormat; }
     GLint getSamples() const { return mSamples; }
 
+    void setCurrentImageLayout(ImageLayout newLayout) { mCurrentLayout = newLayout; }
     ImageLayout getCurrentImageLayout() const { return mCurrentLayout; }
     VkImageLayout getCurrentLayout() const;
 
@@ -815,7 +829,8 @@ class ImageHelper final : public Resource, public angle::Subject
     gl::Extents getLevelExtents2D(uint32_t level) const;
 
     // Clear either color or depth/stencil based on image format.
-    void clear(const VkClearValue &value,
+    void clear(VkImageAspectFlags aspectFlags,
+               const VkClearValue &value,
                uint32_t mipLevel,
                uint32_t baseArrayLayer,
                uint32_t layerCount,
@@ -899,16 +914,9 @@ class ImageHelper final : public Resource, public angle::Subject
                                          const gl::Extents &glExtents,
                                          const VkImageType imageType);
 
-    // Stage a clear operation to a clear value based on WebGL requirements.
-    void stageSubresourceRobustClear(const gl::ImageIndex &index, const Format &format);
-
-    // Stage a clear operation to a clear value that initializes emulated channels to the desired
-    // values.
-    void stageSubresourceEmulatedClear(const gl::ImageIndex &index, const angle::Format &format);
-
-    // If the image has emulated channels, we clear them once so as not to leave garbage on those
-    // channels.
-    void stageClearIfEmulatedFormat(const gl::ImageIndex &index, const Format &format);
+    // Stage a clear based on robust resource init.
+    void stageRobustResourceClear(const gl::ImageIndex &index, const vk::Format &format);
+    void stageSubresourceClear(const gl::ImageIndex &index);
 
     // This will use the underlying dynamic buffer to allocate some memory to be used as a src or
     // dst.
@@ -934,7 +942,6 @@ class ImageHelper final : public Resource, public angle::Subject
     angle::Result flushAllStagedUpdates(ContextVk *contextVk);
 
     bool isUpdateStaged(uint32_t level, uint32_t layer);
-
     bool hasStagedUpdates() const { return !mSubresourceUpdates.empty(); }
 
     // changeLayout automatically skips the layout change if it's unnecessary.  This function can be
@@ -1029,6 +1036,7 @@ class ImageHelper final : public Resource, public angle::Subject
     };
     struct ClearUpdate
     {
+        VkImageAspectFlags aspectFlags;
         VkClearValue value;
         uint32_t levelIndex;
         uint32_t layerIndex;
@@ -1050,7 +1058,9 @@ class ImageHelper final : public Resource, public angle::Subject
         SubresourceUpdate();
         SubresourceUpdate(BufferHelper *bufferHelperIn, const VkBufferImageCopy &copyRegion);
         SubresourceUpdate(ImageHelper *image, const VkImageCopy &copyRegion);
-        SubresourceUpdate(const VkClearValue &clearValue, const gl::ImageIndex &imageIndex);
+        SubresourceUpdate(VkImageAspectFlags aspectFlags,
+                          const VkClearValue &clearValue,
+                          const gl::ImageIndex &imageIndex);
         SubresourceUpdate(const SubresourceUpdate &other);
 
         void release(RendererVk *renderer);
@@ -1079,10 +1089,9 @@ class ImageHelper final : public Resource, public angle::Subject
                                    uint32_t newQueueFamilyIndex,
                                    CommandBufferT *commandBuffer);
 
-    void stageSubresourceClear(const gl::ImageIndex &index,
-                               const angle::Format &format,
-                               const VkClearColorValue &colorValue,
-                               const VkClearDepthStencilValue &depthStencilValue);
+    // If the image has emulated channels, we clear them once so as not to leave garbage on those
+    // channels.
+    void stageClearIfEmulatedFormat(Context *context);
 
     void clearColor(const VkClearColorValue &color,
                     uint32_t baseMipLevel,
@@ -1091,8 +1100,7 @@ class ImageHelper final : public Resource, public angle::Subject
                     uint32_t layerCount,
                     CommandBuffer *commandBuffer);
 
-    void clearDepthStencil(VkImageAspectFlags imageAspectFlags,
-                           VkImageAspectFlags clearAspectFlags,
+    void clearDepthStencil(VkImageAspectFlags clearAspectFlags,
                            const VkClearDepthStencilValue &depthStencil,
                            uint32_t baseMipLevel,
                            uint32_t levelCount,
@@ -1103,12 +1111,15 @@ class ImageHelper final : public Resource, public angle::Subject
     angle::Result initializeNonZeroMemory(Context *context, VkDeviceSize size);
 
     void appendSubresourceUpdate(SubresourceUpdate &&update);
+    void prependSubresourceUpdate(SubresourceUpdate &&update);
+    void resetCachedProperties();
 
     // Vulkan objects.
     Image mImage;
     DeviceMemory mDeviceMemory;
 
     // Image properties.
+    VkImageType mImageType;
     VkExtent3D mExtents;
     const Format *mFormat;
     GLint mSamples;
@@ -1263,15 +1274,16 @@ class ShaderProgramHelper : angle::NonCopyable
     ShaderProgramHelper();
     ~ShaderProgramHelper();
 
-    bool valid() const;
+    bool valid(const gl::ShaderType shaderType) const;
     void destroy(VkDevice device);
     void release(ContextVk *contextVk);
 
     bool isGraphicsProgram() const
     {
-        ASSERT(mShaders[gl::ShaderType::Vertex].valid() !=
+        ASSERT((mShaders[gl::ShaderType::Vertex].valid() ||
+                mShaders[gl::ShaderType::Fragment].valid()) !=
                mShaders[gl::ShaderType::Compute].valid());
-        return mShaders[gl::ShaderType::Vertex].valid();
+        return !mShaders[gl::ShaderType::Compute].valid();
     }
 
     ShaderAndSerial &getShader(gl::ShaderType shaderType) { return mShaders[shaderType].get(); }

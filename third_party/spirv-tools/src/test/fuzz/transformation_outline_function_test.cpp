@@ -2460,6 +2460,125 @@ TEST(TransformationOutlineFunctionTest,
   }
 }
 
+TEST(TransformationOutlineFunctionTest,
+     DoNotOutlineCodeThatProducesUsedPointer) {
+  // This checks that we cannot outline a region of code if it produces a
+  // pointer result id that gets used outside the region.  This avoids creating
+  // a struct with a pointer member.
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %6 "main"
+               OpExecutionMode %6 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+         %21 = OpTypeBool
+        %100 = OpTypeInt 32 0
+         %99 = OpConstant %100 0
+        %101 = OpTypeVector %100 2
+        %102 = OpTypePointer Function %100
+        %103 = OpTypePointer Function %101
+          %6 = OpFunction %2 None %3
+          %7 = OpLabel
+        %104 = OpVariable %103 Function
+               OpBranch %80
+         %80 = OpLabel
+        %105 = OpAccessChain %102 %104 %99
+               OpBranch %106
+        %106 = OpLabel
+               OpStore %105 %99
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_5;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+  spvtools::ValidatorOptions validator_options;
+  TransformationContext transformation_context(&fact_manager,
+                                               validator_options);
+
+  TransformationOutlineFunction transformation(
+      /*entry_block*/ 80,
+      /*exit_block*/ 80,
+      /*new_function_struct_return_type_id*/ 300,
+      /*new_function_type_id*/ 301,
+      /*new_function_id*/ 302,
+      /*new_function_region_entry_block*/ 304,
+      /*new_caller_result_id*/ 305,
+      /*new_callee_result_id*/ 306,
+      /*input_id_to_fresh_id*/ {{104, 307}},
+      /*output_id_to_fresh_id*/ {{105, 308}});
+
+  ASSERT_FALSE(
+      transformation.IsApplicable(context.get(), transformation_context));
+}
+
+TEST(TransformationOutlineFunctionTest,
+     ExitBlockHeadsLoopButContinueConstructIsInRegion) {
+  // This checks that it is not possible outline a region that ends in a loop
+  // head if the continue target for the loop is inside the region.
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+         %15 = OpTypeInt 32 1
+         %35 = OpTypeBool
+         %39 = OpConstant %15 1
+         %40 = OpConstantTrue %35
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+               OpBranch %22
+         %22 = OpLabel
+               OpBranch %23
+         %23 = OpLabel
+         %24 = OpPhi %15 %39 %22 %39 %25
+               OpLoopMerge %26 %25 None
+               OpBranchConditional %40 %25 %26
+         %25 = OpLabel
+               OpBranch %23
+         %26 = OpLabel
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_5;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+  spvtools::ValidatorOptions validator_options;
+  TransformationContext transformation_context(&fact_manager,
+                                               validator_options);
+
+  TransformationOutlineFunction transformation(
+      /*entry_block*/ 22,
+      /*exit_block*/ 23,
+      /*new_function_struct_return_type_id*/ 200,
+      /*new_function_type_id*/ 201,
+      /*new_function_id*/ 202,
+      /*new_function_region_entry_block*/ 203,
+      /*new_caller_result_id*/ 204,
+      /*new_callee_result_id*/ 205,
+      /*input_id_to_fresh_id*/ {},
+      /*output_id_to_fresh_id*/ {});
+
+  ASSERT_FALSE(
+      transformation.IsApplicable(context.get(), transformation_context));
+  transformation.Apply(context.get(), &transformation_context);
+}
+
 TEST(TransformationOutlineFunctionTest, Miscellaneous1) {
   // This tests outlining of some non-trivial code.
 

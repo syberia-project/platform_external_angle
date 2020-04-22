@@ -665,7 +665,18 @@ bool ValidCap(const Context *context, GLenum cap, bool queryOnly)
         case GL_ROBUST_RESOURCE_INITIALIZATION_ANGLE:
             return queryOnly && context->getExtensions().robustResourceInitialization;
 
-        // GLES1 emulation: GLES1-specific caps
+        case GL_TEXTURE_RECTANGLE_ANGLE:
+            return context->getExtensions().webglCompatibility;
+    }
+
+    // GLES1 emulation: GLES1-specific caps after this point
+    if (context->getClientVersion().major != 1)
+    {
+        return false;
+    }
+
+    switch (cap)
+    {
         case GL_ALPHA_TEST:
         case GL_VERTEX_ARRAY:
         case GL_NORMAL_ARRAY:
@@ -704,8 +715,6 @@ bool ValidCap(const Context *context, GLenum cap, bool queryOnly)
         case GL_POINT_SPRITE_OES:
             return context->getClientVersion() < Version(2, 0) &&
                    context->getExtensions().pointSpriteOES;
-        case GL_TEXTURE_RECTANGLE_ANGLE:
-            return context->getExtensions().webglCompatibility;
         default:
             return false;
     }
@@ -2458,6 +2467,14 @@ static bool ValidateObjectIdentifierAndName(const Context *context, GLenum ident
             if (context->getFramebuffer({name}) == nullptr)
             {
                 context->validationError(GL_INVALID_VALUE, kInvalidFramebufferName);
+                return false;
+            }
+            return true;
+
+        case GL_PROGRAM_PIPELINE:
+            if (context->getProgramPipeline({name}) == nullptr)
+            {
+                context->validationError(GL_INVALID_VALUE, kInvalidProgramPipelineName);
                 return false;
             }
             return true;
