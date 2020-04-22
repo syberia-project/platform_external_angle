@@ -43,14 +43,6 @@ constexpr size_t kReadPixelsBufferAlignment = 32 * 3;
 // in case of a bug.
 constexpr VkClearValue kUninitializedClearValue = {{{0.95, 0.05, 0.95, 0.95}}};
 
-const gl::InternalFormat &GetReadAttachmentInfo(const gl::Context *context,
-                                                RenderTargetVk *renderTarget)
-{
-    GLenum implFormat =
-        renderTarget->getImageFormat().actualImageFormat().fboImplementationInternalFormat;
-    return gl::GetSizedInternalFormatInfo(implFormat);
-}
-
 bool HasSrcBlitFeature(RendererVk *renderer, RenderTargetVk *srcRenderTarget)
 {
     const VkFormat srcFormat = srcRenderTarget->getImageFormat().vkImageFormat;
@@ -420,21 +412,14 @@ angle::Result FramebufferVk::clearBufferfi(const gl::Context *context,
                      clearValue.depthStencil);
 }
 
-GLenum FramebufferVk::getImplementationColorReadFormat(const gl::Context *context) const
+const gl::InternalFormat &FramebufferVk::getImplementationColorReadFormat(
+    const gl::Context *context) const
 {
-    return GetReadAttachmentInfo(context, mRenderTargetCache.getColorRead(mState)).format;
-}
-
-GLenum FramebufferVk::getImplementationColorReadType(const gl::Context *context) const
-{
-    GLenum readType = GetReadAttachmentInfo(context, mRenderTargetCache.getColorRead(mState)).type;
-    if (context->getClientMajorVersion() < 3 && readType == GL_HALF_FLOAT)
-    {
-        // GL_HALF_FLOAT was not introduced until GLES 3.0, and has a different value from
-        // GL_HALF_FLOAT_OES
-        readType = GL_HALF_FLOAT_OES;
-    }
-    return readType;
+    ContextVk *contextVk       = vk::GetImpl(context);
+    GLenum sizedFormat         = mState.getReadAttachment()->getFormat().info->sizedInternalFormat;
+    const vk::Format &vkFormat = contextVk->getRenderer()->getFormat(sizedFormat);
+    GLenum implFormat          = vkFormat.actualImageFormat().fboImplementationInternalFormat;
+    return gl::GetSizedInternalFormatInfo(implFormat);
 }
 
 angle::Result FramebufferVk::readPixels(const gl::Context *context,
@@ -1057,6 +1042,7 @@ void FramebufferVk::updateDepthStencilAttachmentSerial(ContextVk *contextVk)
 }
 
 angle::Result FramebufferVk::syncState(const gl::Context *context,
+                                       GLenum binding,
                                        const gl::Framebuffer::DirtyBits &dirtyBits)
 {
     ContextVk *contextVk = vk::GetImpl(context);
@@ -1371,20 +1357,34 @@ angle::Result FramebufferVk::startNewRenderPass(ContextVk *contextVk,
 
         ANGLE_TRY(colorRenderTarget->onColorDraw(contextVk));
 
-        renderPassAttachmentOps.initWithLoadStore(attachmentClearValues.size(),
-                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        renderPassAttachmentOps.initWithStore(
+            attachmentClearValues.size(), VK_ATTACHMENT_LOAD_OP_LOAD,
+            vk::ImageLayout::ColorAttachment, vk::ImageLayout::ColorAttachment);
         attachmentClearValues.emplace_back(kUninitializedClearValue);
     }
 
     RenderTargetVk *depthStencilRenderTarget = getDepthStencilRenderTarget();
     if (depthStencilRenderTarget)
     {
+        VkAttachmentLoadOp loadOp;
+        if (depthStencilRenderTarget->hasDefinedContent())
+        {
+            loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        }
+        else
+        {
+            loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        }
+        renderPassAttachmentOps.initWithStore(attachmentClearValues.size(), loadOp,
+                                              vk::ImageLayout::DepthStencilAttachment,
+                                              vk::ImageLayout::DepthStencilAttachment);
+
+        // This must be called after hasDefinedContent() since it will set content to valid. We are
+        // tracking content valid very loosely here that as long as it is attached, it assumes will
+        // have valid content. The only time it has undefined content is between swap and
+        // startNewRenderPass
         ANGLE_TRY(depthStencilRenderTarget->onDepthStencilDraw(contextVk));
 
-        renderPassAttachmentOps.initWithLoadStore(attachmentClearValues.size(),
-                                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         attachmentClearValues.emplace_back(kUninitializedClearValue);
     }
 

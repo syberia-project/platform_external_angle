@@ -277,6 +277,9 @@ struct Extensions
     // TODO: Don't advertise this extension in ES3
     bool sRGB = false;
 
+    // GL_EXT_texture_sRGB_R8
+    bool sRGBR8EXT = false;
+
     // GL_ANGLE_depth_texture
     bool depthTextureANGLE = false;
 
@@ -1045,6 +1048,9 @@ struct DisplayExtensions
 
     // EGL_ANDROID_framebuffer_target
     bool framebufferTargetANDROID = false;
+
+    // EGL_EXT_image_gl_colorspace
+    bool imageGlColorspace = false;
 };
 
 struct DeviceExtensions

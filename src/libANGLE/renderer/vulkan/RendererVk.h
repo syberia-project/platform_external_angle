@@ -28,6 +28,7 @@
 #include "libANGLE/renderer/vulkan/vk_format_utils.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 #include "libANGLE/renderer/vulkan/vk_internal_shaders_autogen.h"
+#include "libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.h"
 
 namespace egl
 {
@@ -100,6 +101,8 @@ class RendererVk : angle::NonCopyable
     }
     VkDevice getDevice() const { return mDevice; }
 
+    const VmaAllocator &getAllocator() const { return mAllocator; }
+
     angle::Result selectPresentQueueForSurface(DisplayVk *displayVk,
                                                VkSurfaceKHR surface,
                                                uint32_t *presentQueueOut);
@@ -117,7 +120,6 @@ class RendererVk : angle::NonCopyable
 
     const vk::MemoryProperties &getMemoryProperties() const { return mMemoryProperties; }
 
-    // TODO(jmadill): We could pass angle::FormatID here.
     const vk::Format &getFormat(GLenum internalFormat) const
     {
         return mFormatTable[internalFormat];
@@ -356,6 +358,8 @@ class RendererVk : angle::NonCopyable
 
     // track whether we initialized (or released) glslang
     bool mGlslangInitialized;
+
+    VmaAllocator mAllocator;
 };
 
 }  // namespace rx

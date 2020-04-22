@@ -187,35 +187,41 @@ class RenderPassCommandBuffer final : public CommandBufferHelper
 
     void clearRenderPassColorAttachment(size_t attachmentIndex, const VkClearColorValue &clearValue)
     {
-        mAttachmentOps[attachmentIndex].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        mClearValues[attachmentIndex].color    = clearValue;
+        SetBitField(mAttachmentOps[attachmentIndex].loadOp, VK_ATTACHMENT_LOAD_OP_CLEAR);
+        mClearValues[attachmentIndex].color = clearValue;
     }
 
     void clearRenderPassDepthAttachment(size_t attachmentIndex, float depth)
     {
-        mAttachmentOps[attachmentIndex].loadOp           = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        mClearValues[attachmentIndex].depthStencil.depth = depth;
+        SetBitField(mAttachmentOps[attachmentIndex].loadOp, VK_ATTACHMENT_LOAD_OP_CLEAR);
+        SetBitField(mClearValues[attachmentIndex].depthStencil.depth, depth);
     }
 
     void clearRenderPassStencilAttachment(size_t attachmentIndex, uint32_t stencil)
     {
-        mAttachmentOps[attachmentIndex].stencilLoadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        mClearValues[attachmentIndex].depthStencil.stencil = stencil;
+        SetBitField(mAttachmentOps[attachmentIndex].stencilLoadOp, VK_ATTACHMENT_LOAD_OP_CLEAR);
+        SetBitField(mClearValues[attachmentIndex].depthStencil.stencil, stencil);
     }
 
     void invalidateRenderPassColorAttachment(size_t attachmentIndex)
     {
-        mAttachmentOps[attachmentIndex].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        SetBitField(mAttachmentOps[attachmentIndex].storeOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
     }
 
     void invalidateRenderPassDepthAttachment(size_t attachmentIndex)
     {
-        mAttachmentOps[attachmentIndex].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        SetBitField(mAttachmentOps[attachmentIndex].storeOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
     }
 
     void invalidateRenderPassStencilAttachment(size_t attachmentIndex)
     {
-        mAttachmentOps[attachmentIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        SetBitField(mAttachmentOps[attachmentIndex].stencilStoreOp,
+                    VK_ATTACHMENT_STORE_OP_DONT_CARE);
+    }
+
+    void updateRenderPassAttachmentFinalLayout(size_t attachmentIndex, vk::ImageLayout finalLayout)
+    {
+        SetBitField(mAttachmentOps[attachmentIndex].finalLayout, finalLayout);
     }
 
     const gl::Rectangle &getRenderArea() const { return mRenderArea; }
@@ -226,12 +232,17 @@ class RenderPassCommandBuffer final : public CommandBufferHelper
     bool started() const { return mRenderPassStarted; }
     void reset();
 
+    void resumeTransformFeedbackIfStarted();
+    void pauseTransformFeedbackIfStarted();
+
     uint32_t getAndResetCounter()
     {
         uint32_t count = mCounter;
         mCounter       = 0;
         return count;
     }
+
+    VkFramebuffer getFramebufferHandle() const { return mFramebuffer.getHandle(); }
 
   private:
     void addRenderPassCommandDiagnostics(ContextVk *contextVk);
@@ -372,6 +383,9 @@ class ContextVk : public ContextImpl, public vk::Context
     bool isRotatedAspectRatioForDrawFBO() const;
     bool isRotatedAspectRatioForReadFBO() const;
 
+    void invalidateProgramBindingHelper(const gl::State &glState);
+    angle::Result invalidateProgramExecutableHelper(const gl::Context *context);
+
     // State sync with dirty bits.
     angle::Result syncState(const gl::Context *context,
                             const gl::State::DirtyBits &dirtyBits,
@@ -490,6 +504,8 @@ class ContextVk : public ContextImpl, public vk::Context
     // for the next application draw/dispatch call.
     void invalidateGraphicsDescriptorSet(uint32_t usedDescriptorSet);
     void invalidateComputeDescriptorSet(uint32_t usedDescriptorSet);
+
+    void optimizeRenderPassForPresent(VkFramebuffer framebufferHandle);
 
     vk::DynamicQueryPool *getQueryPool(gl::QueryType queryType);
 
@@ -659,10 +675,15 @@ class ContextVk : public ContextImpl, public vk::Context
     size_t getVkIndexTypeSize(gl::DrawElementsType glIndexType) const;
     bool shouldConvertUint8VkIndexType(gl::DrawElementsType glIndexType) const;
 
+    ANGLE_INLINE bool isBresenhamEmulationEnabled(const gl::PrimitiveMode mode)
+    {
+        return getFeatures().basicGLLineRasterization.enabled && gl::IsLineMode(mode);
+    }
+
     const ProgramExecutableVk *getExecutable() const { return mExecutable; }
     ProgramExecutableVk *getExecutable() { return mExecutable; }
 
-    ProgramVk *getShaderProgram(const gl::State &glState, gl::ShaderType shaderType) const;
+    bool isRobustResourceInitEnabled() const override;
 
     // occlusion query
     void beginOcclusionQuery(QueryVk *queryVk);
@@ -682,6 +703,7 @@ class ContextVk : public ContextImpl, public vk::Context
         DIRTY_BIT_SHADER_RESOURCES,  // excluding textures, which are handled separately.
         DIRTY_BIT_TRANSFORM_FEEDBACK_BUFFERS,
         DIRTY_BIT_TRANSFORM_FEEDBACK_STATE,
+        DIRTY_BIT_TRANSFORM_FEEDBACK_RESUME,
         DIRTY_BIT_DESCRIPTOR_SETS,
         DIRTY_BIT_MAX,
     };
@@ -703,7 +725,7 @@ class ContextVk : public ContextImpl, public vk::Context
         ~DriverUniformsDescriptorSet();
 
         void init(RendererVk *rendererVk);
-        void destroy(VkDevice device);
+        void destroy(RendererVk *rendererVk);
     };
 
     enum class PipelineType
@@ -821,7 +843,10 @@ class ContextVk : public ContextImpl, public vk::Context
 
     ANGLE_INLINE void invalidateCurrentGraphicsPipeline()
     {
-        mGraphicsDirtyBits.set(DIRTY_BIT_PIPELINE);
+        mGraphicsDirtyBits |= mNewGraphicsPipelineDirtyBits;
+        // The draw mode may have changed, toggling whether line rasterization is
+        // enabled or not, which means we need to recreate the graphics pipeline.
+        mCurrentGraphicsPipeline = nullptr;
     }
     ANGLE_INLINE void invalidateCurrentComputePipeline()
     {
@@ -860,6 +885,8 @@ class ContextVk : public ContextImpl, public vk::Context
         vk::CommandBuffer *commandBuffer);
     angle::Result handleDirtyGraphicsTransformFeedbackState(const gl::Context *context,
                                                             vk::CommandBuffer *commandBuffer);
+    angle::Result handleDirtyGraphicsTransformFeedbackResume(const gl::Context *context,
+                                                             vk::CommandBuffer *commandBuffer);
 
     // Handlers for compute pipeline dirty bits.
     angle::Result handleDirtyComputePipeline(const gl::Context *context,
@@ -874,11 +901,8 @@ class ContextVk : public ContextImpl, public vk::Context
                                                     vk::CommandBuffer *commandBuffer);
 
     // Common parts of the common dirty bit handlers.
-    angle::Result handleDirtyTexturesImpl(const gl::Context *context,
-                                          vk::CommandBuffer *commandBuffer,
-                                          CommandBufferHelper *commandBufferHelper);
+    angle::Result handleDirtyTexturesImpl(CommandBufferHelper *commandBufferHelper);
     angle::Result handleDirtyShaderResourcesImpl(const gl::Context *context,
-                                                 vk::CommandBuffer *commandBuffer,
                                                  CommandBufferHelper *commandBufferHelper);
     void handleDirtyDriverUniformsBindingImpl(vk::CommandBuffer *commandBuffer,
                                               VkPipelineBindPoint bindPoint,
@@ -956,11 +980,13 @@ class ContextVk : public ContextImpl, public vk::Context
     DirtyBits mIndexedDirtyBitsMask;
     DirtyBits mNewGraphicsCommandBufferDirtyBits;
     DirtyBits mNewComputeCommandBufferDirtyBits;
+    DirtyBits mNewGraphicsPipelineDirtyBits;
 
     // Cached back-end objects.
     VertexArrayVk *mVertexArray;
     FramebufferVk *mDrawFramebuffer;
     ProgramVk *mProgram;
+    ProgramPipelineVk *mProgramPipeline;
     ProgramExecutableVk *mExecutable;
 
     // occlusion query

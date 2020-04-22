@@ -69,8 +69,8 @@ class FramebufferVk : public FramebufferImpl
                                 GLfloat depth,
                                 GLint stencil) override;
 
-    GLenum getImplementationColorReadFormat(const gl::Context *context) const override;
-    GLenum getImplementationColorReadType(const gl::Context *context) const override;
+    const gl::InternalFormat &getImplementationColorReadFormat(
+        const gl::Context *context) const override;
     angle::Result readPixels(const gl::Context *context,
                              const gl::Rectangle &area,
                              GLenum format,
@@ -86,6 +86,7 @@ class FramebufferVk : public FramebufferImpl
     bool checkStatus(const gl::Context *context) const override;
 
     angle::Result syncState(const gl::Context *context,
+                            GLenum binding,
                             const gl::Framebuffer::DirtyBits &dirtyBits) override;
 
     angle::Result getSamplePosition(const gl::Context *context,
@@ -118,6 +119,12 @@ class FramebufferVk : public FramebufferImpl
 
     const vk::RenderPassDesc &getRenderPassDesc() const { return mRenderPassDesc; }
     const vk::FramebufferDesc &getFramebufferDesc() const { return mCurrentFramebufferDesc; }
+    // We only support depth/stencil packed format and depthstencil attachment always follow all
+    // color attachments
+    size_t getDepthStencilAttachmentIndexVk() const
+    {
+        return getState().getEnabledDrawBuffers().count();
+    }
 
   private:
     FramebufferVk(RendererVk *renderer,

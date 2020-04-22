@@ -1657,6 +1657,14 @@ void InitializeFeatures(const FunctionsGL *functions, angle::FeaturesGL *feature
 
     ANGLE_FEATURE_CONDITION(features, unfoldShortCircuits, IsApple());
 
+    ANGLE_FEATURE_CONDITION(features, emulatePrimitiveRestartFixedIndex,
+                            functions->standard == STANDARD_GL_DESKTOP &&
+                                functions->isAtLeastGL(gl::Version(3, 1)) &&
+                                !functions->isAtLeastGL(gl::Version(4, 3)));
+    ANGLE_FEATURE_CONDITION(
+        features, setPrimitiveRestartFixedIndexForDrawArrays,
+        features->emulatePrimitiveRestartFixedIndex.enabled && IsApple() && isIntel);
+
     ANGLE_FEATURE_CONDITION(features, removeDynamicIndexingOfSwizzledVector,
                             IsApple() || IsAndroid() || IsWindows());
 
@@ -1965,9 +1973,11 @@ angle::Result CheckError(const gl::Context *context,
         ERR() << "GL call " << call << " generated error " << gl::FmtHex(error) << " in " << file
               << ", " << function << ":" << line << ". ";
 
-        // Check that only one GL error was generated, ClearErrors should have been called first
+        // Check that only one GL error was generated, ClearErrors should have been called first.
+        // Skip GL_CONTEXT_LOST errors, they will be generated continuously and result in an
+        // infinite loop.
         GLenum nextError = functions->getError();
-        while (nextError != GL_NO_ERROR)
+        while (nextError != GL_NO_ERROR && nextError != GL_CONTEXT_LOST)
         {
             ERR() << "Additional GL error " << gl::FmtHex(nextError) << " generated.";
             nextError = functions->getError();
