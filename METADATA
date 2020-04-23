@@ -19,6 +19,7 @@ third_party: {
     value: "https://chromium.googlesource.com/angle/angle"
   }
   version: "1.0"
+  license_type: RESTRICTED
   last_upgrade_date {
     year: 2020
     month: 2
