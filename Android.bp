@@ -2859,10 +2859,24 @@ android_app {
     ],
     required: [
         "privapp_whitelist_com.android.angle",
+        "hiddenapi-whitelist-com.android.angle"
     ],
     name: "ANGLE",
     defaults: [
         "ANGLE_java_defaults",
     ],
     manifest: "src/android_system_settings/src/com/android/angle/AndroidManifest.xml",
+}
+prebuilt_etc {
+    name: "privapp_whitelist_com.android.angle",
+    sub_dir: "permissions",
+    src: "prebuilt/etc/permissions/com.android.angle.xml",
+    filename_from_src: true,
+}
+
+prebuilt_etc {
+    name: "hiddenapi-whitelist-com.android.angle",
+    sub_dir: "sysconfig",
+    src: "prebuilt/etc/sysconfig/hiddenapi-whitelist-com.android.angle.xml",
+    filename_from_src: true,
 }
