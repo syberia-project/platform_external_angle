@@ -2865,6 +2865,9 @@ android_app {
     defaults: [
         "ANGLE_java_defaults",
     ],
+    asset_dirs: [
+        "src/android_system_settings/assets",
+    ],
     manifest: "src/android_system_settings/src/com/android/angle/AndroidManifest.xml",
 }
 prebuilt_etc {
