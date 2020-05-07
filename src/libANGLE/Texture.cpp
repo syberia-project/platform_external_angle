@@ -1621,7 +1621,8 @@ angle::Result Texture::setEGLImageTarget(Context *context,
                                          egl::Image *imageTarget)
 {
     ASSERT(type == mState.mType);
-    ASSERT(type == TextureType::_2D || type == TextureType::External);
+    ASSERT(type == TextureType::_2D || type == TextureType::External ||
+           type == TextureType::_2DArray);
 
     // Release from previous calls to eglBindTexImage, to avoid calling the Impl after
     ANGLE_TRY(releaseTexImageInternal(context));
@@ -1984,8 +1985,13 @@ angle::Result Texture::getTexImage(const Context *context,
                                    GLint level,
                                    GLenum format,
                                    GLenum type,
-                                   void *pixels) const
+                                   void *pixels)
 {
+    if (hasAnyDirtyBit())
+    {
+        ANGLE_TRY(syncState(context));
+    }
+
     return mTexture->getTexImage(context, packState, packBuffer, target, level, format, type,
                                  pixels);
 }

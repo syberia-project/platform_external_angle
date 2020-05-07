@@ -388,6 +388,7 @@ void State::initialize(Context *context)
     const Version &clientVersion       = context->getClientVersion();
 
     mMaxDrawBuffers               = static_cast<GLuint>(caps.maxDrawBuffers);
+    mBlendStateExt                = BlendStateExt(mMaxDrawBuffers);
     mMaxCombinedTextureImageUnits = static_cast<GLuint>(caps.maxCombinedTextureImageUnits);
 
     setColorClearValue(0.0f, 0.0f, 0.0f, 0.0f);
@@ -581,6 +582,8 @@ void State::reset(const Context *context)
         UpdateIndexedBufferBinding(context, &buf, nullptr, BufferBinding::ShaderStorage, 0, 0);
     }
 
+    mClipDistancesEnabled.reset();
+
     setAllDirtyBits();
 }
 
@@ -704,6 +707,8 @@ void State::setColorMask(bool red, bool green, bool blue, bool alpha)
         blendState.colorMaskBlue  = blue;
         blendState.colorMaskAlpha = alpha;
     }
+
+    mBlendStateExt.setColorMask(red, green, blue, alpha);
     mDirtyBits.set(DIRTY_BIT_COLOR_MASK);
 }
 
@@ -714,6 +719,8 @@ void State::setColorMaskIndexed(bool red, bool green, bool blue, bool alpha, GLu
     mBlendStateArray[index].colorMaskGreen = green;
     mBlendStateArray[index].colorMaskBlue  = blue;
     mBlendStateArray[index].colorMaskAlpha = alpha;
+
+    mBlendStateExt.setColorMaskIndexed(index, red, green, blue, alpha);
     mDirtyBits.set(DIRTY_BIT_COLOR_MASK);
 }
 
@@ -812,7 +819,7 @@ void State::setBlend(bool enabled)
     {
         blendState.blend = enabled;
     }
-    enabled ? mBlendEnabledDrawBuffers.set() : mBlendEnabledDrawBuffers.reset();
+    mBlendStateExt.setEnabled(enabled);
     mDirtyBits.set(DIRTY_BIT_BLEND_ENABLED);
 }
 
@@ -820,7 +827,7 @@ void State::setBlendIndexed(bool enabled, GLuint index)
 {
     ASSERT(index < mBlendStateArray.size());
     mBlendStateArray[index].blend = enabled;
-    mBlendEnabledDrawBuffers.set(index, enabled);
+    mBlendStateExt.setEnabledIndexed(index, enabled);
     mDirtyBits.set(DIRTY_BIT_BLEND_ENABLED);
 }
 
@@ -854,6 +861,8 @@ void State::setBlendFactors(GLenum sourceRGB, GLenum destRGB, GLenum sourceAlpha
             mBlendFuncConstantAlphaDrawBuffers.reset();
         }
     }
+
+    mBlendStateExt.setFactors(sourceRGB, destRGB, sourceAlpha, destAlpha);
     mDirtyBits.set(DIRTY_BIT_BLEND_FUNCS);
 }
 
@@ -874,6 +883,8 @@ void State::setBlendFactorsIndexed(GLenum sourceRGB,
         mBlendFuncConstantColorDrawBuffers.set(index, hasConstantColor(sourceRGB, destRGB));
         mBlendFuncConstantAlphaDrawBuffers.set(index, hasConstantAlpha(sourceRGB, destRGB));
     }
+
+    mBlendStateExt.setFactorsIndexed(index, sourceRGB, destRGB, sourceAlpha, destAlpha);
     mDirtyBits.set(DIRTY_BIT_BLEND_FUNCS);
 }
 
@@ -907,6 +918,8 @@ void State::setBlendEquation(GLenum rgbEquation, GLenum alphaEquation)
         blendState.blendEquationRGB   = rgbEquation;
         blendState.blendEquationAlpha = alphaEquation;
     }
+
+    mBlendStateExt.setEquations(rgbEquation, alphaEquation);
     mDirtyBits.set(DIRTY_BIT_BLEND_EQUATIONS);
 }
 
@@ -915,6 +928,8 @@ void State::setBlendEquationIndexed(GLenum rgbEquation, GLenum alphaEquation, GL
     ASSERT(index < mBlendStateArray.size());
     mBlendStateArray[index].blendEquationRGB   = rgbEquation;
     mBlendStateArray[index].blendEquationAlpha = alphaEquation;
+
+    mBlendStateExt.setEquationsIndexed(index, rgbEquation, alphaEquation);
     mDirtyBits.set(DIRTY_BIT_BLEND_EQUATIONS);
 }
 
@@ -1094,6 +1109,20 @@ void State::setPrimitiveRestart(bool enabled)
     mDirtyBits.set(DIRTY_BIT_PRIMITIVE_RESTART_ENABLED);
 }
 
+void State::setClipDistanceEnable(int idx, bool enable)
+{
+    if (enable)
+    {
+        mClipDistancesEnabled.set(idx);
+    }
+    else
+    {
+        mClipDistancesEnabled.reset(idx);
+    }
+
+    mDirtyBits.set(DIRTY_BIT_EXTENDED);
+}
+
 void State::setEnableFeature(GLenum feature, bool enabled)
 {
     switch (feature)
@@ -1152,12 +1181,28 @@ void State::setEnableFeature(GLenum feature, bool enabled)
         case GL_TEXTURE_RECTANGLE_ANGLE:
             mTextureRectangleEnabled = enabled;
             return;
+        // GL_APPLE_clip_distance/GL_EXT_clip_cull_distance
+        case GL_CLIP_DISTANCE0_EXT:
+        case GL_CLIP_DISTANCE1_EXT:
+        case GL_CLIP_DISTANCE2_EXT:
+        case GL_CLIP_DISTANCE3_EXT:
+        case GL_CLIP_DISTANCE4_EXT:
+        case GL_CLIP_DISTANCE5_EXT:
+        case GL_CLIP_DISTANCE6_EXT:
+        case GL_CLIP_DISTANCE7_EXT:
+            // NOTE(hqle): These enums are conflicted with GLES1's enums, need
+            // to do additional check here:
+            if (mClientVersion.major >= 2)
+            {
+                setClipDistanceEnable(feature - GL_CLIP_DISTANCE0_EXT, enabled);
+                return;
+            }
     }
 
     ASSERT(mClientVersion.major == 1);
 
-    // GLES1 emulation. Need to separate from main switch due to some enums that
-    // could be conflicted between GLES1 & GLES2+
+    // GLES1 emulation. Need to separate from main switch due to conflict enum between
+    // GL_CLIP_DISTANCE0_EXT & GL_CLIP_PLANE0
     switch (feature)
     {
         case GL_ALPHA_TEST:
@@ -1279,6 +1324,23 @@ bool State::getEnableFeature(GLenum feature) const
             return mProgramBinaryCacheEnabled;
         case GL_TEXTURE_RECTANGLE_ANGLE:
             return mTextureRectangleEnabled;
+
+        // GL_APPLE_clip_distance/GL_EXT_clip_cull_distance
+        case GL_CLIP_DISTANCE0_EXT:
+        case GL_CLIP_DISTANCE1_EXT:
+        case GL_CLIP_DISTANCE2_EXT:
+        case GL_CLIP_DISTANCE3_EXT:
+        case GL_CLIP_DISTANCE4_EXT:
+        case GL_CLIP_DISTANCE5_EXT:
+        case GL_CLIP_DISTANCE6_EXT:
+        case GL_CLIP_DISTANCE7_EXT:
+            if (mClientVersion.major >= 2)
+            {
+                // If GLES version is 1, the GL_CLIP_DISTANCE0_EXT enum will be used as
+                // GL_CLIP_PLANE0 instead.
+                return mClipDistancesEnabled.test(feature - GL_CLIP_DISTANCE0_EXT);
+            }
+            break;
     }
 
     ASSERT(mClientVersion.major == 1);
@@ -1363,13 +1425,13 @@ void State::setLineWidth(GLfloat width)
 void State::setGenerateMipmapHint(GLenum hint)
 {
     mGenerateMipmapHint = hint;
-    mDirtyBits.set(DIRTY_BIT_GENERATE_MIPMAP_HINT);
+    mDirtyBits.set(DIRTY_BIT_EXTENDED);
 }
 
 void State::setFragmentShaderDerivativeHint(GLenum hint)
 {
     mFragmentShaderDerivativeHint = hint;
-    mDirtyBits.set(DIRTY_BIT_SHADER_DERIVATIVE_HINT);
+    mDirtyBits.set(DIRTY_BIT_EXTENDED);
     // TODO: Propagate the hint to shader translator so we can write
     // ddx, ddx_coarse, or ddx_fine depending on the hint.
     // Ignore for now. It is valid for implementations to ignore hint.
@@ -1768,7 +1830,6 @@ angle::Result State::useProgramStages(const Context *context,
 {
     programPipeline->useProgramStages(context, stages, shaderProgram);
     ANGLE_TRY(onProgramPipelineExecutableChange(context, programPipeline));
-    mDirtyObjects.set(DIRTY_OBJECT_PROGRAM_PIPELINE);
 
     return angle::Result::Continue;
 }
@@ -3224,7 +3285,7 @@ angle::Result State::onProgramPipelineExecutableChange(const Context *context,
 
     if (programPipeline->hasAnyDirtyBit())
     {
-        mDirtyObjects.set(DIRTY_OBJECT_PROGRAM);
+        mDirtyObjects.set(DIRTY_OBJECT_PROGRAM_PIPELINE);
     }
 
     // Set any bound textures.

@@ -12,6 +12,8 @@
 
 #include "common/bitset_utils.h"
 #include "common/debug.h"
+#include "common/system_utils.h"
+#include "common/vulkan/vulkan_icd.h"
 
 namespace angle
 {
@@ -138,11 +140,18 @@ VulkanExternalHelper::~VulkanExternalHelper()
     }
 }
 
-void VulkanExternalHelper::initialize()
+void VulkanExternalHelper::initialize(bool useSwiftshader)
 {
+    vk::ICD icd = useSwiftshader ? vk::ICD::SwiftShader : vk::ICD::Default;
+
+    vk::ScopedVkLoaderEnvironment scopedEnvironment(true /* enableValidationLayers */, icd);
+
     ASSERT(mInstance == VK_NULL_HANDLE);
-    VkResult result = volkInitialize();
+    VkResult result = VK_SUCCESS;
+#if ANGLE_SHARED_LIBVULKAN
+    result = volkInitialize();
     ASSERT(result == VK_SUCCESS);
+#endif  // ANGLE_SHARED_LIBVULKAN
     std::vector<VkExtensionProperties> instanceExtensionProperties =
         EnumerateInstanceExtensionProperties(nullptr);
 
@@ -188,12 +197,16 @@ void VulkanExternalHelper::initialize()
     result = vkCreateInstance(&instanceCreateInfo, nullptr, &mInstance);
     ASSERT(result == VK_SUCCESS);
     ASSERT(mInstance != VK_NULL_HANDLE);
+#if ANGLE_SHARED_LIBVULKAN
     volkLoadInstance(mInstance);
+#endif  // ANGLE_SHARED_LIBVULKAN
 
     std::vector<VkPhysicalDevice> physicalDevices = EnumeratePhysicalDevices(mInstance);
+
     ASSERT(physicalDevices.size() > 0);
 
-    mPhysicalDevice = physicalDevices[0];
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    ChoosePhysicalDevice(physicalDevices, icd, &mPhysicalDevice, &physicalDeviceProperties);
 
     vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &mMemoryProperties);
 
@@ -261,7 +274,9 @@ void VulkanExternalHelper::initialize()
     result = vkCreateDevice(mPhysicalDevice, &deviceCreateInfo, nullptr, &mDevice);
     ASSERT(result == VK_SUCCESS);
     ASSERT(mDevice != VK_NULL_HANDLE);
+#if ANGLE_SHARED_LIBVULKAN
     volkLoadDevice(mDevice);
+#endif  // ANGLE_SHARED_LIBVULKAN
 
     constexpr uint32_t kGraphicsQueueIndex = 0;
     static_assert(kGraphicsQueueIndex < kGraphicsQueueCount, "must be in range");

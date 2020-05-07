@@ -11,9 +11,8 @@
 #ifndef LIBANGLE_RENDERER_VULKAN_VK_WRAPPER_H_
 #define LIBANGLE_RENDERER_VULKAN_VK_WRAPPER_H_
 
-#include "volk.h"
-
 #include "libANGLE/renderer/renderer_utils.h"
+#include "libANGLE/renderer/vulkan/vk_headers.h"
 #include "libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.h"
 
 namespace rx
@@ -56,7 +55,7 @@ enum class HandleType
 {
     Invalid,
     CommandBuffer,
-    ANGLE_HANDLE_TYPES_X(ANGLE_COMMA_SEP_FUNC)
+    ANGLE_HANDLE_TYPES_X(ANGLE_COMMA_SEP_FUNC) EnumCount
 };
 
 #undef ANGLE_COMMA_SEP_FUNC
@@ -427,6 +426,8 @@ class Semaphore final : public WrappedObject<Semaphore, VkSemaphore>
     void destroy(VkDevice device);
 
     VkResult init(VkDevice device);
+    VkResult init(VkDevice device, const VkSemaphoreCreateInfo &createInfo);
+    VkResult importFd(VkDevice device, const VkImportSemaphoreFdInfoKHR &importFdInfo) const;
 };
 
 class Framebuffer final : public WrappedObject<Framebuffer, VkFramebuffer>
@@ -600,6 +601,8 @@ class Fence final : public WrappedObject<Fence, VkFence>
     VkResult reset(VkDevice device);
     VkResult getStatus(VkDevice device) const;
     VkResult wait(VkDevice device, uint64_t timeout) const;
+    VkResult importFd(VkDevice device, const VkImportFenceFdInfoKHR &importFenceFdInfo) const;
+    VkResult exportFd(VkDevice device, const VkFenceGetFdInfoKHR &fenceGetFdInfo, int *outFd) const;
 };
 
 class QueryPool final : public WrappedObject<QueryPool, VkQueryPool>
@@ -1155,8 +1158,16 @@ ANGLE_INLINE void CommandBuffer::bindTransformFeedbackBuffersEXT(uint32_t firstB
 ANGLE_INLINE void CommandBuffer::beginDebugUtilsLabelEXT(const VkDebugUtilsLabelEXT &labelInfo)
 {
     ASSERT(valid());
-    ASSERT(vkCmdBeginDebugUtilsLabelEXT);
-    vkCmdBeginDebugUtilsLabelEXT(mHandle, &labelInfo);
+    {
+#if !defined(ANGLE_SHARED_LIBVULKAN)
+        // When the vulkan-loader is statically linked, we need to use the extension
+        // functions defined in ANGLE's rx namespace. When it's dynamically linked
+        // with volk, this will default to the function definitions with no namespace
+        using rx::vkCmdBeginDebugUtilsLabelEXT;
+#endif  // !defined(ANGLE_SHARED_LIBVULKAN)
+        ASSERT(vkCmdBeginDebugUtilsLabelEXT);
+        vkCmdBeginDebugUtilsLabelEXT(mHandle, &labelInfo);
+    }
 }
 
 ANGLE_INLINE void CommandBuffer::endDebugUtilsLabelEXT()
@@ -1261,6 +1272,19 @@ ANGLE_INLINE VkResult Semaphore::init(VkDevice device)
     semaphoreInfo.flags                 = 0;
 
     return vkCreateSemaphore(device, &semaphoreInfo, nullptr, &mHandle);
+}
+
+ANGLE_INLINE VkResult Semaphore::init(VkDevice device, const VkSemaphoreCreateInfo &createInfo)
+{
+    ASSERT(valid());
+    return vkCreateSemaphore(device, &createInfo, nullptr, &mHandle);
+}
+
+ANGLE_INLINE VkResult Semaphore::importFd(VkDevice device,
+                                          const VkImportSemaphoreFdInfoKHR &importFdInfo) const
+{
+    ASSERT(valid());
+    return vkImportSemaphoreFdKHR(device, &importFdInfo);
 }
 
 // Framebuffer implementation.
@@ -1673,6 +1697,21 @@ ANGLE_INLINE VkResult Fence::wait(VkDevice device, uint64_t timeout) const
 {
     ASSERT(valid());
     return vkWaitForFences(device, 1, &mHandle, true, timeout);
+}
+
+ANGLE_INLINE VkResult Fence::importFd(VkDevice device,
+                                      const VkImportFenceFdInfoKHR &importFenceFdInfo) const
+{
+    ASSERT(valid());
+    return vkImportFenceFdKHR(device, &importFenceFdInfo);
+}
+
+ANGLE_INLINE VkResult Fence::exportFd(VkDevice device,
+                                      const VkFenceGetFdInfoKHR &fenceGetFdInfo,
+                                      int *fdOut) const
+{
+    ASSERT(valid());
+    return vkGetFenceFdKHR(device, &fenceGetFdInfo, fdOut);
 }
 
 // QueryPool implementation.

@@ -70,6 +70,13 @@ class DynamicBuffer : angle::NonCopyable
               size_t initialSize,
               bool hostVisible);
 
+    // Init that gives the ability to pass in specified memory property flags for the buffer.
+    void initWithFlags(RendererVk *renderer,
+                       VkBufferUsageFlags usage,
+                       size_t alignment,
+                       size_t initialSize,
+                       VkMemoryPropertyFlags memoryProperty);
+
     // This call will allocate a new region at the end of the buffer. It internally may trigger
     // a new buffer to be created (which is returned in the optional parameter
     // `newBufferAllocatedOut`).  The new region will be in the returned buffer at given offset. If
@@ -103,6 +110,11 @@ class DynamicBuffer : angle::NonCopyable
     // For testing only!
     void setMinimumSizeForTesting(size_t minSize);
 
+    bool isCoherent() const
+    {
+        return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+    }
+
   private:
     void reset();
     angle::Result allocateNewBuffer(ContextVk *contextVk);
@@ -117,6 +129,7 @@ class DynamicBuffer : angle::NonCopyable
     uint32_t mLastFlushOrInvalidateOffset;
     size_t mSize;
     size_t mAlignment;
+    VkMemoryPropertyFlags mMemoryPropertyFlags;
 
     std::vector<BufferHelper *> mInFlightBuffers;
     std::vector<BufferHelper *> mBufferFreeList;
@@ -388,13 +401,16 @@ class QueryHelper final
     angle::Result endQuery(ContextVk *contextVk);
 
     // for occlusion query
-    void beginOcclusionQuery(ContextVk *contextVk,
-                             PrimaryCommandBuffer *primaryCommands,
-                             CommandBuffer *renderPassCommandBuffer);
+    // Must resetQueryPool outside of RenderPass before beginning occlusion query.
+    void resetQueryPool(ContextVk *contextVk, CommandBuffer *outsideRenderPassCommandBuffer);
+    void beginOcclusionQuery(ContextVk *contextVk, CommandBuffer *renderPassCommandBuffer);
     void endOcclusionQuery(ContextVk *contextVk, CommandBuffer *renderPassCommandBuffer);
 
     angle::Result flushAndWriteTimestamp(ContextVk *contextVk);
+    // When syncing gpu/cpu time, main thread accesses primary directly
     void writeTimestamp(ContextVk *contextVk, PrimaryCommandBuffer *primary);
+    // All other timestamp accesses should be made on outsideRenderPassCommandBuffer
+    void writeTimestamp(ContextVk *contextVk, CommandBuffer *outsideRenderPassCommandBuffer);
 
     Serial getStoredQueueSerial() { return mMostRecentSerial; }
     bool hasPendingWork(ContextVk *contextVk);
@@ -558,15 +574,23 @@ class BufferHelper final : public Resource
     {
         return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
     }
+    bool isCoherent() const
+    {
+        return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+    }
 
     // Set write access mask when the buffer is modified externally, e.g. by host.  There is no
     // graph resource to create a dependency to.
-    void onExternalWrite(VkAccessFlags writeAccessType) { mCurrentWriteAccess |= writeAccessType; }
+    void onExternalWrite(VkAccessFlags writeAccessType)
+    {
+        ASSERT(writeAccessType == VK_ACCESS_HOST_WRITE_BIT);
+        mCurrentWriteAccess |= writeAccessType;
+        mCurrentWriteStages |= VK_PIPELINE_STAGE_HOST_BIT;
+    }
 
     // Also implicitly sets up the correct barriers.
     angle::Result copyFromBuffer(ContextVk *contextVk,
                                  BufferHelper *srcBuffer,
-                                 VkAccessFlags bufferAccessType,
                                  const VkBufferCopy &copyRegion);
 
     // Note: currently only one view is allowed.  If needs be, multiple views can be created
@@ -613,37 +637,38 @@ class BufferHelper final : public Resource
 
     void changeQueue(uint32_t newQueueFamilyIndex, CommandBuffer *commandBuffer);
 
+    // Performs an ownership transfer from an external instance or API.
+    void acquireFromExternal(ContextVk *contextVk,
+                             uint32_t externalQueueFamilyIndex,
+                             uint32_t rendererQueueFamilyIndex,
+                             CommandBuffer *commandBuffer);
+
+    // Performs an ownership transfer to an external instance or API.
+    void releaseToExternal(ContextVk *contextVk,
+                           uint32_t rendererQueueFamilyIndex,
+                           uint32_t externalQueueFamilyIndex,
+                           CommandBuffer *commandBuffer);
+
     // Currently always returns false. Should be smarter about accumulation.
     bool canAccumulateRead(ContextVk *contextVk, VkAccessFlags readAccessType);
     bool canAccumulateWrite(ContextVk *contextVk, VkAccessFlags writeAccessType);
 
     void updateReadBarrier(VkAccessFlags readAccessType,
                            VkAccessFlags *barrierSrcOut,
-                           VkAccessFlags *barrierDstOut);
+                           VkAccessFlags *barrierDstOut,
+                           VkPipelineStageFlags readStage,
+                           VkPipelineStageFlags *barrierSrcStageOut,
+                           VkPipelineStageFlags *barrierDstStageOut);
 
     void updateWriteBarrier(VkAccessFlags writeAccessType,
                             VkAccessFlags *barrierSrcOut,
-                            VkAccessFlags *barrierDstOut);
+                            VkAccessFlags *barrierDstOut,
+                            VkPipelineStageFlags writeStage,
+                            VkPipelineStageFlags *barrierSrcStageOut,
+                            VkPipelineStageFlags *barrierDstStageOut);
 
   private:
     angle::Result mapImpl(ContextVk *contextVk);
-    bool needsOnReadBarrier(VkAccessFlags readAccessType,
-                            VkAccessFlags *barrierSrcOut,
-                            VkAccessFlags *barrierDstOut)
-    {
-        bool needsBarrier =
-            mCurrentWriteAccess != 0 && (mCurrentReadAccess & readAccessType) != readAccessType;
-
-        *barrierSrcOut = mCurrentWriteAccess;
-        *barrierDstOut = readAccessType;
-
-        mCurrentReadAccess |= readAccessType;
-        return needsBarrier;
-    }
-    bool needsOnWriteBarrier(VkAccessFlags writeAccessType,
-                             VkAccessFlags *barrierSrcOut,
-                             VkAccessFlags *barrierDstOut);
-
     angle::Result initializeNonZeroMemory(Context *context, VkDeviceSize size);
 
     // Vulkan objects.
@@ -661,6 +686,157 @@ class BufferHelper final : public Resource
     // For memory barriers.
     VkFlags mCurrentWriteAccess;
     VkFlags mCurrentReadAccess;
+    VkPipelineStageFlags mCurrentWriteStages;
+    VkPipelineStageFlags mCurrentReadStages;
+};
+
+// CommandBufferHelper (CBH) class wraps ANGLE's custom command buffer
+//  class, SecondaryCommandBuffer. This provides a way to temporarily
+//  store Vulkan commands that be can submitted in-line to a primary
+//  command buffer at a later time.
+// The current plan is for the main ANGLE thread to record commands
+//  into the CBH and then pass the CBH off to a worker thread that will
+//  process the commands into a primary command buffer and then submit
+//  those commands to the queue.
+struct CommandBufferHelper : angle::NonCopyable
+{
+  public:
+    CommandBufferHelper(bool canHaveRenderPass);
+    ~CommandBufferHelper();
+
+    // General Functions (non-renderPass specific)
+    void initialize(angle::PoolAllocator *poolAllocator);
+
+    void bufferRead(vk::ResourceUseList *resourceUseList,
+                    VkAccessFlags readAccessType,
+                    VkPipelineStageFlags readStage,
+                    vk::BufferHelper *buffer);
+    void bufferWrite(vk::ResourceUseList *resourceUseList,
+                     VkAccessFlags writeAccessType,
+                     VkPipelineStageFlags writeStage,
+                     vk::BufferHelper *buffer);
+
+    void imageRead(vk::ResourceUseList *resourceUseList,
+                   VkImageAspectFlags aspectFlags,
+                   vk::ImageLayout imageLayout,
+                   vk::ImageHelper *image);
+
+    void imageWrite(vk::ResourceUseList *resourceUseList,
+                    VkImageAspectFlags aspectFlags,
+                    vk::ImageLayout imageLayout,
+                    vk::ImageHelper *image);
+
+    void imageBarrier(VkPipelineStageFlags srcStageMask,
+                      VkPipelineStageFlags dstStageMask,
+                      const VkImageMemoryBarrier &imageMemoryBarrier);
+
+    vk::CommandBuffer &getCommandBuffer() { return mCommandBuffer; }
+
+    angle::Result flushToPrimary(ContextVk *contextVk, vk::PrimaryCommandBuffer *primary);
+
+    void executeBarriers(vk::PrimaryCommandBuffer *primary);
+
+    bool empty() const { return (!mCommandBuffer.empty() || mRenderPassStarted) ? false : true; }
+
+    void reset();
+
+    // RenderPass related functions
+    bool started() const
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        return mRenderPassStarted;
+    }
+
+    void beginRenderPass(const vk::Framebuffer &framebuffer,
+                         const gl::Rectangle &renderArea,
+                         const vk::RenderPassDesc &renderPassDesc,
+                         const vk::AttachmentOpsArray &renderPassAttachmentOps,
+                         const vk::ClearValuesArray &clearValues,
+                         vk::CommandBuffer **commandBufferOut);
+
+    void beginTransformFeedback(size_t validBufferCount,
+                                const VkBuffer *counterBuffers,
+                                bool rebindBuffer);
+
+    void invalidateRenderPassColorAttachment(size_t attachmentIndex)
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        SetBitField(mAttachmentOps[attachmentIndex].storeOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+    }
+
+    void invalidateRenderPassDepthAttachment(size_t attachmentIndex)
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        SetBitField(mAttachmentOps[attachmentIndex].storeOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+    }
+
+    void invalidateRenderPassStencilAttachment(size_t attachmentIndex)
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        SetBitField(mAttachmentOps[attachmentIndex].stencilStoreOp,
+                    VK_ATTACHMENT_STORE_OP_DONT_CARE);
+    }
+
+    void updateRenderPassAttachmentFinalLayout(size_t attachmentIndex, vk::ImageLayout finalLayout)
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        SetBitField(mAttachmentOps[attachmentIndex].finalLayout, finalLayout);
+    }
+
+    const gl::Rectangle &getRenderArea() const
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        return mRenderArea;
+    }
+
+    void resumeTransformFeedbackIfStarted();
+    void pauseTransformFeedbackIfStarted();
+
+    uint32_t getAndResetCounter()
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        uint32_t count = mCounter;
+        mCounter       = 0;
+        return count;
+    }
+
+    VkFramebuffer getFramebufferHandle() const
+    {
+        ASSERT(mIsRenderPassCommandBuffer);
+        return mFramebuffer.getHandle();
+    }
+
+    // Dumping the command stream is disabled by default.
+    static constexpr bool kEnableCommandStreamDiagnostics = false;
+
+  private:
+    void addCommandDiagnostics(ContextVk *contextVk);
+
+    // General state (non-renderPass related)
+    VkPipelineStageFlags mImageBarrierSrcStageMask;
+    VkPipelineStageFlags mImageBarrierDstStageMask;
+    std::vector<VkImageMemoryBarrier> mImageMemoryBarriers;
+    VkFlags mGlobalMemoryBarrierSrcAccess;
+    VkFlags mGlobalMemoryBarrierDstAccess;
+    VkPipelineStageFlags mGlobalMemoryBarrierSrcStages;
+    VkPipelineStageFlags mGlobalMemoryBarrierDstStages;
+    vk::CommandBuffer mCommandBuffer;
+
+    // RenderPass state
+    uint32_t mCounter;
+    vk::RenderPassDesc mRenderPassDesc;
+    vk::AttachmentOpsArray mAttachmentOps;
+    vk::Framebuffer mFramebuffer;
+    gl::Rectangle mRenderArea;
+    vk::ClearValuesArray mClearValues;
+    bool mRenderPassStarted;
+
+    // Transform feedback state
+    gl::TransformFeedbackBuffersArray<VkBuffer> mTransformFeedbackCounterBuffers;
+    uint32_t mValidTransformFeedbackBufferCount;
+    bool mRebindTransformFeedbackBuffers;
+
+    const bool mIsRenderPassCommandBuffer;
 };
 
 // Imagine an image going through a few layout transitions:
@@ -858,7 +1034,7 @@ class ImageHelper final : public Resource, public angle::Subject
     void resolve(ImageHelper *dest, const VkImageResolve &region, CommandBuffer *commandBuffer);
 
     // Data staging
-    void removeStagedUpdates(ContextVk *contextVk, const gl::ImageIndex &index);
+    void removeStagedUpdates(ContextVk *contextVk, uint32_t levelIndex, uint32_t layerIndex);
 
     angle::Result stageSubresourceUpdateImpl(ContextVk *contextVk,
                                              const gl::ImageIndex &index,
@@ -895,6 +1071,8 @@ class ImageHelper final : public Resource, public angle::Subject
                                                    uint32_t mipLevel,
                                                    uint32_t baseArrayLayer,
                                                    uint32_t layerCount,
+                                                   uint32_t bufferRowLength,
+                                                   uint32_t bufferImageHeight,
                                                    const VkExtent3D &extent,
                                                    const VkOffset3D &offset,
                                                    BufferHelper *stagingBuffer,
@@ -914,9 +1092,17 @@ class ImageHelper final : public Resource, public angle::Subject
                                          const gl::Extents &glExtents,
                                          const VkImageType imageType);
 
+    // Stage a clear to an arbitrary value.
+    void stageClear(const gl::ImageIndex &index,
+                    VkImageAspectFlags aspectFlags,
+                    const VkClearValue &clearValue);
+
     // Stage a clear based on robust resource init.
-    void stageRobustResourceClear(const gl::ImageIndex &index, const vk::Format &format);
-    void stageSubresourceClear(const gl::ImageIndex &index);
+    angle::Result stageRobustResourceClearWithFormat(ContextVk *contextVk,
+                                                     const gl::ImageIndex &index,
+                                                     const gl::Extents &glExtents,
+                                                     const vk::Format &format);
+    void stageRobustResourceClear(const gl::ImageIndex &index);
 
     // This will use the underlying dynamic buffer to allocate some memory to be used as a src or
     // dst.
@@ -927,6 +1113,15 @@ class ImageHelper final : public Resource, public angle::Subject
                                         StagingBufferOffsetArray *offsetOut,
                                         bool *newBufferAllocatedOut);
 
+    // Flush staged updates for a single subresource. Can optionally take a parameter to defer
+    // clears to a subsequent RenderPass load op.
+    angle::Result flushSingleSubresourceStagedUpdates(ContextVk *contextVk,
+                                                      uint32_t level,
+                                                      uint32_t layer,
+                                                      CommandBuffer *commandBuffer,
+                                                      ClearValuesArray *deferredClears,
+                                                      uint32_t deferredClearIndex);
+
     // Flushes staged updates to a range of levels and layers from start to (but not including) end.
     // Due to the nature of updates (done wholly to a VkImageSubresourceLayers), some unsolicited
     // layers may also be updated.
@@ -936,6 +1131,7 @@ class ImageHelper final : public Resource, public angle::Subject
                                      uint32_t layerStart,
                                      uint32_t layerEnd,
                                      CommandBuffer *commandBuffer);
+
     // Creates a command buffer and flushes all staged updates.  This is used for one-time
     // initialization of resources that we don't expect to accumulate further staged updates, such
     // as with renderbuffers or surface images.
@@ -971,6 +1167,20 @@ class ImageHelper final : public Resource, public angle::Subject
                               ImageLayout newLayout,
                               uint32_t newQueueFamilyIndex,
                               CommandBuffer *commandBuffer);
+
+    // Performs an ownership transfer from an external instance or API.
+    void acquireFromExternal(ContextVk *contextVk,
+                             uint32_t externalQueueFamilyIndex,
+                             uint32_t rendererQueueFamilyIndex,
+                             ImageLayout currentLayout,
+                             CommandBuffer *commandBuffer);
+
+    // Performs an ownership transfer to an external instance or API.
+    void releaseToExternal(ContextVk *contextVk,
+                           uint32_t rendererQueueFamilyIndex,
+                           uint32_t externalQueueFamilyIndex,
+                           ImageLayout desiredLayout,
+                           CommandBuffer *commandBuffer);
 
     // If the image is used externally to GL, its layout could be different from ANGLE's internal
     // state.  This function is used to inform ImageHelper of an external layout change.
@@ -1215,10 +1425,10 @@ class SamplerHelper final : angle::NonCopyable
     SamplerHelper();
     ~SamplerHelper();
 
+    angle::Result init(Context *context, const VkSamplerCreateInfo &createInfo);
     void release(RendererVk *renderer);
 
     bool valid() const { return mSampler.valid(); }
-    Sampler &get() { return mSampler; }
     const Sampler &get() const { return mSampler; }
 
     void retain(ResourceUseList *resourceUseList) { resourceUseList->add(mUse); }
@@ -1278,14 +1488,6 @@ class ShaderProgramHelper : angle::NonCopyable
     void destroy(VkDevice device);
     void release(ContextVk *contextVk);
 
-    bool isGraphicsProgram() const
-    {
-        ASSERT((mShaders[gl::ShaderType::Vertex].valid() ||
-                mShaders[gl::ShaderType::Fragment].valid()) !=
-               mShaders[gl::ShaderType::Compute].valid());
-        return !mShaders[gl::ShaderType::Compute].valid();
-    }
-
     ShaderAndSerial &getShader(gl::ShaderType shaderType) { return mShaders[shaderType].get(); }
 
     void setShader(gl::ShaderType shaderType, RefCounted<ShaderAndSerial> *shader);
@@ -1337,6 +1539,30 @@ class ShaderProgramHelper : angle::NonCopyable
 
     // Specialization constants, currently only used by the graphics queue.
     vk::SpecializationConstantBitSet mSpecializationConstants;
+};
+
+// Tracks current handle allocation counts in the back-end. Useful for debugging and profiling.
+// Note: not all handle types are currently implemented.
+class ActiveHandleCounter final : angle::NonCopyable
+{
+  public:
+    ActiveHandleCounter();
+    ~ActiveHandleCounter();
+
+    void onAllocate(HandleType handleType)
+    {
+        mActiveCounts[handleType]++;
+        mAllocatedCounts[handleType]++;
+    }
+
+    void onDeallocate(HandleType handleType) { mActiveCounts[handleType]--; }
+
+    uint32_t getActive(HandleType handleType) const { return mActiveCounts[handleType]; }
+    uint32_t getAllocated(HandleType handleType) const { return mAllocatedCounts[handleType]; }
+
+  private:
+    angle::PackedEnumMap<HandleType, uint32_t> mActiveCounts;
+    angle::PackedEnumMap<HandleType, uint32_t> mAllocatedCounts;
 };
 }  // namespace vk
 }  // namespace rx

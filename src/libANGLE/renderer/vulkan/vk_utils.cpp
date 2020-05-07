@@ -185,61 +185,67 @@ const char *VulkanResultString(VkResult result)
     switch (result)
     {
         case VK_SUCCESS:
-            return "Command successfully completed.";
+            return "Command successfully completed";
         case VK_NOT_READY:
-            return "A fence or query has not yet completed.";
+            return "A fence or query has not yet completed";
         case VK_TIMEOUT:
-            return "A wait operation has not completed in the specified time.";
+            return "A wait operation has not completed in the specified time";
         case VK_EVENT_SET:
-            return "An event is signaled.";
+            return "An event is signaled";
         case VK_EVENT_RESET:
-            return "An event is unsignaled.";
+            return "An event is unsignaled";
         case VK_INCOMPLETE:
-            return "A return array was too small for the result.";
+            return "A return array was too small for the result";
         case VK_SUBOPTIMAL_KHR:
             return "A swapchain no longer matches the surface properties exactly, but can still be "
-                   "used to present to the surface successfully.";
+                   "used to present to the surface successfully";
         case VK_ERROR_OUT_OF_HOST_MEMORY:
-            return "A host memory allocation has failed.";
+            return "A host memory allocation has failed";
         case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            return "A device memory allocation has failed.";
+            return "A device memory allocation has failed";
         case VK_ERROR_INITIALIZATION_FAILED:
             return "Initialization of an object could not be completed for implementation-specific "
-                   "reasons.";
+                   "reasons";
         case VK_ERROR_DEVICE_LOST:
-            return "The logical or physical device has been lost.";
+            return "The logical or physical device has been lost";
         case VK_ERROR_MEMORY_MAP_FAILED:
-            return "Mapping of a memory object has failed.";
+            return "Mapping of a memory object has failed";
         case VK_ERROR_LAYER_NOT_PRESENT:
-            return "A requested layer is not present or could not be loaded.";
+            return "A requested layer is not present or could not be loaded";
         case VK_ERROR_EXTENSION_NOT_PRESENT:
-            return "A requested extension is not supported.";
+            return "A requested extension is not supported";
         case VK_ERROR_FEATURE_NOT_PRESENT:
-            return "A requested feature is not supported.";
+            return "A requested feature is not supported";
         case VK_ERROR_INCOMPATIBLE_DRIVER:
             return "The requested version of Vulkan is not supported by the driver or is otherwise "
-                   "incompatible for implementation-specific reasons.";
+                   "incompatible for implementation-specific reasons";
         case VK_ERROR_TOO_MANY_OBJECTS:
-            return "Too many objects of the type have already been created.";
+            return "Too many objects of the type have already been created";
         case VK_ERROR_FORMAT_NOT_SUPPORTED:
-            return "A requested format is not supported on this device.";
+            return "A requested format is not supported on this device";
         case VK_ERROR_SURFACE_LOST_KHR:
-            return "A surface is no longer available.";
+            return "A surface is no longer available";
         case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
             return "The requested window is already connected to a VkSurfaceKHR, or to some other "
-                   "non-Vulkan API.";
+                   "non-Vulkan API";
         case VK_ERROR_OUT_OF_DATE_KHR:
             return "A surface has changed in such a way that it is no longer compatible with the "
-                   "swapchain.";
+                   "swapchain";
         case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
             return "The display used by a swapchain does not use the same presentable image "
-                   "layout, or is incompatible in a way that prevents sharing an image.";
+                   "layout, or is incompatible in a way that prevents sharing an image";
         case VK_ERROR_VALIDATION_FAILED_EXT:
-            return "The validation layers detected invalid API usage.";
+            return "The validation layers detected invalid API usage";
         case VK_ERROR_INVALID_SHADER_NV:
-            return "Invalid Vulkan shader was generated.";
+            return "Invalid Vulkan shader was generated";
+        case VK_ERROR_OUT_OF_POOL_MEMORY:
+            return "A pool memory allocation has failed";
+        case VK_ERROR_FRAGMENTED_POOL:
+            return "A pool allocation has failed due to fragmentation of the pool's memory";
+        case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+            return "An external handle is not a valid handle of the specified type";
         default:
-            return "Unknown vulkan error code.";
+            return "Unknown vulkan error code";
     }
 }
 
@@ -653,6 +659,8 @@ void GarbageObject::destroy(RendererVk *renderer)
             UNREACHABLE();
             break;
     }
+
+    renderer->getActiveHandleCounts().onDeallocate(mHandleType);
 }
 
 void MakeDebugUtilsLabel(GLenum source, const char *marker, VkDebugUtilsLabelEXT *label)
@@ -674,7 +682,199 @@ void MakeDebugUtilsLabel(GLenum source, const char *marker, VkDebugUtilsLabelEXT
     label->pLabelName = marker;
     kLabelColors[colorIndex].writeData(label->color);
 }
+
+// ClearValuesArray implementation.
+ClearValuesArray::ClearValuesArray() : mValues{}, mEnabled{} {}
+
+ClearValuesArray::~ClearValuesArray() = default;
+
+ClearValuesArray::ClearValuesArray(const ClearValuesArray &other) = default;
+
+ClearValuesArray &ClearValuesArray::operator=(const ClearValuesArray &rhs) = default;
+
+void ClearValuesArray::store(uint32_t index,
+                             VkImageAspectFlags aspectFlags,
+                             const VkClearValue &clearValue)
+{
+    ASSERT(aspectFlags != 0);
+
+    // We do this double if to handle the packed depth-stencil case.
+    if ((aspectFlags & VK_IMAGE_ASPECT_STENCIL_BIT) != 0)
+    {
+        // Special case for stencil.
+        ASSERT(index == kClearValueDepthIndex);
+        mValues[kClearValueStencilIndex] = clearValue;
+        mEnabled.set(kClearValueStencilIndex);
+    }
+
+    if (aspectFlags != VK_IMAGE_ASPECT_STENCIL_BIT)
+    {
+        mValues[index] = clearValue;
+        mEnabled.set(index);
+    }
+}
 }  // namespace vk
+
+#if !defined(ANGLE_SHARED_LIBVULKAN)
+// VK_EXT_debug_utils
+PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT   = nullptr;
+PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = nullptr;
+PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT       = nullptr;
+PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT           = nullptr;
+PFN_vkCmdInsertDebugUtilsLabelEXT vkCmdInsertDebugUtilsLabelEXT     = nullptr;
+
+// VK_EXT_debug_report
+PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT   = nullptr;
+PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT = nullptr;
+
+// VK_KHR_get_physical_device_properties2
+PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR = nullptr;
+PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR     = nullptr;
+
+// VK_KHR_external_semaphore_fd
+PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR = nullptr;
+
+// VK_EXT_external_memory_host
+PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT = nullptr;
+
+// VK_EXT_transform_feedback
+PFN_vkCmdBindTransformFeedbackBuffersEXT vkCmdBindTransformFeedbackBuffersEXT = nullptr;
+PFN_vkCmdBeginTransformFeedbackEXT vkCmdBeginTransformFeedbackEXT             = nullptr;
+PFN_vkCmdEndTransformFeedbackEXT vkCmdEndTransformFeedbackEXT                 = nullptr;
+PFN_vkCmdBeginQueryIndexedEXT vkCmdBeginQueryIndexedEXT                       = nullptr;
+PFN_vkCmdEndQueryIndexedEXT vkCmdEndQueryIndexedEXT                           = nullptr;
+PFN_vkCmdDrawIndirectByteCountEXT vkCmdDrawIndirectByteCountEXT               = nullptr;
+
+PFN_vkGetBufferMemoryRequirements2KHR vkGetBufferMemoryRequirements2KHR = nullptr;
+PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2KHR   = nullptr;
+
+// VK_KHR_external_fence_capabilities
+PFN_vkGetPhysicalDeviceExternalFencePropertiesKHR vkGetPhysicalDeviceExternalFencePropertiesKHR =
+    nullptr;
+
+// VK_KHR_external_fence_fd
+PFN_vkGetFenceFdKHR vkGetFenceFdKHR       = nullptr;
+PFN_vkImportFenceFdKHR vkImportFenceFdKHR = nullptr;
+
+// VK_KHR_external_semaphore_capabilities
+PFN_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR
+    vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = nullptr;
+
+#    if defined(ANGLE_PLATFORM_FUCHSIA)
+// VK_FUCHSIA_imagepipe_surface
+PFN_vkCreateImagePipeSurfaceFUCHSIA vkCreateImagePipeSurfaceFUCHSIA = nullptr;
+#    endif
+
+#    if defined(ANGLE_PLATFORM_ANDROID)
+PFN_vkGetAndroidHardwareBufferPropertiesANDROID vkGetAndroidHardwareBufferPropertiesANDROID =
+    nullptr;
+PFN_vkGetMemoryAndroidHardwareBufferANDROID vkGetMemoryAndroidHardwareBufferANDROID = nullptr;
+#    endif
+
+#    if defined(ANGLE_PLATFORM_GGP)
+PFN_vkCreateStreamDescriptorSurfaceGGP vkCreateStreamDescriptorSurfaceGGP = nullptr;
+#    endif
+
+#    define GET_INSTANCE_FUNC(vkName)                                                          \
+        do                                                                                     \
+        {                                                                                      \
+            vkName = reinterpret_cast<PFN_##vkName>(vkGetInstanceProcAddr(instance, #vkName)); \
+            ASSERT(vkName);                                                                    \
+        } while (0)
+
+#    define GET_DEVICE_FUNC(vkName)                                                        \
+        do                                                                                 \
+        {                                                                                  \
+            vkName = reinterpret_cast<PFN_##vkName>(vkGetDeviceProcAddr(device, #vkName)); \
+            ASSERT(vkName);                                                                \
+        } while (0)
+
+void InitDebugUtilsEXTFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkCreateDebugUtilsMessengerEXT);
+    GET_INSTANCE_FUNC(vkDestroyDebugUtilsMessengerEXT);
+    GET_INSTANCE_FUNC(vkCmdBeginDebugUtilsLabelEXT);
+    GET_INSTANCE_FUNC(vkCmdEndDebugUtilsLabelEXT);
+    GET_INSTANCE_FUNC(vkCmdInsertDebugUtilsLabelEXT);
+}
+
+void InitDebugReportEXTFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkCreateDebugReportCallbackEXT);
+    GET_INSTANCE_FUNC(vkDestroyDebugReportCallbackEXT);
+}
+
+void InitGetPhysicalDeviceProperties2KHRFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetPhysicalDeviceProperties2KHR);
+    GET_INSTANCE_FUNC(vkGetPhysicalDeviceFeatures2KHR);
+}
+
+void InitTransformFeedbackEXTFunctions(VkDevice device)
+{
+    GET_DEVICE_FUNC(vkCmdBindTransformFeedbackBuffersEXT);
+    GET_DEVICE_FUNC(vkCmdBeginTransformFeedbackEXT);
+    GET_DEVICE_FUNC(vkCmdEndTransformFeedbackEXT);
+    GET_DEVICE_FUNC(vkCmdBeginQueryIndexedEXT);
+    GET_DEVICE_FUNC(vkCmdEndQueryIndexedEXT);
+    GET_DEVICE_FUNC(vkCmdDrawIndirectByteCountEXT);
+}
+
+#    if defined(ANGLE_PLATFORM_FUCHSIA)
+void InitImagePipeSurfaceFUCHSIAFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkCreateImagePipeSurfaceFUCHSIA);
+}
+#    endif
+
+#    if defined(ANGLE_PLATFORM_ANDROID)
+void InitExternalMemoryHardwareBufferANDROIDFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetAndroidHardwareBufferPropertiesANDROID);
+    GET_INSTANCE_FUNC(vkGetMemoryAndroidHardwareBufferANDROID);
+}
+#    endif
+
+#    if defined(ANGLE_PLATFORM_GGP)
+void InitGGPStreamDescriptorSurfaceFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkCreateStreamDescriptorSurfaceGGP);
+}
+#    endif  // defined(ANGLE_PLATFORM_GGP)
+
+void InitExternalSemaphoreFdFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkImportSemaphoreFdKHR);
+}
+
+void InitExternalMemoryHostFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetMemoryHostPointerPropertiesEXT);
+}
+
+// VK_KHR_external_fence_capabilities
+void InitExternalFenceCapabilitiesFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetPhysicalDeviceExternalFencePropertiesKHR);
+}
+
+// VK_KHR_external_fence_fd
+void InitExternalFenceFdFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetFenceFdKHR);
+    GET_INSTANCE_FUNC(vkImportFenceFdKHR);
+}
+
+// VK_KHR_external_semaphore_capabilities
+void InitExternalSemaphoreCapabilitiesFunctions(VkInstance instance)
+{
+    GET_INSTANCE_FUNC(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR);
+}
+
+#    undef GET_INSTANCE_FUNC
+#    undef GET_DEVICE_FUNC
+
+#endif  // !defined(ANGLE_SHARED_LIBVULKAN)
 
 namespace gl_vk
 {

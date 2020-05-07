@@ -27,6 +27,7 @@
 namespace angle
 {
 struct SystemInfo;
+class RNG;
 }  // namespace angle
 
 #define ASSERT_GL_TRUE(a) ASSERT_EQ(static_cast<GLboolean>(GL_TRUE), (a))
@@ -161,6 +162,8 @@ GLColor MakeGLColor(TR r, TG g, TB b, TA a)
                    static_cast<GLubyte>(a));
 }
 
+GLColor RandomColor(angle::RNG *rng);
+
 bool operator==(const GLColor &a, const GLColor &b);
 bool operator!=(const GLColor &a, const GLColor &b);
 std::ostream &operator<<(std::ostream &ostream, const GLColor &color);
@@ -183,7 +186,7 @@ constexpr std::array<GLenum, 6> kCubeFaces = {
      GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
      GL_TEXTURE_CUBE_MAP_NEGATIVE_Z}};
 
-void LoadEntryPointsWithUtilLoader();
+void LoadEntryPointsWithUtilLoader(angle::GLESDriverType driver);
 
 }  // namespace angle
 
@@ -542,6 +545,7 @@ class ANGLETestBase
 
     // Workaround for NVIDIA not being able to share a window with OpenGL and Vulkan.
     static Optional<EGLint> mLastRendererType;
+    static Optional<angle::GLESDriverType> mLastLoadedDriver;
 };
 
 template <typename Params = angle::PlatformParameters>
@@ -593,13 +597,17 @@ class ANGLETestEnvironment : public testing::Environment
     void SetUp() override;
     void TearDown() override;
 
-    static angle::Library *GetEGLLibrary();
-    static angle::Library *GetWGLLibrary();
+    static angle::Library *GetDriverLibrary(angle::GLESDriverType driver);
 
   private:
+    static angle::Library *GetAngleEGLLibrary();
+    static angle::Library *GetSystemEGLLibrary();
+    static angle::Library *GetSystemWGLLibrary();
+
     // For loading entry points.
-    static std::unique_ptr<angle::Library> gEGLLibrary;
-    static std::unique_ptr<angle::Library> gWGLLibrary;
+    static std::unique_ptr<angle::Library> gAngleEGLLibrary;
+    static std::unique_ptr<angle::Library> gSystemEGLLibrary;
+    static std::unique_ptr<angle::Library> gSystemWGLLibrary;
 };
 
 extern angle::PlatformMethods gDefaultPlatformMethods;

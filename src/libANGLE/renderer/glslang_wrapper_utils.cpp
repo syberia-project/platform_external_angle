@@ -96,6 +96,7 @@ void GetBuiltInResourcesFromCaps(const gl::Caps &caps, TBuiltInResource *outBuil
     outBuiltInResources->maxVertexAttribs                 = caps.maxVertexAttributes;
     outBuiltInResources->maxVertexOutputComponents        = caps.maxVertexOutputComponents;
     outBuiltInResources->maxVertexUniformVectors          = caps.maxVertexUniformVectors;
+    outBuiltInResources->maxClipDistances                 = caps.maxClipDistances;
 }
 
 // Test if there are non-zero indices in the uniform name, returning false in that case.  This
@@ -1965,6 +1966,7 @@ angle::Result GlslangTransformSpirvCode(const GlslangErrorCallback &callback,
 }
 
 angle::Result GlslangGetShaderSpirvCode(const GlslangErrorCallback &callback,
+                                        const gl::ShaderBitSet &linkedShaderStages,
                                         const gl::Caps &glCaps,
                                         const gl::ShaderMap<std::string> &shaderSources,
                                         const ShaderMapInterfaceVariableInfoMap &variableInfoMap,
@@ -1973,7 +1975,7 @@ angle::Result GlslangGetShaderSpirvCode(const GlslangErrorCallback &callback,
     gl::ShaderMap<SpirvBlob> initialSpirvBlobs;
     ANGLE_TRY(GetShaderSpirvCode(callback, glCaps, shaderSources, &initialSpirvBlobs));
 
-    for (const gl::ShaderType shaderType : gl::AllShaderTypes())
+    for (const gl::ShaderType shaderType : linkedShaderStages)
     {
         // we pass in false here to skip modifications related to  early fragment tests
         // optimizations and line rasterization. These are done in the initProgram time since they

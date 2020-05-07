@@ -36,16 +36,8 @@
 //// Failures blocking an official GLES 3.1 conformance run on SwiftShader
 ////
 
-// Verify that compute and non-compute stages can be attached to one pipeline object:
-3570 VULKAN : KHR-GLES31.core.compute_shader.sso-compute-pipeline = SKIP
-3570 VULKAN : KHR-GLES31.core.compute_shader.sso-case2 = SKIP
-3570 VULKAN : KHR-GLES31.core.compute_shader.sso-case3 = SKIP
-3570 SWIFTSHADER : KHR-GLES31.core.shader_image_load_store.advanced-sso-simple = SKIP
 // Separate shader objects:
 3570 VULKAN : KHR-GLES31.core.sepshaderobjs.StateInteraction = SKIP
-
-// Program interface query.
-3596 VULKAN : KHR-GLES31.core.program_interface_query.* = FAIL
 
 // Image related failures
 
@@ -75,9 +67,6 @@
 3605 VULKAN : KHR-GLES31.core.texture_gather.* = FAIL
 
 // Dispatch indirect:
-4188 VULKAN : KHR-GLES31.core.compute_shader.resource-image = FAIL
-4191 VULKAN : KHR-GLES31.core.compute_shader.resources-max = FAIL
-4192 VULKAN : KHR-GLES31.core.compute_shader.pipeline-post-xfb = FAIL
 3726 VULKAN PIXEL2ORXL : KHR-GLES31.core.compute_shader.pipeline-compute-chain = FAIL
 4194 VULKAN PIXEL2ORXL : KHR-GLES31.core.compute_shader.resource-ubo = FAIL
 4194 VULKAN PIXEL2ORXL : KHR-GLES31.core.compute_shader.built-in-variables = FAIL
@@ -138,3 +127,6 @@
 
 // Crashing on Android with SwiftShader
 4240 SWIFTSHADER ANDROID : KHR-GLES31.core.texture_storage_multisample.FunctionalTests.blitting_multisampled_depth_attachment = SKIP
+
+// New failures with latest dEQP roll (2020-04-28)
+4593 SWIFTSHADER : KHR-GLES31.core.nearest_edge.offset_left = FAIL

@@ -10,10 +10,9 @@
 #ifndef LIBANGLE_RENDERER_VULKAN_RENDERTARGETVK_H_
 #define LIBANGLE_RENDERER_VULKAN_RENDERTARGETVK_H_
 
-#include "volk.h"
-
 #include "libANGLE/FramebufferAttachment.h"
 #include "libANGLE/renderer/renderer_utils.h"
+#include "libANGLE/renderer/vulkan/vk_headers.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 
 namespace rx
@@ -69,11 +68,15 @@ class RenderTargetVk final : public FramebufferAttachmentRenderTarget
     uint32_t getLevelIndex() const { return mLevelIndex; }
     uint32_t getLayerIndex() const { return mLayerIndex; }
 
+    gl::ImageIndex getImageIndex() const;
+
     // Special mutator for Surface RenderTargets. Allows the Framebuffer to keep a single
     // RenderTargetVk pointer.
     void updateSwapchainImage(vk::ImageHelper *image, vk::ImageViewHelper *imageViews);
 
-    angle::Result flushStagedUpdates(ContextVk *contextVk);
+    angle::Result flushStagedUpdates(ContextVk *contextVk,
+                                     vk::ClearValuesArray *deferredClears,
+                                     uint32_t deferredClearIndex) const;
 
     void retainImageViews(ContextVk *contextVk) const;
 
@@ -93,7 +96,6 @@ class RenderTargetVk final : public FramebufferAttachmentRenderTarget
 
 // A vector of rendertargets
 using RenderTargetVector = std::vector<RenderTargetVk>;
-
 }  // namespace rx
 
 #endif  // LIBANGLE_RENDERER_VULKAN_RENDERTARGETVK_H_

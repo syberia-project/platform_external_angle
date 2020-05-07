@@ -852,7 +852,7 @@ TEST_P(ClearTestES3, MaskedIndexedClearMultipleAttachments)
     ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled("GL_OES_draw_buffers_indexed"));
 
     constexpr uint32_t kSize            = 16;
-    constexpr uint32_t kAttachmentCount = 2;
+    constexpr uint32_t kAttachmentCount = 4;
     std::vector<unsigned char> pixelData(kSize * kSize * 4, 255);
 
     glBindFramebuffer(GL_FRAMEBUFFER, mFBOs[0]);
@@ -882,7 +882,8 @@ TEST_P(ClearTestES3, MaskedIndexedClearMultipleAttachments)
     // Block blue channel for all attachements
     glColorMask(GL_TRUE, GL_TRUE, GL_FALSE, GL_TRUE);
 
-    // Unblock blue channel for attachement 1
+    // Unblock blue channel for attachments 0 and 1
+    glColorMaskiOES(0, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glColorMaskiOES(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
@@ -895,12 +896,12 @@ TEST_P(ClearTestES3, MaskedIndexedClearMultipleAttachments)
         glReadBuffer(GL_COLOR_ATTACHMENT0 + i);
         ASSERT_GL_NO_ERROR();
 
-        const GLColor attachementColor = (i == 1) ? clearColor : clearColorMasked;
-        EXPECT_PIXEL_COLOR_EQ(0, 0, attachementColor);
-        EXPECT_PIXEL_COLOR_EQ(0, kSize - 1, attachementColor);
-        EXPECT_PIXEL_COLOR_EQ(kSize - 1, 0, attachementColor);
-        EXPECT_PIXEL_COLOR_EQ(kSize - 1, kSize - 1, attachementColor);
-        EXPECT_PIXEL_COLOR_EQ(kSize / 2, kSize / 2, attachementColor);
+        const GLColor attachmentColor = (i > 1) ? clearColorMasked : clearColor;
+        EXPECT_PIXEL_COLOR_EQ(0, 0, attachmentColor);
+        EXPECT_PIXEL_COLOR_EQ(0, kSize - 1, attachmentColor);
+        EXPECT_PIXEL_COLOR_EQ(kSize - 1, 0, attachmentColor);
+        EXPECT_PIXEL_COLOR_EQ(kSize - 1, kSize - 1, attachmentColor);
+        EXPECT_PIXEL_COLOR_EQ(kSize / 2, kSize / 2, attachmentColor);
     }
 }
 
@@ -1497,6 +1498,53 @@ TEST_P(ClearTestES3, ClearBuffer1OnDefaultFramebufferNoAssert)
     std::vector<GLfloat> testFloat(4);
     glClearBufferfv(GL_COLOR, 1, testFloat.data());
     EXPECT_GL_NO_ERROR();
+}
+
+// Clears many small concentric rectangles using scissor regions.
+TEST_P(ClearTest, InceptionScissorClears)
+{
+    angle::RNG rng;
+
+    constexpr GLuint kSize = 16;
+
+    // Create a square user FBO so we have more control over the dimensions.
+    GLFramebuffer fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    GLRenderbuffer rbo;
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kSize, kSize);
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    glViewport(0, 0, kSize, kSize);
+
+    // Draw small concentric squares using scissor.
+    std::vector<GLColor> expectedColors;
+    for (GLuint index = 0; index < (kSize - 1) / 2; index++)
+    {
+        // Do the first clear without the scissor.
+        if (index > 0)
+        {
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(index, index, kSize - (index * 2), kSize - (index * 2));
+        }
+
+        GLColor color = RandomColor(&rng);
+        expectedColors.push_back(color);
+        Vector4 floatColor = color.toNormalizedVector();
+        glClearColor(floatColor[0], floatColor[1], floatColor[2], floatColor[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+
+    ASSERT_GL_NO_ERROR();
+
+    std::vector<GLColor> actualColors(expectedColors.size());
+    glReadPixels(0, kSize / 2, actualColors.size(), 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                 actualColors.data());
+
+    EXPECT_EQ(expectedColors, actualColors);
 }
 
 #ifdef Bool

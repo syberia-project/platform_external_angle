@@ -40,7 +40,7 @@ constexpr VkImageUsageFlags kTransferStagingImageFlags =
 constexpr VkFormatFeatureFlags kBlitFeatureFlags =
     VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
 
-constexpr angle::SubjectIndex kStagingBufferSubjectIndex = 0;
+constexpr angle::SubjectIndex kTextureImageSubjectIndex = 0;
 
 bool CanCopyWithTransfer(RendererVk *renderer,
                          const vk::Format &srcFormat,
@@ -115,7 +115,7 @@ TextureVk::TextureVk(const gl::TextureState &state, RendererVk *renderer)
       mImage(nullptr),
       mStagingBufferInitialSize(vk::kStagingBufferSize),
       mImageUsageFlags(0),
-      mStagingBufferObserverBinding(this, kStagingBufferSubjectIndex)
+      mImageObserverBinding(this, kTextureImageSubjectIndex)
 {}
 
 TextureVk::~TextureVk() = default;
@@ -125,7 +125,7 @@ void TextureVk::onDestroy(const gl::Context *context)
     ContextVk *contextVk = vk::GetImpl(context);
 
     releaseAndDeleteImage(contextVk);
-    mSampler.release(contextVk->getRenderer());
+    mSampler.reset();
 }
 
 angle::Result TextureVk::setImage(const gl::Context *context,
@@ -879,7 +879,7 @@ void TextureVk::releaseAndDeleteImage(ContextVk *contextVk)
     {
         releaseImage(contextVk);
         releaseStagingBuffer(contextVk);
-        mStagingBufferObserverBinding.bind(nullptr);
+        mImageObserverBinding.bind(nullptr);
         SafeDelete(mImage);
     }
 }
@@ -924,7 +924,7 @@ void TextureVk::setImageHelper(ContextVk *contextVk,
 {
     ASSERT(mImage == nullptr);
 
-    mStagingBufferObserverBinding.bind(imageHelper);
+    mImageObserverBinding.bind(imageHelper);
 
     mOwnsImage        = selfOwned;
     mImageNativeType  = imageType;
@@ -967,7 +967,9 @@ angle::Result TextureVk::redefineImage(const gl::Context *context,
     {
         // If there is any staged changes for this index, we can remove them since we're going to
         // override them with this call.
-        mImage->removeStagedUpdates(contextVk, index);
+        uint32_t levelIndex = index.getLevelIndex();
+        uint32_t layerIndex = index.hasLayer() ? index.getLayerIndex() : 0;
+        mImage->removeStagedUpdates(contextVk, levelIndex, layerIndex);
 
         if (mImage->valid())
         {
@@ -1035,7 +1037,7 @@ angle::Result TextureVk::copyBufferDataToImage(ContextVk *contextVk,
     ANGLE_TRY(ensureImageInitialized(contextVk, ImageMipLevels::EnabledLevels));
 
     vk::CommandBuffer *commandBuffer = nullptr;
-    ANGLE_TRY(contextVk->onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, srcBuffer));
+    ANGLE_TRY(contextVk->onBufferTransferRead(srcBuffer));
     ANGLE_TRY(
         contextVk->onImageWrite(VK_IMAGE_ASPECT_COLOR_BIT, vk::ImageLayout::TransferDst, mImage));
     ANGLE_TRY(contextVk->endRenderPassAndGetCommandBuffer(&commandBuffer));
@@ -1210,9 +1212,19 @@ angle::Result TextureVk::copyAndStageImageSubresource(ContextVk *contextVk,
 
     // Stage an update to the new image
     ASSERT(stagingBuffer);
+    uint32_t bufferRowLength   = updatedExtents.width;
+    uint32_t bufferImageHeight = updatedExtents.height;
+    if (desc.format.info->compressed)
+    {
+        // In the case of a compressed texture, bufferRowLength can never be smaller than the
+        // compressed format's compressed block width, and bufferImageHeight can never be smaller
+        // than the compressed block height.
+        bufferRowLength   = std::max(bufferRowLength, desc.format.info->compressedBlockWidth);
+        bufferImageHeight = std::max(bufferImageHeight, desc.format.info->compressedBlockHeight);
+    }
     ANGLE_TRY(mImage->stageSubresourceUpdateFromBuffer(
-        contextVk, bufferSize, stagingDstMipLevel, currentLayer, layerCount, updatedExtents, offset,
-        stagingBuffer, stagingBufferOffsets));
+        contextVk, bufferSize, stagingDstMipLevel, currentLayer, layerCount, bufferRowLength,
+        bufferImageHeight, updatedExtents, offset, stagingBuffer, stagingBufferOffsets));
 
     return angle::Result::Continue;
 }
@@ -1363,7 +1375,19 @@ angle::Result TextureVk::getAttachmentRenderTarget(const gl::Context *context,
     ASSERT(imageIndex.getLevelIndex() >= 0);
 
     ContextVk *contextVk = vk::GetImpl(context);
-    ANGLE_TRY(ensureImageInitialized(contextVk, ImageMipLevels::EnabledLevels));
+
+    if (!mImage->valid())
+    {
+        const gl::ImageDesc &baseLevelDesc  = mState.getBaseLevelDesc();
+        const gl::Extents &baseLevelExtents = baseLevelDesc.size;
+        const uint32_t levelCount           = getMipLevelCount(ImageMipLevels::EnabledLevels);
+        const vk::Format &format            = getBaseLevelFormat(contextVk->getRenderer());
+
+        ANGLE_TRY(initImage(contextVk, format, baseLevelDesc.format.info->sized, baseLevelExtents,
+                            levelCount));
+    }
+
+    // Don't flush staged updates here. We'll handle that in FramebufferVk so it can defer clears.
 
     GLuint layerIndex = 0, layerCount = 0;
     GetRenderTargetLayerCountAndIndex(mImage, imageIndex, &layerCount, &layerIndex);
@@ -1461,7 +1485,11 @@ angle::Result TextureVk::syncState(const gl::Context *context,
     // Initialize the image storage and flush the pixel buffer.
     ANGLE_TRY(ensureImageInitialized(contextVk, ImageMipLevels::EnabledLevels));
 
-    if (dirtyBits.none() && mSampler.valid())
+    // Mask out the IMPLEMENTATION dirty bit to avoid unnecessary syncs.
+    gl::Texture::DirtyBits localBits = dirtyBits;
+    localBits.reset(gl::Texture::DIRTY_BIT_IMPLEMENTATION);
+
+    if (localBits.none() && mSampler.valid())
     {
         return angle::Result::Continue;
     }
@@ -1469,13 +1497,13 @@ angle::Result TextureVk::syncState(const gl::Context *context,
     RendererVk *renderer = contextVk->getRenderer();
     if (mSampler.valid())
     {
-        mSampler.release(renderer);
+        mSampler.reset();
     }
 
-    if (dirtyBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_RED) ||
-        dirtyBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_GREEN) ||
-        dirtyBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_BLUE) ||
-        dirtyBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_ALPHA))
+    if (localBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_RED) ||
+        localBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_GREEN) ||
+        localBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_BLUE) ||
+        localBits.test(gl::Texture::DIRTY_BIT_SWIZZLE_ALPHA))
     {
         if (mImage && mImage->valid())
         {
@@ -1493,52 +1521,8 @@ angle::Result TextureVk::syncState(const gl::Context *context,
         }
     }
 
-    const gl::Extensions &extensions     = renderer->getNativeExtensions();
-    const gl::SamplerState &samplerState = mState.getSamplerState();
-
-    float maxAnisotropy   = samplerState.getMaxAnisotropy();
-    bool anisotropyEnable = extensions.textureFilterAnisotropic && maxAnisotropy > 1.0f;
-    bool compareEnable    = samplerState.getCompareMode() == GL_COMPARE_REF_TO_TEXTURE;
-    VkCompareOp compareOp = gl_vk::GetCompareOp(samplerState.getCompareFunc());
-    // When sampling from stencil, deqp tests expect texture compare to have no effect
-    // dEQP - GLES31.functional.stencil_texturing.misc.compare_mode_effect
-    // states: NOTE: Texture compare mode has no effect when reading stencil values.
-    if (mState.isStencilMode())
-    {
-        compareEnable = VK_FALSE;
-        compareOp     = VK_COMPARE_OP_ALWAYS;
-    }
-
-    // Create a simple sampler. Force basic parameter settings.
-    VkSamplerCreateInfo samplerInfo     = {};
-    samplerInfo.sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.flags                   = 0;
-    samplerInfo.magFilter               = gl_vk::GetFilter(samplerState.getMagFilter());
-    samplerInfo.minFilter               = gl_vk::GetFilter(samplerState.getMinFilter());
-    samplerInfo.mipmapMode              = gl_vk::GetSamplerMipmapMode(samplerState.getMinFilter());
-    samplerInfo.addressModeU            = gl_vk::GetSamplerAddressMode(samplerState.getWrapS());
-    samplerInfo.addressModeV            = gl_vk::GetSamplerAddressMode(samplerState.getWrapT());
-    samplerInfo.addressModeW            = gl_vk::GetSamplerAddressMode(samplerState.getWrapR());
-    samplerInfo.mipLodBias              = 0.0f;
-    samplerInfo.anisotropyEnable        = anisotropyEnable;
-    samplerInfo.maxAnisotropy           = maxAnisotropy;
-    samplerInfo.compareEnable           = compareEnable;
-    samplerInfo.compareOp               = compareOp;
-    samplerInfo.minLod                  = samplerState.getMinLod();
-    samplerInfo.maxLod                  = samplerState.getMaxLod();
-    samplerInfo.borderColor             = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-
-    if (!gl::IsMipmapFiltered(samplerState))
-    {
-        // Per the Vulkan spec, GL_NEAREST and GL_LINEAR do not map directly to Vulkan, so
-        // they must be emulated (See "Mapping of OpenGL to Vulkan filter modes")
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.minLod     = 0.0f;
-        samplerInfo.maxLod     = 0.25f;
-    }
-
-    ANGLE_VK_TRY(contextVk, mSampler.get().init(contextVk->getDevice(), samplerInfo));
+    vk::SamplerDesc samplerDesc(mState.getSamplerState(), mState.isStencilMode());
+    ANGLE_TRY(renderer->getSamplerCache().getSampler(contextVk, samplerDesc, &mSampler));
 
     // Regenerate the serial on a sampler change.
     mSerial = contextVk->generateTextureSerial();
@@ -1555,11 +1539,9 @@ angle::Result TextureVk::initializeContents(const gl::Context *context,
         contextVk->getRenderer()->getFormat(desc.format.info->sizedInternalFormat);
 
     ASSERT(mImage);
-    mImage->stageRobustResourceClear(imageIndex, format);
-
     // Note that we cannot ensure the image is initialized because we might be calling subImage
     // on a non-complete cube map.
-    return angle::Result::Continue;
+    return mImage->stageRobustResourceClearWithFormat(contextVk, imageIndex, desc.size, format);
 }
 
 void TextureVk::releaseOwnershipOfImage(const gl::Context *context)
@@ -1686,7 +1668,7 @@ void TextureVk::releaseImage(ContextVk *contextVk)
         }
         else
         {
-            mStagingBufferObserverBinding.bind(nullptr);
+            mImageObserverBinding.bind(nullptr);
             mImage = nullptr;
         }
     }
@@ -1852,9 +1834,9 @@ const vk::Format &TextureVk::getBaseLevelFormat(RendererVk *renderer) const
 
 void TextureVk::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMessage message)
 {
-    ASSERT(index == kStagingBufferSubjectIndex && message == angle::SubjectMessage::SubjectChanged);
+    ASSERT(index == kTextureImageSubjectIndex && message == angle::SubjectMessage::SubjectChanged);
 
-    // Forward the notification to vk::Texture that the staging buffer changed.
+    // Forward the notification to the parent that the staging buffer changed.
     onStateChange(angle::SubjectMessage::SubjectChanged);
 }
 }  // namespace rx

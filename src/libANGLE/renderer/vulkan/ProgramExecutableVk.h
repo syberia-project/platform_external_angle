@@ -28,6 +28,7 @@ class ShaderInfo final : angle::NonCopyable
     ~ShaderInfo();
 
     angle::Result initShaders(ContextVk *contextVk,
+                              const gl::ShaderBitSet &linkedShaderStages,
                               const gl::ShaderMap<std::string> &shaderSources,
                               const ShaderMapInterfaceVariableInfoMap &variableInfoMap);
     void release(ContextVk *contextVk);
@@ -119,11 +120,12 @@ class ProgramExecutableVk
                              gl::ShaderMap<const gl::ProgramState *> *programStatesOut);
     const gl::ProgramExecutable &getGlExecutable();
 
-    ProgramInfo &getDefaultProgramInfo() { return mProgramInfos[0]; }
-    ProgramInfo &getProgramInfo(ProgramTransformOptionBits optionBits)
+    ProgramInfo &getGraphicsDefaultProgramInfo() { return mGraphicsProgramInfos[0]; }
+    ProgramInfo &getGraphicsProgramInfo(ProgramTransformOptionBits optionBits)
     {
-        return mProgramInfos[optionBits.to_ulong()];
+        return mGraphicsProgramInfos[optionBits.to_ulong()];
     }
+    ProgramInfo &getComputeProgramInfo() { return mComputeProgramInfo; }
 
     angle::Result getGraphicsPipeline(ContextVk *contextVk,
                                       gl::PrimitiveMode mode,
@@ -140,7 +142,7 @@ class ProgramExecutableVk
     angle::Result updateTexturesDescriptorSet(ContextVk *contextVk);
     angle::Result updateShaderResourcesDescriptorSet(ContextVk *contextVk,
                                                      vk::ResourceUseList *resourceUseList,
-                                                     CommandBufferHelper *commandBufferHelper);
+                                                     vk::CommandBufferHelper *commandBufferHelper);
     angle::Result updateTransformFeedbackDescriptorSet(
         const gl::ProgramState &programState,
         gl::ShaderMap<DefaultUniformBlock> &defaultUniformBlocks,
@@ -192,14 +194,14 @@ class ProgramExecutableVk
     void updateBuffersDescriptorSet(ContextVk *contextVk,
                                     const gl::ShaderType shaderType,
                                     vk::ResourceUseList *resourceUseList,
-                                    CommandBufferHelper *commandBufferHelper,
+                                    vk::CommandBufferHelper *commandBufferHelper,
                                     const std::vector<gl::InterfaceBlock> &blocks,
                                     VkDescriptorType descriptorType);
     void updateAtomicCounterBuffersDescriptorSet(const gl::ProgramState &programState,
                                                  const gl::ShaderType shaderType,
                                                  ContextVk *contextVk,
                                                  vk::ResourceUseList *resourceUseList,
-                                                 CommandBufferHelper *commandBufferHelper);
+                                                 vk::CommandBufferHelper *commandBufferHelper);
     angle::Result updateImagesDescriptorSet(const gl::ProgramState &programState,
                                             const gl::ShaderType shaderType,
                                             ContextVk *contextVk);
@@ -223,7 +225,6 @@ class ProgramExecutableVk
     // deleted while this program is in use.
     vk::BindingPointer<vk::PipelineLayout> mPipelineLayout;
     vk::DescriptorSetLayoutPointerArray mDescriptorSetLayouts;
-    bool mPipelineLayoutCreated;
 
     // Keep bindings to the descriptor pools. This ensures the pools stay valid while the Program
     // is in use.
@@ -240,7 +241,8 @@ class ProgramExecutableVk
     // since that's slow to calculate.
     ShaderMapInterfaceVariableInfoMap mVariableInfoMap;
 
-    ProgramInfo mProgramInfos[static_cast<int>(ProgramTransformOption::PermutationCount)];
+    ProgramInfo mGraphicsProgramInfos[static_cast<int>(ProgramTransformOption::PermutationCount)];
+    ProgramInfo mComputeProgramInfo;
 
     ProgramTransformOptionBits mTransformOptionBits;
 
