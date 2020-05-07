@@ -260,12 +260,12 @@ void ProgramVk::save(const gl::Context *context, gl::BinaryOutputStream *stream)
 
 void ProgramVk::setBinaryRetrievableHint(bool retrievable)
 {
-    UNIMPLEMENTED();
+    // Nothing to do here yet.
 }
 
 void ProgramVk::setSeparable(bool separable)
 {
-    // Nohting to do here yet.
+    // Nothing to do here yet.
 }
 
 // TODO: http://anglebug.com/3570: Move/Copy all of the necessary information into
@@ -302,7 +302,8 @@ std::unique_ptr<LinkEvent> ProgramVk::link(const gl::Context *context,
 
     // Compile the shaders.
     angle::Result status =
-        mShaderInfo.initShaders(contextVk, shaderSources, mExecutable.mVariableInfoMap);
+        mShaderInfo.initShaders(contextVk, mState.getProgramExecutable().getLinkedShaderStages(),
+                                shaderSources, mExecutable.mVariableInfoMap);
     if (status != angle::Result::Continue)
     {
         return std::make_unique<LinkEventDone>(status);

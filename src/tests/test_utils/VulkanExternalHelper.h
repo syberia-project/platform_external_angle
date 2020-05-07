@@ -8,7 +8,7 @@
 #ifndef ANGLE_TESTS_TESTUTILS_VULKANEXTERNALHELPER_H_
 #define ANGLE_TESTS_TESTUTILS_VULKANEXTERNALHELPER_H_
 
-#include "volk.h"
+#include "libANGLE/renderer/vulkan/vk_headers.h"
 #include "vulkan/vulkan_fuchsia_ext.h"
 
 namespace angle
@@ -20,7 +20,7 @@ class VulkanExternalHelper
     VulkanExternalHelper();
     ~VulkanExternalHelper();
 
-    void initialize();
+    void initialize(bool useSwiftshader);
 
     VkInstance getInstance() const { return mInstance; }
     VkPhysicalDevice getPhysicalDevice() const { return mPhysicalDevice; }

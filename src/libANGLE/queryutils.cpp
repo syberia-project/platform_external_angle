@@ -676,7 +676,7 @@ GLint GetInputResourceProperty(const Program *program, GLuint index, GLenum prop
             return clampCast<GLint>(program->getInputResourceName(index).size() + 1u);
 
         case GL_LOCATION:
-            return variable.location;
+            return variable.isBuiltIn() ? GL_INVALID_INDEX : variable.location;
 
         // The query is targeted at the set of active input variables used by the first shader stage
         // of program. If program contains multiple shader stages then input variables from any
@@ -3155,6 +3155,20 @@ bool GetQueryParameterInfo(const State &glState,
             *type      = GL_INT;
             *numParams = 1;
             return true;
+        case GL_MAX_CLIP_DISTANCES_EXT:  // case GL_MAX_CLIP_PLANES
+            if (clientMajorVersion < 2)
+            {
+                break;
+            }
+            if (!extensions.clipDistanceAPPLE)
+            {
+                // NOTE(hqle): if client version is 1. GL_MAX_CLIP_DISTANCES_EXT is equal
+                // to GL_MAX_CLIP_PLANES which is a valid enum.
+                return false;
+            }
+            *type      = GL_INT;
+            *numParams = 1;
+            return true;
     }
 
     if (glState.getClientType() == EGL_OPENGL_API)
@@ -3950,7 +3964,10 @@ void QueryContextAttrib(const gl::Context *context, EGLint attribute, EGLint *va
     }
 }
 
-void QuerySurfaceAttrib(const Surface *surface, EGLint attribute, EGLint *value)
+egl::Error QuerySurfaceAttrib(const Display *display,
+                              const Surface *surface,
+                              EGLint attribute,
+                              EGLint *value)
 {
     switch (attribute)
     {
@@ -3967,7 +3984,7 @@ void QuerySurfaceAttrib(const Surface *surface, EGLint attribute, EGLint *value)
             *value = surface->getConfig()->configID;
             break;
         case EGL_HEIGHT:
-            *value = surface->getHeight();
+            ANGLE_TRY(surface->getUserHeight(display, value));
             break;
         case EGL_HORIZONTAL_RESOLUTION:
             *value = surface->getHorizontalResolution();
@@ -4023,7 +4040,7 @@ void QuerySurfaceAttrib(const Surface *surface, EGLint attribute, EGLint *value)
             *value = surface->getVerticalResolution();
             break;
         case EGL_WIDTH:
-            *value = surface->getWidth();
+            ANGLE_TRY(surface->getUserWidth(display, value));
             break;
         case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
             *value = surface->isPostSubBufferSupported();
@@ -4050,6 +4067,7 @@ void QuerySurfaceAttrib(const Surface *surface, EGLint attribute, EGLint *value)
             UNREACHABLE();
             break;
     }
+    return NoError();
 }
 
 void SetSurfaceAttrib(Surface *surface, EGLint attribute, EGLint value)
