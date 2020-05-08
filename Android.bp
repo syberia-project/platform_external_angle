@@ -20,7 +20,6 @@ cc_defaults {
         "third_party/jsoncpp/source/src/lib_json/json_value.cpp",
         "third_party/jsoncpp/source/src/lib_json/json_writer.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -73,7 +72,6 @@ cc_library_shared {
     srcs: [
         "src/feature_support_util/feature_support_util.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -138,7 +136,6 @@ cc_defaults {
     srcs: [
         "src/libEGL/egl_loader_autogen.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -236,7 +233,6 @@ cc_library_shared {
     srcs: [
         "src/libEGL/libEGL.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -339,7 +335,6 @@ cc_library_shared {
     srcs: [
         "src/libGLESv1_CM/libGLESv1_CM.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -401,7 +396,6 @@ cc_defaults {
         "",
         "third_party/vulkan-headers/src/include/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -437,7 +431,6 @@ cc_defaults {
     srcs: [
         "src/third_party/volk/volk.c",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -471,7 +464,6 @@ cc_defaults {
     shared_libs: [
         "libvulkan",
     ],
-    sdk_version: "28",
     defaults: [
         "angle_volk",
         "angle_vulkan_headers",
@@ -546,7 +538,6 @@ cc_library_static {
         "third_party/spirv-tools/src/source/val/validate_type.cpp",
         "third_party/spirv-tools/src/source/val/validation_state.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -701,7 +692,6 @@ cc_defaults {
         "",
         "third_party/spirv-tools/src/include/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -793,7 +783,6 @@ cc_defaults {
         "",
         "third_party/spirv-headers/src/include/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -867,7 +856,6 @@ cc_library_static {
         "third_party/spirv-tools/src/source/util/string_utils.cpp",
         "third_party/spirv-tools/src/source/util/timer.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1027,7 +1015,6 @@ cc_library_static {
         "third_party/spirv-tools/src/source/opt/workaround1209.cpp",
         "third_party/spirv-tools/src/source/opt/wrap_opkill.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1132,7 +1119,6 @@ cc_defaults {
         "third_party/glslang/src/hlsl/hlslScanContext.cpp",
         "third_party/glslang/src/hlsl/hlslTokenStream.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1192,7 +1178,6 @@ cc_defaults {
     srcs: [
         "third_party/glslang/src/StandAlone/ResourceLimits.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1259,7 +1244,6 @@ cc_defaults {
     srcs: [
         "src/libANGLE/renderer/glslang_wrapper_utils.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1397,7 +1381,6 @@ cc_defaults {
         "src/libANGLE/renderer/vulkan/vk_mandatory_format_support_table_autogen.cpp",
         "src/libANGLE/renderer/vulkan/vk_utils.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1488,7 +1471,6 @@ cc_library_static {
         "src/compiler/preprocessor/preprocessor_lex_autogen.cpp",
         "src/compiler/preprocessor/preprocessor_tab_autogen.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1667,7 +1649,6 @@ cc_library_static {
         "src/compiler/translator/util.cpp",
         "src/third_party/compiler/ArrayBoundsClamper.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1727,7 +1708,6 @@ cc_defaults {
         "include/",
         "src/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1801,7 +1781,6 @@ cc_defaults {
         "src/libANGLE/Overlay_autogen.cpp",
         "src/libANGLE/Overlay_font_autogen.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1869,7 +1848,6 @@ cc_defaults {
         "src/",
         "src/common/third_party/base/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -1939,7 +1917,6 @@ cc_library_static {
         "src/image_util/loadimage.cpp",
         "src/image_util/loadimage_etc.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2011,7 +1988,6 @@ cc_library_static {
         "src/gpu_info_util/SystemInfo_android.cpp",
         "src/gpu_info_util/SystemInfo_vulkan.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2071,7 +2047,6 @@ cc_defaults {
     srcs: [
         "src/common/third_party/xxhash/xxhash.c",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2129,7 +2104,6 @@ cc_defaults {
         "src/common/system_utils_linux.cpp",
         "src/common/system_utils_posix.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2211,7 +2185,6 @@ cc_library_static {
         "src/common/uniform_type_info_autogen.cpp",
         "src/common/utilities.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2445,7 +2418,6 @@ cc_defaults {
         "src/libANGLE/validationGL45.cpp",
         "src/libANGLE/validationGL46.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2545,7 +2517,6 @@ cc_defaults {
     srcs: [
         "src/libANGLE/FrameCapture_mock.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2607,7 +2578,6 @@ cc_defaults {
         "include/",
         "src/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2674,7 +2644,6 @@ cc_defaults {
         "include/",
         "src/",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2775,7 +2744,6 @@ cc_library_shared {
         "src/libGLESv2/libGLESv2_autogen.cpp",
         "src/libGLESv2/proc_table_egl_autogen.cpp",
     ],
-    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
