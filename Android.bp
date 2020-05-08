@@ -2014,6 +2014,9 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    defaults: [
+        "angle_vulkan_headers",
+    ],
     arch: {
         arm64: {
             cflags: [
