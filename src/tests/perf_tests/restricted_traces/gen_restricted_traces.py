@@ -7,7 +7,9 @@
 # gen_restricted_traces.py:
 #   Generates integration code for the restricted trace tests.
 
+import fnmatch
 import json
+import os
 import sys
 
 gni_template = """# GENERATED FILE - DO NOT EDIT.
@@ -17,7 +19,8 @@ gni_template = """# GENERATED FILE - DO NOT EDIT.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
-# A list of all restricted trace tests. Can be consumed by tests/BUILD.gn.
+# A list of all restricted trace tests, paired with their context.
+# Can be consumed by tests/BUILD.gn.
 
 angle_restricted_traces = [
 {test_list}
@@ -46,6 +49,7 @@ enum class RestrictedTraceID
 }};
 
 using ReplayFunc = void (*)(uint32_t);
+using ResetFunc = void (*)();
 using SetupFunc = void (*)();
 using DecompressFunc = uint8_t *(*)(const std::vector<uint8_t> &);
 using SetBinaryDataDirFunc = void (*)(const char *);
@@ -71,6 +75,18 @@ inline void ReplayFrame(RestrictedTraceID traceID, uint32_t frameIndex)
     switch (traceID)
     {{
 {replay_func_cases}
+        default:
+            fprintf(stderr, "Error in switch.\\n");
+            assert(0);
+            break;
+    }}
+}}
+
+inline void ResetReplay(RestrictedTraceID traceID)
+{{
+    switch (traceID)
+    {{
+{reset_func_cases}
         default:
             fprintf(stderr, "Error in switch.\\n");
             assert(0);
@@ -142,7 +158,8 @@ def reject_duplicate_keys(pairs):
 
 
 def gen_gni(traces, gni_file, format_args):
-    format_args["test_list"] = ",\n".join(['"%s"' % trace for trace in traces])
+    format_args["test_list"] = ",\n".join(
+        ['"%s %s"' % (trace, get_context(trace)) for trace in traces])
     gni_data = gni_template.format(**format_args)
     with open(gni_file, "w") as out_file:
         out_file.write(gni_data)
@@ -154,6 +171,18 @@ def get_trace_info(trace):
     return ", ".join([element % trace for element in info])
 
 
+def get_context(trace):
+    "Returns the context number used by trace header file"
+    for file in os.listdir(trace):
+        # Load up the only header present for each trace
+        if fnmatch.fnmatch(file, '*.h'):
+            # Strip the extension to isolate the context
+            context = file[len(file) - 3]
+            assert context.isdigit() == True, "Failed to find trace context number"
+            assert file[len(file) - 4].isdigit() == False, "Context number is higher than 9"
+            return context
+
+
 def get_cases(traces, function, args):
     funcs = [
         "case RestrictedTraceID::%s: %s::%s(%s); break;" % (trace, trace, function, args)
@@ -162,9 +191,25 @@ def get_cases(traces, function, args):
     return "\n".join(funcs)
 
 
+def get_header_name(trace):
+    return "%s/%s_capture_context%s.h" % (trace, trace, get_context(trace))
+
+
+def get_sha1_name(trace):
+    return "%s.tar.gz.sha1" % trace
+
+
+def get_cases_with_context(traces, function_start, function_end, args):
+    funcs = [
+        "case RestrictedTraceID::%s: %s::%s%s%s(%s); break;" %
+        (trace, trace, function_start, get_context(trace), function_end, args) for trace in traces
+    ]
+    return "\n".join(funcs)
+
+
 def gen_header(traces, header_file, format_args):
 
-    includes = ["#include \"%s/%s_capture_context1.h\"" % (trace, trace) for trace in traces]
+    includes = ["#include \"%s\"" % get_header_name(trace) for trace in traces]
     trace_infos = [
         "{RestrictedTraceID::%s, {%s}}" % (trace, get_trace_info(trace)) for trace in traces
     ]
@@ -172,8 +217,10 @@ def gen_header(traces, header_file, format_args):
     format_args["includes"] = "\n".join(includes)
     format_args["trace_ids"] = ",\n".join(traces)
     format_args["trace_infos"] = ",\n".join(trace_infos)
-    format_args["replay_func_cases"] = get_cases(traces, "ReplayContext1Frame", "frameIndex")
-    format_args["setup_func_cases"] = get_cases(traces, "SetupContext1Replay", "")
+    format_args["replay_func_cases"] = get_cases_with_context(traces, "ReplayContext", "Frame",
+                                                              "frameIndex")
+    format_args["reset_func_cases"] = get_cases_with_context(traces, "ResetContext", "Replay", "")
+    format_args["setup_func_cases"] = get_cases_with_context(traces, "SetupContext", "Replay", "")
     format_args["set_binary_data_dir_cases"] = get_cases(traces, "SetBinaryDataDir", "dataDir")
     format_args["decompress_callback_cases"] = get_cases(traces, "SetBinaryDataDecompressCallback",
                                                          "callback")
@@ -195,9 +242,15 @@ def main():
     gni_file = 'restricted_traces_autogen.gni'
     header_file = 'restricted_traces_autogen.h'
 
+    json_data = read_json(json_file)
+    if 'traces' not in json_data:
+        print('Trace data missing traces key.')
+        return 1
+    traces = json_data['traces']
+
     # auto_script parameters.
     if len(sys.argv) > 1:
-        inputs = [json_file]
+        inputs = [json_file] + [get_sha1_name(trace) for trace in traces]
         outputs = [gni_file, header_file]
 
         if sys.argv[1] == 'inputs':
@@ -209,17 +262,11 @@ def main():
             return 1
         return 0
 
-    json_data = read_json(json_file)
-    if 'traces' not in json_data:
-        print('Trace data missing traces key.')
-        return 1
-
     format_args = {
         "script_name": __file__,
         "data_source_name": json_file,
     }
 
-    traces = json_data['traces']
     if not gen_gni(traces, gni_file, format_args):
         print('.gni file generation failed.')
         return 1

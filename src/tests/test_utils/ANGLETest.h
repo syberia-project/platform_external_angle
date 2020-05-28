@@ -334,8 +334,13 @@ class ANGLETestBase
 
     bool isSwiftshader() const
     {
-        return mCurrentParams->eglParameters.deviceType ==
-               EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE;
+        // Renderer might be swiftshader even if local swiftshader not used.
+        return mCurrentParams->isSwiftshader() || angle::IsSwiftshaderDevice();
+    }
+
+    bool enableDebugLayers() const
+    {
+        return mCurrentParams->eglParameters.debugLayersEnabled != EGL_FALSE;
     }
 
   protected:

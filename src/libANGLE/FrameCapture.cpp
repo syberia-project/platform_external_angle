@@ -280,26 +280,6 @@ void WriteInlineData(const std::vector<uint8_t> &vec, std::ostream &out)
 }
 
 template <>
-void WriteInlineData<GLfloat>(const std::vector<uint8_t> &vec, std::ostream &out)
-{
-    const float *data = reinterpret_cast<const GLfloat *>(vec.data());
-    size_t count      = vec.size() / sizeof(GLfloat);
-
-    if (data == nullptr)
-    {
-        return;
-    }
-
-    WriteGLFloatValue(out, data[0]);
-
-    for (size_t dataIndex = 1; dataIndex < count; ++dataIndex)
-    {
-        out << ", ";
-        WriteGLFloatValue(out, data[dataIndex]);
-    }
-}
-
-template <>
 void WriteInlineData<GLchar>(const std::vector<uint8_t> &vec, std::ostream &out)
 {
     const GLchar *data = reinterpret_cast<const GLchar *>(vec.data());
@@ -322,8 +302,6 @@ void WriteInlineData<GLchar>(const std::vector<uint8_t> &vec, std::ostream &out)
 
     out << "\"";
 }
-
-constexpr size_t kInlineDataThreshold = 128;
 
 void WriteStringParamReplay(std::ostream &out, const ParamCapture &param)
 {
@@ -405,67 +383,38 @@ void WriteBinaryParamReplay(DataCounters *counters,
     ASSERT(param.data.size() == 1);
     const std::vector<uint8_t> &data = param.data[0];
 
-    if (data.size() > kInlineDataThreshold)
+    ParamType overrideType = param.type;
+    if (param.type == ParamType::TGLvoidConstPointer || param.type == ParamType::TvoidConstPointer)
     {
-        size_t offset = binaryData->size();
-        binaryData->resize(offset + data.size());
-        memcpy(binaryData->data() + offset, data.data(), data.size());
-        if (param.type == ParamType::TvoidConstPointer || param.type == ParamType::TvoidPointer)
+        overrideType = ParamType::TGLubyteConstPointer;
+    }
+    if (overrideType == ParamType::TGLenumConstPointer || overrideType == ParamType::TGLcharPointer)
+    {
+        // Inline if data are of type string or enum
+        std::string paramTypeString = ParamTypeToString(param.type);
+        header << paramTypeString.substr(0, paramTypeString.length() - 1);
+        WriteParamStaticVarName(call, param, counter, header);
+        header << "[] = { ";
+        if (overrideType == ParamType::TGLenumConstPointer)
         {
-            out << "&gBinaryData[" << offset << "]";
+            WriteInlineData<GLuint>(data, header);
         }
         else
         {
-            out << "reinterpret_cast<" << ParamTypeToString(param.type) << ">(&gBinaryData["
-                << offset << "])";
+            ASSERT(overrideType == ParamType::TGLcharPointer);
+            WriteInlineData<GLchar>(data, header);
         }
+        header << " };\n";
+        WriteParamStaticVarName(call, param, counter, out);
     }
     else
     {
-        ParamType overrideType = param.type;
-        if (param.type == ParamType::TGLvoidConstPointer ||
-            param.type == ParamType::TvoidConstPointer)
-        {
-            overrideType = ParamType::TGLubyteConstPointer;
-        }
-
-        std::string paramTypeString = ParamTypeToString(overrideType);
-        header << paramTypeString.substr(0, paramTypeString.length() - 1);
-        WriteParamStaticVarName(call, param, counter, header);
-
-        header << "[] = { ";
-
-        switch (overrideType)
-        {
-            case ParamType::TGLintConstPointer:
-                WriteInlineData<GLint>(data, header);
-                break;
-            case ParamType::TGLshortConstPointer:
-                WriteInlineData<GLshort>(data, header);
-                break;
-            case ParamType::TGLfloatConstPointer:
-                WriteInlineData<GLfloat>(data, header);
-                break;
-            case ParamType::TGLubyteConstPointer:
-                WriteInlineData<GLubyte, int>(data, header);
-                break;
-            case ParamType::TGLuintConstPointer:
-            case ParamType::TGLenumConstPointer:
-                WriteInlineData<GLuint>(data, header);
-                break;
-            case ParamType::TGLcharPointer:
-                WriteInlineData<GLchar>(data, header);
-                break;
-            default:
-                INFO() << "Unhandled ParamType: " << angle::ParamTypeToString(overrideType)
-                       << " in " << call.name();
-                UNIMPLEMENTED();
-                break;
-        }
-
-        header << " };\n";
-
-        WriteParamStaticVarName(call, param, counter, out);
+        // Store in binary file if data are not of type string or enum
+        size_t offset = binaryData->size();
+        binaryData->resize(offset + data.size());
+        memcpy(binaryData->data() + offset, data.data(), data.size());
+        out << "reinterpret_cast<" << ParamTypeToString(overrideType) << ">(&gBinaryData[" << offset
+            << "])";
     }
 }
 
@@ -649,30 +598,38 @@ size_t MaxClientArraySize(const gl::AttribArray<size_t> &clientArraySizes)
 
 struct SaveFileHelper
 {
-    SaveFileHelper(const std::string &filePathIn, std::ios_base::openmode mode = std::ios::out)
-        : ofs(filePathIn, mode), filePath(filePathIn)
+  public:
+    // We always use ios::binary to avoid inconsistent line endings when captured on Linux vs Win.
+    SaveFileHelper(const std::string &filePathIn)
+        : mOfs(filePathIn, std::ios::binary | std::ios::out), mFilePath(filePathIn)
     {
-        if (!ofs.is_open())
+        if (!mOfs.is_open())
         {
             FATAL() << "Could not open " << filePathIn;
         }
     }
 
-    ~SaveFileHelper() { printf("Saved '%s'.\n", filePath.c_str()); }
+    ~SaveFileHelper() { printf("Saved '%s'.\n", mFilePath.c_str()); }
 
     template <typename T>
     SaveFileHelper &operator<<(const T &value)
     {
-        ofs << value;
-        if (ofs.bad())
+        mOfs << value;
+        if (mOfs.bad())
         {
-            FATAL() << "Error writing to " << filePath;
+            FATAL() << "Error writing to " << mFilePath;
         }
         return *this;
     }
 
-    std::ofstream ofs;
-    std::string filePath;
+    void write(const uint8_t *data, size_t size)
+    {
+        mOfs.write(reinterpret_cast<const char *>(data), size);
+    }
+
+  private:
+    std::ofstream mOfs;
+    std::string mFilePath;
 };
 
 std::string GetBinaryDataFilePath(bool compression,
@@ -697,7 +654,7 @@ void SaveBinaryData(bool compression,
     std::string binaryDataFileName = GetBinaryDataFilePath(compression, contextId, captureLabel);
     std::string dataFilepath       = outDir + binaryDataFileName;
 
-    SaveFileHelper saveData(dataFilepath, std::ios::binary);
+    SaveFileHelper saveData(dataFilepath);
 
     if (compression)
     {
@@ -717,11 +674,11 @@ void SaveBinaryData(bool compression,
             FATAL() << "Error compressing binary data: " << zResult;
         }
 
-        saveData.ofs.write(reinterpret_cast<const char *>(compressedData.data()), compressedSize);
+        saveData.write(compressedData.data(), compressedSize);
     }
     else
     {
-        saveData.ofs.write(reinterpret_cast<const char *>(binaryData.data()), binaryData.size());
+        saveData.write(binaryData.data(), binaryData.size());
     }
 }
 
@@ -1113,7 +1070,7 @@ void WriteCppReplayIndexFiles(bool compression,
     source << "    if (fp == 0)\n";
     source << "    {\n";
     source << "        fprintf(stderr, \"Error loading binary data file: %s\\n\", fileName);\n";
-    source << "        exit(1);\n";
+    source << "        return;\n";
     source << "    }\n";
     source << "    fseek(fp, 0, SEEK_END);\n";
     source << "    long size = ftell(fp);\n";
@@ -2618,7 +2575,7 @@ void CaptureMidExecutionSetup(const gl::Context *context,
     }
 
     // Bind samplers
-    gl::SamplerBindingVector samplerBindings = apiState.getSamplers();
+    const gl::SamplerBindingVector &samplerBindings = apiState.getSamplers();
     for (GLuint bindingIndex = 0; bindingIndex < static_cast<GLuint>(samplerBindings.size());
          ++bindingIndex)
     {

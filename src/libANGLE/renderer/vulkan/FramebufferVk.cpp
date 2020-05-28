@@ -275,7 +275,7 @@ angle::Result FramebufferVk::clearImpl(const gl::Context *context,
     // there's a depth mask, depth clearing is already disabled.
     bool maskedClearColor =
         clearColor && (mActiveColorComponents & colorMaskFlags) != mActiveColorComponents;
-    bool maskedClearStencil = stencilMask != 0xFF;
+    bool maskedClearStencil = clearStencil && stencilMask != 0xFF;
 
     bool clearColorWithRenderPassLoadOp   = clearColor && !maskedClearColor && !scissoredClear;
     bool clearDepthWithRenderPassLoadOp   = clearDepth && !scissoredClear;
@@ -323,6 +323,13 @@ angle::Result FramebufferVk::clearImpl(const gl::Context *context,
         {
             return angle::Result::Continue;
         }
+    }
+
+    if (scissoredClear && !maskedClearColor && !maskedClearStencil)
+    {
+        return clearImmediatelyWithRenderPassOp(contextVk, scissoredRenderArea, clearColorBuffers,
+                                                clearDepth, clearStencil, clearColorValue,
+                                                clearDepthStencilValue);
     }
 
     // The most costly clear mode is when we need to mask out specific color channels or stencil
@@ -463,9 +470,42 @@ angle::Result FramebufferVk::readPixels(const gl::Context *context,
                                                    format, type, area, clippedArea, &params,
                                                    &outputSkipBytes));
 
-    if (contextVk->isViewportFlipEnabledForReadFBO())
+    bool flipY = contextVk->isViewportFlipEnabledForReadFBO();
+    switch (params.rotation = contextVk->getRotationReadFramebuffer())
     {
-        params.area.y          = fbRect.height - clippedArea.y - clippedArea.height;
+        case SurfaceRotation::Identity:
+            // Do not rotate gl_Position (surface matches the device's orientation):
+            if (flipY)
+            {
+                params.area.y = fbRect.height - clippedArea.y - clippedArea.height;
+            }
+            break;
+        case SurfaceRotation::Rotated90Degrees:
+            // Rotate gl_Position 90 degrees:
+            params.area.x = clippedArea.y;
+            params.area.y =
+                flipY ? clippedArea.x : fbRect.width - clippedArea.x - clippedArea.width;
+            std::swap(params.area.width, params.area.height);
+            break;
+        case SurfaceRotation::Rotated180Degrees:
+            // Rotate gl_Position 180 degrees:
+            params.area.x = fbRect.width - clippedArea.x - clippedArea.width;
+            params.area.y =
+                flipY ? clippedArea.y : fbRect.height - clippedArea.y - clippedArea.height;
+            break;
+        case SurfaceRotation::Rotated270Degrees:
+            // Rotate gl_Position 270 degrees:
+            params.area.x = fbRect.height - clippedArea.y - clippedArea.height;
+            params.area.y =
+                flipY ? fbRect.width - clippedArea.x - clippedArea.width : clippedArea.x;
+            std::swap(params.area.width, params.area.height);
+            break;
+        default:
+            UNREACHABLE();
+            break;
+    }
+    if (flipY)
+    {
         params.reverseRowOrder = !params.reverseRowOrder;
     }
 
@@ -1337,6 +1377,40 @@ angle::Result FramebufferVk::getFramebuffer(ContextVk *contextVk, vk::Framebuffe
     return angle::Result::Continue;
 }
 
+angle::Result FramebufferVk::clearImmediatelyWithRenderPassOp(
+    ContextVk *contextVk,
+    const gl::Rectangle &clearArea,
+    gl::DrawBufferMask clearColorBuffers,
+    bool clearDepth,
+    bool clearStencil,
+    const VkClearColorValue &clearColorValue,
+    const VkClearDepthStencilValue &clearDepthStencilValue)
+{
+    for (size_t colorIndexGL : clearColorBuffers)
+    {
+        VkClearValue clearValue = getCorrectedColorClearValue(colorIndexGL, clearColorValue);
+        mDeferredClears.store(static_cast<uint32_t>(colorIndexGL), VK_IMAGE_ASPECT_COLOR_BIT,
+                              clearValue);
+    }
+
+    if (clearDepth)
+    {
+        VkClearValue clearValue;
+        clearValue.depthStencil = clearDepthStencilValue;
+        mDeferredClears.store(vk::kClearValueDepthIndex, VK_IMAGE_ASPECT_DEPTH_BIT, clearValue);
+    }
+
+    if (clearStencil)
+    {
+        VkClearValue clearValue;
+        clearValue.depthStencil = clearDepthStencilValue;
+        mDeferredClears.store(vk::kClearValueStencilIndex, VK_IMAGE_ASPECT_STENCIL_BIT, clearValue);
+    }
+
+    // Ensure the clear happens immediately.
+    return flushDeferredClears(contextVk, clearArea);
+}
+
 angle::Result FramebufferVk::clearWithDraw(ContextVk *contextVk,
                                            const gl::Rectangle &clearArea,
                                            gl::DrawBufferMask clearColorBuffers,
@@ -1353,11 +1427,8 @@ angle::Result FramebufferVk::clearWithDraw(ContextVk *contextVk,
         clearValue.depthStencil = clearDepthStencilValue;
         mDeferredClears.store(vk::kClearValueDepthIndex, VK_IMAGE_ASPECT_DEPTH_BIT, clearValue);
 
-        // Ensure the clear happens immediately.
-        if (clearColorBuffers.none() && !clearStencil)
-        {
-            return flushDeferredClears(contextVk, clearArea);
-        }
+        // Scissored-only clears are handled in clearImmediatelyWithRenderPassOp.
+        ASSERT(clearColorBuffers.any() || clearStencil);
     }
 
     UtilsVk::ClearFramebufferParameters params = {};
@@ -1399,6 +1470,40 @@ angle::Result FramebufferVk::clearWithDraw(ContextVk *contextVk,
     return angle::Result::Continue;
 }
 
+VkClearValue FramebufferVk::getCorrectedColorClearValue(size_t colorIndexGL,
+                                                        const VkClearColorValue &clearColor) const
+{
+    VkClearValue clearValue;
+    clearValue.color = clearColor;
+
+    if (!mEmulatedAlphaAttachmentMask[colorIndexGL])
+    {
+        return clearValue;
+    }
+
+    // If the render target doesn't have alpha, but its emulated format has it, clear the alpha
+    // to 1.
+    RenderTargetVk *renderTarget = getColorDrawRenderTarget(colorIndexGL);
+    const vk::Format &format     = renderTarget->getImageFormat();
+    if (format.vkFormatIsInt)
+    {
+        if (format.vkFormatIsUnsigned)
+        {
+            clearValue.color.uint32[3] = kEmulatedAlphaValue;
+        }
+        else
+        {
+            clearValue.color.int32[3] = kEmulatedAlphaValue;
+        }
+    }
+    else
+    {
+        clearValue.color.float32[3] = kEmulatedAlphaValue;
+    }
+
+    return clearValue;
+}
+
 void FramebufferVk::clearWithRenderPassOp(gl::DrawBufferMask clearColorBuffers,
                                           bool clearDepth,
                                           bool clearStencil,
@@ -1410,33 +1515,8 @@ void FramebufferVk::clearWithRenderPassOp(gl::DrawBufferMask clearColorBuffers,
     {
         ASSERT(mState.getEnabledDrawBuffers().test(colorIndexGL));
         RenderTargetVk *renderTarget = getColorDrawRenderTarget(colorIndexGL);
-
-        VkClearValue clearValue;
-        clearValue.color = clearColorValue;
-
-        // If the render target doesn't have alpha, but its emulated format has it, clear the
-        // alpha to 1.
-        if (mEmulatedAlphaAttachmentMask[colorIndexGL])
-        {
-            const vk::Format &format = renderTarget->getImageFormat();
-            if (format.vkFormatIsInt)
-            {
-                if (format.vkFormatIsUnsigned)
-                {
-                    clearValue.color.uint32[3] = kEmulatedAlphaValue;
-                }
-                else
-                {
-                    clearValue.color.int32[3] = kEmulatedAlphaValue;
-                }
-            }
-            else
-            {
-                clearValue.color.float32[3] = kEmulatedAlphaValue;
-            }
-        }
-
-        gl::ImageIndex imageIndex = renderTarget->getImageIndex();
+        VkClearValue clearValue      = getCorrectedColorClearValue(colorIndexGL, clearColorValue);
+        gl::ImageIndex imageIndex    = renderTarget->getImageIndex();
         renderTarget->getImage().stageClear(imageIndex, VK_IMAGE_ASPECT_COLOR_BIT, clearValue);
     }
 

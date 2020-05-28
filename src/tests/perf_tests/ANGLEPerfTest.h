@@ -85,6 +85,9 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     unsigned int getNumStepsPerformed() const { return mNumStepsPerformed; }
     void doRunLoop(double maxRunTime);
 
+    // Overriden in trace perf tests.
+    virtual void saveScreenshot(const std::string &screenshotName) {}
+
     std::string mName;
     std::string mBackend;
     std::string mStory;
@@ -152,9 +155,9 @@ class ANGLERenderTest : public ANGLEPerfTest
     void beginGLTraceEvent(const char *name, double hostTimeSec);
     void endGLTraceEvent(const char *name, double hostTimeSec);
 
-    bool mIsTimestampQueryAvailable;
+    void disableTestHarnessSwap() { mSwapEnabled = false; }
 
-    void saveScreenshotIfEnabled();
+    bool mIsTimestampQueryAvailable;
 
   private:
     void SetUp() override;
@@ -171,6 +174,7 @@ class ANGLERenderTest : public ANGLEPerfTest
     std::vector<const char *> mExtensionPrerequisites;
     angle::PlatformMethods mPlatformMethods;
     ConfigParameters mConfigParams;
+    bool mSwapEnabled;
 
     GLuint mTimestampQuery;
 
