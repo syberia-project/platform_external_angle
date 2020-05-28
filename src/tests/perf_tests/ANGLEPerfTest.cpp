@@ -16,7 +16,6 @@
 #include "common/utilities.h"
 #include "third_party/perf/perf_test.h"
 #include "third_party/trace_event/trace_event.h"
-#include "util/png_utils.h"
 #include "util/shader_utils.h"
 #include "util/test_utils.h"
 
@@ -410,7 +409,8 @@ ANGLERenderTest::ANGLERenderTest(const std::string &name, const RenderTestParams
       mTestParams(testParams),
       mIsTimestampQueryAvailable(false),
       mGLWindow(nullptr),
-      mOSWindow(nullptr)
+      mOSWindow(nullptr),
+      mSwapEnabled(true)
 {
     // Force fast tests to make sure our slowest bots don't time out.
     if (OneFrame())
@@ -507,6 +507,14 @@ void ANGLERenderTest::SetUp()
     EGLPlatformParameters withMethods = mTestParams.eglParameters;
     withMethods.platformMethods       = &mPlatformMethods;
 
+    // Request a common framebuffer config
+    mConfigParams.redBits     = 8;
+    mConfigParams.greenBits   = 8;
+    mConfigParams.blueBits    = 8;
+    mConfigParams.alphaBits   = 8;
+    mConfigParams.depthBits   = 24;
+    mConfigParams.stencilBits = 8;
+
     if (!mGLWindow->initializeGL(mOSWindow, mEntryPointsLib.get(), mTestParams.driver, withMethods,
                                  mConfigParams))
     {
@@ -564,6 +572,16 @@ void ANGLERenderTest::SetUp()
         mSkipTest = true;
         FAIL() << "Please initialize 'iterationsPerStep'.";
         // FAIL returns.
+    }
+
+    // Capture a screenshot if enabled.
+    if (gScreenShotDir != nullptr)
+    {
+        std::stringstream screenshotNameStr;
+        screenshotNameStr << gScreenShotDir << GetPathSeparator() << "angle" << mBackend << "_"
+                          << mStory << ".png";
+        std::string screenshotName = screenshotNameStr.str();
+        saveScreenshot(screenshotName);
     }
 }
 
@@ -655,14 +673,14 @@ void ANGLERenderTest::step()
     {
         drawBenchmark();
 
-        // Saves a screenshot. The test will also exit early if we're taking screenshots.
-        saveScreenshotIfEnabled();
-
         // Swap is needed so that the GPU driver will occasionally flush its
         // internal command queue to the GPU. This is enabled for null back-end
         // devices because some back-ends (e.g. Vulkan) also accumulate internal
         // command queues.
-        mGLWindow->swap();
+        if (mSwapEnabled)
+        {
+            mGLWindow->swap();
+        }
         mOSWindow->messageLoop();
 
 #if defined(ANGLE_ENABLE_ASSERTS)
@@ -756,33 +774,6 @@ void ANGLERenderTest::setRobustResourceInit(bool enabled)
 std::vector<TraceEvent> &ANGLERenderTest::getTraceEventBuffer()
 {
     return mTraceEventBuffer;
-}
-
-void ANGLERenderTest::saveScreenshotIfEnabled()
-{
-    if (gScreenShotDir == nullptr)
-    {
-        return;
-    }
-
-    std::stringstream screenshotNameStr;
-    screenshotNameStr << gScreenShotDir << GetPathSeparator() << "angle" << mBackend << "_"
-                      << mStory << ".png";
-    std::string screenshotName = screenshotNameStr.str();
-
-    // RGBA 4-byte data.
-    std::vector<uint8_t> pixelData(mTestParams.windowWidth * mTestParams.windowHeight * 4);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, mTestParams.windowWidth, mTestParams.windowHeight, GL_RGBA, GL_UNSIGNED_BYTE,
-                 pixelData.data());
-
-    angle::SavePNG(screenshotName.c_str(), "ANGLE Screenshot", mTestParams.windowWidth,
-                   mTestParams.windowHeight, pixelData);
-
-    // Early exit.
-    abortTest();
-    mSkipTest = true;
 }
 
 namespace angle

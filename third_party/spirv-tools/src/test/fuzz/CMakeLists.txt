@@ -21,7 +21,6 @@ if (${SPIRV_BUILD_FUZZER})
           equivalence_relation_test.cpp
           fact_manager_test.cpp
           fuzz_test_util.cpp
-          fuzzer_pass_add_useful_constructs_test.cpp
           fuzzer_pass_construct_composites_test.cpp
           fuzzer_pass_donate_modules_test.cpp
           instruction_descriptor_test.cpp
@@ -47,6 +46,7 @@ if (${SPIRV_BUILD_FUZZER})
           transformation_add_type_pointer_test.cpp
           transformation_add_type_struct_test.cpp
           transformation_add_type_vector_test.cpp
+          transformation_adjust_branch_weights_test.cpp
           transformation_composite_construct_test.cpp
           transformation_composite_extract_test.cpp
           transformation_compute_data_synonym_fact_closure_test.cpp

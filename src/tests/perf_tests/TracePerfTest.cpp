@@ -14,6 +14,7 @@
 #include "tests/perf_tests/DrawCallPerfParams.h"
 #include "util/egl_loader_autogen.h"
 #include "util/frame_capture_utils.h"
+#include "util/png_utils.h"
 
 #include "restricted_traces/restricted_traces_autogen.h"
 
@@ -90,6 +91,7 @@ class TracePerfTest : public ANGLERenderTest, public ::testing::WithParamInterfa
     };
 
     void sampleTime();
+    void saveScreenshot(const std::string &screenshotName) override;
 
     // For tracking RenderPass/FBO change timing.
     QueryInfo mCurrentQuery = {};
@@ -109,6 +111,9 @@ TracePerfTest::TracePerfTest()
     {
         mSkipTest = true;
     }
+
+    // We already swap in TracePerfTest::drawBenchmark, no need to swap again in the harness.
+    disableTestHarnessSwap();
 }
 
 void TracePerfTest::initializeBenchmark()
@@ -136,6 +141,7 @@ void TracePerfTest::initializeBenchmark()
 
     // Potentially slow. Can load a lot of resources.
     SetupReplay(params.testID);
+    glFinish();
 
     ASSERT_TRUE(mEndFrame > mStartFrame);
 
@@ -187,6 +193,8 @@ void TracePerfTest::drawBenchmark()
 
         endInternalTraceEvent(frameName);
     }
+
+    ResetReplay(GetParam().testID);
 
     // Process any running queries once per iteration.
     for (size_t queryIndex = 0; queryIndex < mRunningQueries.size();)
@@ -290,6 +298,45 @@ void TracePerfTest::onFramebufferChange(GLenum target, GLuint framebuffer)
     glGenQueriesEXT(1, &mCurrentQuery.beginTimestampQuery);
     glQueryCounterEXT(mCurrentQuery.beginTimestampQuery, GL_TIMESTAMP_EXT);
     mCurrentQuery.framebuffer = framebuffer;
+}
+
+void TracePerfTest::saveScreenshot(const std::string &screenshotName)
+{
+    // Render a single frame.
+    RestrictedTraceID testID   = GetParam().testID;
+    const TraceInfo &traceInfo = kTraceInfos[testID];
+    ReplayFrame(testID, traceInfo.startFrame);
+
+    // RGBA 4-byte data.
+    uint32_t pixelCount = mTestParams.windowWidth * mTestParams.windowHeight;
+    std::vector<uint8_t> pixelData(pixelCount * 4);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glReadPixels(0, 0, mTestParams.windowWidth, mTestParams.windowHeight, GL_RGBA, GL_UNSIGNED_BYTE,
+                 pixelData.data());
+
+    // Convert to RGB and flip y.
+    std::vector<uint8_t> rgbData(pixelCount * 3);
+    for (EGLint y = 0; y < mTestParams.windowHeight; ++y)
+    {
+        for (EGLint x = 0; x < mTestParams.windowWidth; ++x)
+        {
+            EGLint srcPixel = x + y * mTestParams.windowWidth;
+            EGLint dstPixel = x + (mTestParams.windowHeight - y - 1) * mTestParams.windowWidth;
+            memcpy(&rgbData[dstPixel * 3], &pixelData[srcPixel * 4], 3);
+        }
+    }
+
+    angle::SavePNGRGB(screenshotName.c_str(), "ANGLE Screenshot", mTestParams.windowWidth,
+                      mTestParams.windowHeight, rgbData);
+
+    // Finish the frame loop.
+    for (uint32_t nextFrame = traceInfo.startFrame + 1; nextFrame < traceInfo.endFrame; ++nextFrame)
+    {
+        ReplayFrame(testID, nextFrame);
+    }
+    getGLWindow()->swap();
+    glFinish();
 }
 
 ANGLE_MAYBE_UNUSED void FramebufferChangeCallback(void *userData, GLenum target, GLuint framebuffer)

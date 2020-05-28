@@ -22,6 +22,13 @@ namespace rx
 {
 namespace
 {
+constexpr gl::ShaderMap<vk::PipelineStage> kPipelineStageShaderMap = {
+    {gl::ShaderType::Vertex, vk::PipelineStage::VertexShader},
+    {gl::ShaderType::Fragment, vk::PipelineStage::FragmentShader},
+    {gl::ShaderType::Geometry, vk::PipelineStage::GeometryShader},
+    {gl::ShaderType::Compute, vk::PipelineStage::ComputeShader},
+};
+
 VkDeviceSize GetShaderBufferBindingSize(const gl::OffsetBindingPointer<gl::Buffer> &bufferBinding)
 {
     if (bufferBinding.getSize() != 0)
@@ -264,7 +271,7 @@ ProgramVk *ProgramExecutableVk::getShaderProgram(const gl::State &glState,
 {
     if (mProgram)
     {
-        const gl::ProgramExecutable &glExecutable = mProgram->getState().getProgramExecutable();
+        const gl::ProgramExecutable &glExecutable = mProgram->getState().getExecutable();
         if (glExecutable.hasLinkedShaderStage(shaderType))
         {
             return mProgram;
@@ -300,7 +307,7 @@ const gl::ProgramExecutable &ProgramExecutableVk::getGlExecutable()
     ASSERT(mProgram || mProgramPipeline);
     if (mProgram)
     {
-        return mProgram->getState().getProgramExecutable();
+        return mProgram->getState().getExecutable();
     }
     return mProgramPipeline->getState().getProgramExecutable();
 }
@@ -430,8 +437,7 @@ void ProgramExecutableVk::addImageDescriptorSetDesc(const gl::ProgramState &prog
         // The front-end always binds array image units sequentially.
         uint32_t arraySize = static_cast<uint32_t>(imageBinding.boundImageUnits.size());
 
-        for (const gl::ShaderType shaderType :
-             programState.getProgramExecutable().getLinkedShaderStages())
+        for (const gl::ShaderType shaderType : programState.getExecutable().getLinkedShaderStages())
         {
             if (!imageUniform.isActive(shaderType))
             {
@@ -485,8 +491,7 @@ void ProgramExecutableVk::addTextureDescriptorSetDesc(const gl::ProgramState &pr
             }
         }
 
-        for (const gl::ShaderType shaderType :
-             programState.getProgramExecutable().getLinkedShaderStages())
+        for (const gl::ShaderType shaderType : programState.getExecutable().getLinkedShaderStages())
         {
             if (!samplerUniform.isActive(shaderType))
             {
@@ -942,14 +947,12 @@ void ProgramExecutableVk::updateBuffersDescriptorSet(ContextVk *contextVk,
             // We set the SHADER_READ_BIT to be conservative.
             VkAccessFlags accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             commandBufferHelper->bufferWrite(resourceUseList, accessFlags,
-                                             gl_vk::kPipelineStageShaderMap[shaderType],
-                                             &bufferHelper);
+                                             kPipelineStageShaderMap[shaderType], &bufferHelper);
         }
         else
         {
             commandBufferHelper->bufferRead(resourceUseList, VK_ACCESS_UNIFORM_READ_BIT,
-                                            gl_vk::kPipelineStageShaderMap[shaderType],
-                                            &bufferHelper);
+                                            kPipelineStageShaderMap[shaderType], &bufferHelper);
         }
 
         ++writeCount;
@@ -1022,7 +1025,7 @@ void ProgramExecutableVk::updateAtomicCounterBuffersDescriptorSet(
         // We set SHADER_READ_BIT to be conservative.
         commandBufferHelper->bufferWrite(resourceUseList,
                                          VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                                         gl_vk::kPipelineStageShaderMap[shaderType], &bufferHelper);
+                                         kPipelineStageShaderMap[shaderType], &bufferHelper);
 
         writtenBindings.set(binding);
     }
@@ -1182,7 +1185,7 @@ angle::Result ProgramExecutableVk::updateTransformFeedbackDescriptorSet(
     gl::ShaderMap<DefaultUniformBlock> &defaultUniformBlocks,
     ContextVk *contextVk)
 {
-    const gl::ProgramExecutable &executable = programState.getProgramExecutable();
+    const gl::ProgramExecutable &executable = programState.getExecutable();
     ASSERT(executable.hasTransformFeedbackOutput());
 
     ANGLE_TRY(allocateDescriptorSet(contextVk, kUniformsAndXfbDescriptorSetIndex));
@@ -1204,7 +1207,7 @@ void ProgramExecutableVk::updateTransformFeedbackDescriptorSetImpl(
 {
     const gl::State &glState                 = contextVk->getState();
     gl::TransformFeedback *transformFeedback = glState.getCurrentTransformFeedback();
-    const gl::ProgramExecutable &executable  = programState.getProgramExecutable();
+    const gl::ProgramExecutable &executable  = programState.getExecutable();
 
     if (!executable.hasTransformFeedbackOutput())
     {

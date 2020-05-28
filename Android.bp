@@ -420,26 +420,21 @@ cc_library_shared {
     },
 }
 cc_defaults {
-    name: "src_libANGLE_renderer_vulkan_angle_vulkan_memory_allocator",
+    name: "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
     stl: "libc++_static",
     local_include_dirs: [
         "",
-        "src/third_party/volk/",
-        "third_party/VulkanMemoryAllocator/src/",
-        "third_party/vulkan-headers/src/include/",
+        "third_party/vulkan_memory_allocator/src/",
     ],
     sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_SHARED_LIBVULKAN=1",
         "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
         "-DNVALGRIND",
-        "-DVK_USE_PLATFORM_ANDROID_KHR",
-        "-DVMA_IMPLEMENTATION",
         "-D_FORTIFY_SOURCE=2",
         "-D_GNU_SOURCE",
         "-D__STDC_CONSTANT_MACROS",
@@ -462,9 +457,6 @@ cc_defaults {
         "-Wno-unused-private-field",
         "-Wno-unused-variable",
     ],
-    defaults: [
-        "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-    ],
 }
 cc_defaults {
     name: "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
@@ -473,8 +465,8 @@ cc_defaults {
         "include/",
         "src/",
         "src/third_party/volk/",
-        "third_party/VulkanMemoryAllocator/src/",
         "third_party/vulkan-headers/src/include/",
+        "third_party/vulkan_memory_allocator/src/",
     ],
     srcs: [
         "src/libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.cpp",
@@ -516,7 +508,7 @@ cc_defaults {
     ],
     defaults: [
         "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-        "src_libANGLE_renderer_vulkan_angle_vulkan_memory_allocator",
+        "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
     ],
     arch: {
         arm64: {
@@ -1683,6 +1675,7 @@ cc_defaults {
     ],
     srcs: [
         "src/libANGLE/renderer/vulkan/BufferVk.cpp",
+        "src/libANGLE/renderer/vulkan/CommandProcessor.cpp",
         "src/libANGLE/renderer/vulkan/CompilerVk.cpp",
         "src/libANGLE/renderer/vulkan/ContextVk.cpp",
         "src/libANGLE/renderer/vulkan/DeviceVk.cpp",
@@ -3356,9 +3349,6 @@ android_library {
 android_app {
     static_libs: [
         "ANGLE_library",
-    ],
-    required: [
-        "privapp_whitelist_com.android.angle",
     ],
     name: "ANGLE",
     defaults: [

@@ -120,6 +120,10 @@ struct FeaturesVk : FeatureSetBase
         "supports_external_memory_fuchsia", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_FUCHSIA_external_memory extension", &members};
 
+    angle::Feature supportsFilteringPrecision = {
+        "supports_filtering_precision_google", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_GOOGLE_sampler_filtering_precision extension", &members};
+
     // Whether the VkDevice supports the VK_KHR_external_fence_capabilities extension.
     Feature supportsExternalFenceCapabilities = {
         "supports_external_fence_capabilities", FeatureCategory::VulkanFeatures,
@@ -304,6 +308,22 @@ struct FeaturesVk : FeatureSetBase
     Feature supportDepthStencilRenderingFeedbackLoops = {
         "support_depth_stencil_rendering_feedback_loops", FeatureCategory::VulkanFeatures,
         "Suport depth/stencil rendering feedback loops", &members, "http://anglebug.com/4490"};
+
+    // Desktop (at least NVIDIA) drivers prefer combining barriers into one vkCmdPipelineBarrier
+    // call over issuing multiple barrier calls with fine grained dependency information to have
+    // better performance. http://anglebug.com/4633
+    Feature preferAggregateBarrierCalls = {
+        "prefer_aggregate_barrier_calls", FeatureCategory::VulkanWorkarounds,
+        "Single barrier call is preferred over multiple calls with "
+        "fine grained pipeline stage dependency information",
+        &members, "http://anglebug.com/4633"};
+
+    // Enable parallel thread that processes and submits vulkan command buffers.
+    // Currently off by default to enable testing.
+    Feature enableCommandProcessingThread = {
+        "enable_command_processing_thread", FeatureCategory::VulkanFeatures,
+        "Enable parallel processing and submission of Vulkan commands in worker thread", &members,
+        "http://anglebug.com/4324"};
 };
 
 inline FeaturesVk::FeaturesVk()  = default;

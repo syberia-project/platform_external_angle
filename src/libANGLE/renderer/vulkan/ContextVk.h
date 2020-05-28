@@ -10,8 +10,11 @@
 #ifndef LIBANGLE_RENDERER_VULKAN_CONTEXTVK_H_
 #define LIBANGLE_RENDERER_VULKAN_CONTEXTVK_H_
 
+#include <condition_variable>
+
 #include "common/PackedEnums.h"
 #include "libANGLE/renderer/ContextImpl.h"
+#include "libANGLE/renderer/renderer_utils.h"
 #include "libANGLE/renderer/vulkan/OverlayVk.h"
 #include "libANGLE/renderer/vulkan/PersistentCommandPool.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
@@ -28,23 +31,6 @@ namespace rx
 class ProgramExecutableVk;
 class RendererVk;
 class WindowSurfaceVk;
-
-// The possible rotations of the surface/draw framebuffer, used for pre-rotating gl_Position
-// in the vertex shader.
-enum class SurfaceRotationType
-{
-    Identity,
-    Rotated90Degrees,
-    Rotated180Degrees,
-    Rotated270Degrees,
-    FlippedIdentity,
-    FlippedRotated90Degrees,
-    FlippedRotated180Degrees,
-    FlippedRotated270Degrees,
-
-    InvalidEnum,
-    EnumCount = InvalidEnum,
-};
 
 struct CommandBatch final : angle::NonCopyable
 {
@@ -227,8 +213,8 @@ class ContextVk : public ContextImpl, public vk::Context
     // render area must be swapped.
     bool isRotatedAspectRatioForDrawFBO() const;
     bool isRotatedAspectRatioForReadFBO() const;
-    SurfaceRotationType getRotationDrawFramebuffer() const;
-    SurfaceRotationType getRotationReadFramebuffer() const;
+    SurfaceRotation getRotationDrawFramebuffer() const;
+    SurfaceRotation getRotationReadFramebuffer() const;
 
     void invalidateProgramBindingHelper(const gl::State &glState);
     angle::Result invalidateProgramExecutableHelper(const gl::Context *context);
@@ -343,7 +329,6 @@ class ContextVk : public ContextImpl, public vk::Context
     void onHostVisibleBufferWrite() { mIsAnyHostVisibleBufferWritten = true; }
 
     void invalidateCurrentTransformFeedbackBuffers();
-    void invalidateCurrentTransformFeedbackState();
     void onTransformFeedbackStateChanged();
 
     // When UtilsVk issues draw or dispatch calls, it binds descriptor sets that the context is not
@@ -464,21 +449,19 @@ class ContextVk : public ContextImpl, public vk::Context
 
     angle::Result onBufferTransferRead(vk::BufferHelper *buffer)
     {
-        return onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, buffer);
+        return onBufferRead(VK_ACCESS_TRANSFER_READ_BIT, vk::PipelineStage::Transfer, buffer);
     }
     angle::Result onBufferTransferWrite(vk::BufferHelper *buffer)
     {
-        return onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, buffer);
+        return onBufferWrite(VK_ACCESS_TRANSFER_WRITE_BIT, vk::PipelineStage::Transfer, buffer);
     }
     angle::Result onBufferComputeShaderRead(vk::BufferHelper *buffer)
     {
-        return onBufferRead(VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                            buffer);
+        return onBufferRead(VK_ACCESS_SHADER_READ_BIT, vk::PipelineStage::ComputeShader, buffer);
     }
     angle::Result onBufferComputeShaderWrite(vk::BufferHelper *buffer)
     {
-        return onBufferWrite(VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                             buffer);
+        return onBufferWrite(VK_ACCESS_SHADER_WRITE_BIT, vk::PipelineStage::ComputeShader, buffer);
     }
 
     angle::Result onImageRead(VkImageAspectFlags aspectFlags,
@@ -496,9 +479,9 @@ class ContextVk : public ContextImpl, public vk::Context
     angle::Result endRenderPassAndGetCommandBuffer(vk::CommandBuffer **commandBufferOut)
     {
         // Only one command buffer should be active at a time
-        ASSERT(mOutsideRenderPassCommands.empty() || mRenderPassCommands.empty());
+        ASSERT(mOutsideRenderPassCommands->empty() || mRenderPassCommands->empty());
         ANGLE_TRY(endRenderPass());
-        *commandBufferOut = &mOutsideRenderPassCommands.getCommandBuffer();
+        *commandBufferOut = &mOutsideRenderPassCommands->getCommandBuffer();
         return angle::Result::Continue;
     }
 
@@ -509,12 +492,12 @@ class ContextVk : public ContextImpl, public vk::Context
                                           const vk::ClearValuesArray &clearValues,
                                           vk::CommandBuffer **commandBufferOut);
 
-    bool hasStartedRenderPass() const { return !mRenderPassCommands.empty(); }
+    bool hasStartedRenderPass() const { return !mRenderPassCommands->empty(); }
 
     vk::CommandBufferHelper &getStartedRenderPassCommands()
     {
         ASSERT(hasStartedRenderPass());
-        return mRenderPassCommands;
+        return *mRenderPassCommands;
     }
 
     egl::ContextPriority getContextPriority() const override { return mContextPriority; }
@@ -542,6 +525,16 @@ class ContextVk : public ContextImpl, public vk::Context
     // occlusion query
     void beginOcclusionQuery(QueryVk *queryVk);
     void endOcclusionQuery(QueryVk *queryVk);
+
+    void updateOverlayOnPresent();
+
+    // Submit commands to worker thread for processing
+    ANGLE_INLINE void queueCommandsToWorker(const vk::CommandProcessorTask &commands)
+    {
+        mRenderer->queueCommands(commands);
+    }
+    // When worker thread completes, it releases command buffers back to context queue
+    void recycleCommandBuffer(vk::CommandBufferHelper *commandBuffer);
 
   private:
     // Dirty bits.
@@ -799,13 +792,16 @@ class ContextVk : public ContextImpl, public vk::Context
     ANGLE_INLINE void onRenderPassFinished() { mRenderPassCommandBuffer = nullptr; }
 
     angle::Result onBufferRead(VkAccessFlags readAccessType,
-                               VkPipelineStageFlags readStage,
+                               vk::PipelineStage readStage,
                                vk::BufferHelper *buffer);
     angle::Result onBufferWrite(VkAccessFlags writeAccessType,
-                                VkPipelineStageFlags writeStage,
+                                vk::PipelineStage writeStage,
                                 vk::BufferHelper *buffer);
 
     void initIndexTypeMap();
+
+    // Pull an available CBH ptr from the CBH queue and set to specified hasRenderPass state
+    void getNextAvailableCommandBuffer(vk::CommandBufferHelper **commandBuffer, bool hasRenderPass);
 
     std::array<DirtyBitHandler, DIRTY_BIT_MAX> mGraphicsDirtyBitHandlers;
     std::array<DirtyBitHandler, DIRTY_BIT_MAX> mComputeDirtyBitHandlers;
@@ -819,8 +815,8 @@ class ContextVk : public ContextImpl, public vk::Context
     WindowSurfaceVk *mCurrentWindowSurface;
     // Records the current rotation of the surface (draw/read) framebuffer, derived from
     // mCurrentWindowSurface->getPreTransform().
-    SurfaceRotationType mCurrentRotationDrawFramebuffer;
-    SurfaceRotationType mCurrentRotationReadFramebuffer;
+    SurfaceRotation mCurrentRotationDrawFramebuffer;
+    SurfaceRotation mCurrentRotationReadFramebuffer;
 
     // Keep a cached pipeline description structure that can be used to query the pipeline cache.
     // Kept in a pointer so allocations can be aligned, and structs can be portably packed.
@@ -923,14 +919,23 @@ class ContextVk : public ContextImpl, public vk::Context
     // http://anglebug.com/2701
     vk::Shared<vk::Fence> mSubmitFence;
 
-    // Pool allocator used for command graph but may be expanded to other allocations
-    angle::PoolAllocator mPoolAllocator;
-
     // When the command graph is disabled we record commands completely linearly. We have plans to
-    // reorder independent draws so that we can create fewer RenderPasses in some scenarios.
-    vk::CommandBufferHelper mOutsideRenderPassCommands;
-    vk::CommandBufferHelper mRenderPassCommands;
+    //  reorder independent draws so that we can create fewer RenderPasses in some scenarios.
+    // We have a queue of CommandBufferHelpers (CBHs) that is drawn from for the two active command
+    //  buffers in the main thread. The two active command buffers are the inside and outside
+    //  RenderPass command buffers.
+    constexpr static size_t kNumCommandBuffers = 2;
+    std::array<vk::CommandBufferHelper, kNumCommandBuffers> mCommandBuffers;
+
+    // Lock access to the command buffer queue
+    std::mutex mCommandBufferQueueMutex;
+    std::queue<vk::CommandBufferHelper *> mAvailableCommandBuffers;
+    std::condition_variable mAvailableCommandBufferCondition;
+
+    vk::CommandBufferHelper *mOutsideRenderPassCommands;
+    vk::CommandBufferHelper *mRenderPassCommands;
     vk::PrimaryCommandBuffer mPrimaryCommands;
+    // Function recycleCommandBuffer() is public above
     bool mHasPrimaryCommands;
 
     // Internal shader library.

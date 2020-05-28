@@ -181,7 +181,12 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.depthTextureCubeMapOES =
         mNativeExtensions.depthTextureOES && mNativeExtensions.packedDepthStencilOES;
 
+    // Vulkan natively supports format reinterpretation
+    mNativeExtensions.textureSRGBOverride = mNativeExtensions.sRGB;
+
     mNativeExtensions.gpuShader5EXT = vk::CanSupportGPUShader5EXT(mPhysicalDeviceFeatures);
+
+    mNativeExtensions.textureFilteringCHROMIUM = getFeatures().supportsFilteringPrecision.enabled;
 
     // https://vulkan.lunarg.com/doc/view/1.0.30.0/linux/vkspec.chunked/ch31s02.html
     mNativeCaps.maxElementIndex  = std::numeric_limits<GLuint>::max() - 1;
@@ -423,10 +428,15 @@ void RendererVk::ensureCapsInitialized() const
     // GL Images correspond to Vulkan Storage Images.
     const int32_t maxPerStageImages = LimitToInt(limitsVk.maxPerStageDescriptorStorageImages);
     const int32_t maxCombinedImages = LimitToInt(limitsVk.maxDescriptorSetStorageImages);
-    for (gl::ShaderType shaderType : gl::AllShaderTypes())
-    {
-        mNativeCaps.maxShaderImageUniforms[shaderType] = maxPerStageImages;
-    }
+
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Vertex] =
+        mPhysicalDeviceFeatures.vertexPipelineStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Fragment] =
+        mPhysicalDeviceFeatures.fragmentStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Geometry] =
+        mPhysicalDeviceFeatures.vertexPipelineStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Compute] = maxPerStageImages;
+
     mNativeCaps.maxCombinedImageUniforms = maxCombinedImages;
     mNativeCaps.maxImageUnits            = maxCombinedImages;
 
