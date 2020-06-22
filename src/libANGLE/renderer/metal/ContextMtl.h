@@ -187,9 +187,6 @@ class ContextMtl : public ContextImpl, public mtl::Context
     // Program Pipeline object creation
     ProgramPipelineImpl *createProgramPipeline(const gl::ProgramPipelineState &data) override;
 
-    // Path object creation
-    std::vector<PathImpl *> createPaths(GLsizei) override;
-
     // Memory object creation.
     MemoryObjectImpl *createMemoryObject() override;
 
@@ -331,6 +328,8 @@ class ContextMtl : public ContextImpl, public mtl::Context
                                    const void *indices,
                                    GLsizei instanceCount);
 
+    void updateExtendedState(const gl::State &glState);
+
     void updateViewport(FramebufferMtl *framebufferMtl,
                         const gl::Rectangle &viewport,
                         float nearPlane,
@@ -378,9 +377,12 @@ class ContextMtl : public ContextImpl, public mtl::Context
     {
         float viewport[4];
 
-        float halfRenderAreaHeight;
-        float viewportYScale;
-        float negViewportYScale;
+        float halfRenderArea[2];
+        float flipXY[2];
+        float negFlipXY[2];
+
+        // 32 bits for 32 clip distances
+        uint32_t enabledClipDistances;
 
         // NOTE(hqle): Transform feedsback is not supported yet.
         uint32_t xfbActiveUnpaused;
@@ -397,6 +399,10 @@ class ContextMtl : public ContextImpl, public mtl::Context
         // Used to pre-rotate gl_Position for Vulkan swapchain images on Android (a mat2, which is
         // padded to the size of two vec4's).
         float preRotation[8];
+
+        // Used to pre-rotate gl_FragCoord for Vulkan swapchain images on Android (a mat2, which is
+        // padded to the size of two vec4's).
+        float fragRotation[8];
     };
 
     struct DefaultAttribute

@@ -95,6 +95,7 @@ SPVTOOLS_OPT_SRC_FILES := \
 		source/opt/dead_variable_elimination.cpp \
 		source/opt/decompose_initialized_variables_pass.cpp \
 		source/opt/decoration_manager.cpp \
+		source/opt/debug_info_manager.cpp \
 		source/opt/def_use_manager.cpp \
 		source/opt/desc_sroa.cpp \
 		source/opt/dominator_analysis.cpp \
@@ -119,6 +120,7 @@ SPVTOOLS_OPT_SRC_FILES := \
 		source/opt/inline_opaque_pass.cpp \
 		source/opt/inst_bindless_check_pass.cpp \
 		source/opt/inst_buff_addr_check_pass.cpp \
+		source/opt/inst_debug_printf_pass.cpp \
 		source/opt/instruction.cpp \
 		source/opt/instruction_list.cpp \
 		source/opt/instrument_pass.cpp \

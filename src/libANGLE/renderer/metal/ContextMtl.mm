@@ -664,10 +664,6 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
                 break;
             case gl::State::DIRTY_BIT_DITHER_ENABLED:
                 break;
-            case gl::State::DIRTY_BIT_GENERATE_MIPMAP_HINT:
-                break;
-            case gl::State::DIRTY_BIT_SHADER_DERIVATIVE_HINT:
-                break;
             case gl::State::DIRTY_BIT_READ_FRAMEBUFFER_BINDING:
                 break;
             case gl::State::DIRTY_BIT_DRAW_FRAMEBUFFER_BINDING:
@@ -718,8 +714,6 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
                 break;
             case gl::State::DIRTY_BIT_COVERAGE_MODULATION:
                 break;
-            case gl::State::DIRTY_BIT_PATH_RENDERING:
-                break;
             case gl::State::DIRTY_BIT_FRAMEBUFFER_SRGB:
                 break;
             case gl::State::DIRTY_BIT_CURRENT_VALUES:
@@ -729,6 +723,9 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
             }
             case gl::State::DIRTY_BIT_PROVOKING_VERTEX:
                 break;
+            case gl::State::DIRTY_BIT_EXTENDED:
+                updateExtendedState(glState);
+                break;
             default:
                 UNREACHABLE();
                 break;
@@ -736,6 +733,13 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
     }
 
     return angle::Result::Continue;
+}
+
+void ContextMtl::updateExtendedState(const gl::State &glState)
+{
+    // Handling clip distance enabled flags, mipmap generation hint & shader derivative
+    // hint.
+    invalidateDriverUniforms();
 }
 
 // Disjoint timer queries
@@ -864,13 +868,6 @@ ProgramPipelineImpl *ContextMtl::createProgramPipeline(const gl::ProgramPipeline
     // NOTE(hqle): ES 3.0
     UNIMPLEMENTED();
     return nullptr;
-}
-
-// Path object creation
-std::vector<PathImpl *> ContextMtl::createPaths(GLsizei)
-{
-    UNIMPLEMENTED();
-    return std::vector<PathImpl *>();
 }
 
 // Memory object creation.
@@ -1546,8 +1543,8 @@ angle::Result ContextMtl::handleDirtyActiveTextures(const gl::Context *context)
     const gl::State &glState   = mState;
     const gl::Program *program = glState.getProgram();
 
-    const gl::ActiveTexturePointerArray &textures = glState.getActiveTexturesCache();
-    const gl::ActiveTextureMask &activeTextures   = program->getActiveSamplersMask();
+    const gl::ActiveTexturesCache &textures     = glState.getActiveTexturesCache();
+    const gl::ActiveTextureMask &activeTextures = program->getExecutable().getActiveSamplersMask();
 
     for (size_t textureUnit : activeTextures)
     {
@@ -1597,10 +1594,16 @@ angle::Result ContextMtl::handleDirtyDriverUniforms(const gl::Context *context)
     mDriverUniforms.viewport[2] = glViewport.width;
     mDriverUniforms.viewport[3] = glViewport.height;
 
-    mDriverUniforms.halfRenderAreaHeight =
+    mDriverUniforms.halfRenderArea[0] =
+        static_cast<float>(mDrawFramebuffer->getState().getDimensions().width) * 0.5f;
+    mDriverUniforms.halfRenderArea[1] =
         static_cast<float>(mDrawFramebuffer->getState().getDimensions().height) * 0.5f;
-    mDriverUniforms.viewportYScale    = mDrawFramebuffer->flipY() ? -1.0f : 1.0f;
-    mDriverUniforms.negViewportYScale = -mDriverUniforms.viewportYScale;
+    mDriverUniforms.flipXY[0]    = 1.0f;
+    mDriverUniforms.flipXY[1]    = mDrawFramebuffer->flipY() ? -1.0f : 1.0f;
+    mDriverUniforms.negFlipXY[0] = mDriverUniforms.flipXY[0];
+    mDriverUniforms.negFlipXY[1] = -mDriverUniforms.flipXY[1];
+
+    mDriverUniforms.enabledClipDistances = mState.getEnabledClipDistances().bits();
 
     mDriverUniforms.depthRange[0] = depthRangeNear;
     mDriverUniforms.depthRange[1] = depthRangeFar;
@@ -1616,6 +1619,16 @@ angle::Result ContextMtl::handleDirtyDriverUniforms(const gl::Context *context)
     mDriverUniforms.preRotation[5] = 1.0f;
     mDriverUniforms.preRotation[6] = 0.0f;
     mDriverUniforms.preRotation[7] = 0.0f;
+
+    // Fill in a mat2 identity matrix, plus padding
+    mDriverUniforms.fragRotation[0] = 1.0f;
+    mDriverUniforms.fragRotation[1] = 0.0f;
+    mDriverUniforms.fragRotation[2] = 0.0f;
+    mDriverUniforms.fragRotation[3] = 0.0f;
+    mDriverUniforms.fragRotation[4] = 0.0f;
+    mDriverUniforms.fragRotation[5] = 1.0f;
+    mDriverUniforms.fragRotation[6] = 0.0f;
+    mDriverUniforms.fragRotation[7] = 0.0f;
 
     ASSERT(mRenderEncoder.valid());
     mRenderEncoder.setFragmentData(mDriverUniforms, mtl::kDriverUniformsBindingIndex);

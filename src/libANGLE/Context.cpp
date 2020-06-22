@@ -28,7 +28,6 @@
 #include "libANGLE/Framebuffer.h"
 #include "libANGLE/FramebufferAttachment.h"
 #include "libANGLE/MemoryObject.h"
-#include "libANGLE/Path.h"
 #include "libANGLE/Program.h"
 #include "libANGLE/ProgramPipeline.h"
 #include "libANGLE/Query.h"
@@ -51,58 +50,6 @@ namespace gl
 {
 namespace
 {
-template <typename T>
-std::vector<Path *> GatherPaths(PathManager &resourceManager,
-                                GLsizei numPaths,
-                                const void *paths,
-                                PathID pathBase)
-{
-    std::vector<Path *> ret;
-    ret.reserve(numPaths);
-
-    const auto *nameArray = static_cast<const T *>(paths);
-
-    for (GLsizei i = 0; i < numPaths; ++i)
-    {
-        const GLuint pathName = nameArray[i] + pathBase.value;
-
-        ret.push_back(resourceManager.getPath({pathName}));
-    }
-
-    return ret;
-}
-
-std::vector<Path *> GatherPaths(PathManager &resourceManager,
-                                GLsizei numPaths,
-                                GLenum pathNameType,
-                                const void *paths,
-                                PathID pathBase)
-{
-    switch (pathNameType)
-    {
-        case GL_UNSIGNED_BYTE:
-            return GatherPaths<GLubyte>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_BYTE:
-            return GatherPaths<GLbyte>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_UNSIGNED_SHORT:
-            return GatherPaths<GLushort>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_SHORT:
-            return GatherPaths<GLshort>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_UNSIGNED_INT:
-            return GatherPaths<GLuint>(resourceManager, numPaths, paths, pathBase);
-
-        case GL_INT:
-            return GatherPaths<GLint>(resourceManager, numPaths, paths, pathBase);
-    }
-
-    UNREACHABLE();
-    return std::vector<Path *>();
-}
-
 template <typename T>
 angle::Result GetQueryObjectParameter(const Context *context, Query *query, GLenum pname, T *params)
 {
@@ -308,8 +255,7 @@ Context::Context(egl::Display *display,
                  const egl::AttributeMap &attribs,
                  const egl::DisplayExtensions &displayExtensions,
                  const egl::ClientExtensions &clientExtensions)
-    : mState(reinterpret_cast<ContextID>(this),
-             shareContext ? &shareContext->mState : nullptr,
+    : mState(shareContext ? &shareContext->mState : nullptr,
              shareTextures,
              &mOverlay,
              clientType,
@@ -432,6 +378,13 @@ void Context::initialize()
         }
     }
 
+    if (getClientVersion() >= Version(3, 2) || mSupportedExtensions.textureCubeMapArrayAny())
+    {
+        Texture *zeroTextureCubeMapArray =
+            new Texture(mImplementation.get(), {0}, TextureType::CubeMapArray);
+        mZeroTextures[TextureType::CubeMapArray].set(this, zeroTextureCubeMapArray);
+    }
+
     if (mSupportedExtensions.textureRectangle)
     {
         Texture *zeroTextureRectangle =
@@ -458,6 +411,8 @@ void Context::initialize()
     }
 
     mState.initializeZeroTextures(this, mZeroTextures);
+
+    ANGLE_CONTEXT_TRY(mImplementation->initialize());
 
     bindVertexArray({0});
 
@@ -495,13 +450,9 @@ void Context::initialize()
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_VERTEX_ARRAY);
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_TEXTURES);
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM);
+    mDrawDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM_PIPELINE);
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_SAMPLERS);
     mDrawDirtyObjects.set(State::DIRTY_OBJECT_IMAGES);
-
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_DRAW_FRAMEBUFFER);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_VERTEX_ARRAY);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_TEXTURES);
-    mPathOperationDirtyObjects.set(State::DIRTY_OBJECT_SAMPLERS);
 
     mTexImageDirtyBits.set(State::DIRTY_BIT_UNPACK_STATE);
     mTexImageDirtyBits.set(State::DIRTY_BIT_UNPACK_BUFFER_BINDING);
@@ -548,13 +499,12 @@ void Context::initialize()
     mComputeDirtyBits.set(State::DIRTY_BIT_DISPATCH_INDIRECT_BUFFER_BINDING);
     mComputeDirtyObjects.set(State::DIRTY_OBJECT_TEXTURES);
     mComputeDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM);
+    mComputeDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM_PIPELINE);
     mComputeDirtyObjects.set(State::DIRTY_OBJECT_IMAGES);
     mComputeDirtyObjects.set(State::DIRTY_OBJECT_SAMPLERS);
 
     mCopyImageDirtyBits.set(State::DIRTY_BIT_READ_FRAMEBUFFER_BINDING);
     mCopyImageDirtyObjects.set(State::DIRTY_OBJECT_READ_FRAMEBUFFER);
-
-    ANGLE_CONTEXT_TRY(mImplementation->initialize());
 
     // Initialize overlay after implementation is initialized.
     ANGLE_CONTEXT_TRY(mOverlay.init(this));
@@ -622,14 +572,16 @@ egl::Error Context::onDestroy(const egl::Display *display)
     mState.reset(this);
 
     mState.mBufferManager->release(this);
+    // mProgramPipelineManager must be before mShaderProgramManager to give each
+    // PPO the chance to release any references they have to the Programs that
+    // are bound to them before the Programs are released()'ed.
+    mState.mProgramPipelineManager->release(this);
     mState.mShaderProgramManager->release(this);
     mState.mTextureManager->release(this);
     mState.mRenderbufferManager->release(this);
     mState.mSamplerManager->release(this);
     mState.mSyncManager->release(this);
-    mState.mPathManager->release(this);
     mState.mFramebufferManager->release(this);
-    mState.mProgramPipelineManager->release(this);
     mState.mMemoryObjectManager->release(this);
     mState.mSemaphoreManager->release(this);
 
@@ -747,18 +699,6 @@ RenderbufferID Context::createRenderbuffer()
     return mState.mRenderbufferManager->createRenderbuffer();
 }
 
-void Context::tryGenPaths(GLsizei range, PathID *createdOut)
-{
-    ANGLE_CONTEXT_TRY(mState.mPathManager->createPaths(this, range, createdOut));
-}
-
-GLuint Context::genPaths(GLsizei range)
-{
-    PathID created = {0};
-    tryGenPaths(range, &created);
-    return created.value;
-}
-
 // Returns an unused framebuffer name
 FramebufferID Context::createFramebuffer()
 {
@@ -782,7 +722,57 @@ ProgramPipelineID Context::createProgramPipeline()
 
 GLuint Context::createShaderProgramv(ShaderType type, GLsizei count, const GLchar *const *strings)
 {
-    UNIMPLEMENTED();
+    const ShaderProgramID shaderID = FromGL<ShaderProgramID>(createShader(type));
+    if (shaderID.value)
+    {
+        Shader *shaderObject = getShader(shaderID);
+        ASSERT(shaderObject);
+        shaderObject->setSource(count, strings, nullptr);
+        shaderObject->compile(this);
+        const ShaderProgramID programID = FromGL<ShaderProgramID>(createProgram());
+        if (programID.value)
+        {
+            gl::Program *programObject = getProgramNoResolveLink(programID);
+            ASSERT(programObject);
+
+            if (shaderObject->isCompiled())
+            {
+                // As per Khronos issue 2261:
+                // https://gitlab.khronos.org/Tracker/vk-gl-cts/issues/2261
+                // We must wait to mark the program separable until it's successfully compiled.
+                programObject->setSeparable(true);
+
+                programObject->attachShader(this, shaderObject);
+
+                if (programObject->link(this) != angle::Result::Continue)
+                {
+                    deleteShader(shaderID);
+                    deleteProgram(programID);
+                    return 0u;
+                }
+                if (onProgramLink(programObject) != angle::Result::Continue)
+                {
+                    deleteShader(shaderID);
+                    deleteProgram(programID);
+                    return 0u;
+                }
+
+                // Need to manually resolveLink(), since onProgramLink() doesn't think the program
+                // is in use.   For the normal glDetachShader() API call path, this is done during
+                // ValidateDetachShader() via gl::GetValidProgram().
+                programObject->resolveLink(this);
+                programObject->detachShader(this, shaderObject);
+            }
+
+            InfoLog &programInfoLog = programObject->getExecutable().getInfoLog();
+            programInfoLog << shaderObject->getInfoLogString();
+        }
+
+        deleteShader(shaderID);
+
+        return programID.value;
+    }
+
     return 0u;
 }
 
@@ -846,14 +836,15 @@ void Context::deleteSync(GLsync sync)
     mState.mSyncManager->deleteObject(this, static_cast<GLuint>(reinterpret_cast<uintptr_t>(sync)));
 }
 
-void Context::deleteProgramPipeline(ProgramPipelineID pipeline)
+void Context::deleteProgramPipeline(ProgramPipelineID pipelineID)
 {
-    if (mState.mProgramPipelineManager->getProgramPipeline(pipeline))
+    ProgramPipeline *pipeline = mState.mProgramPipelineManager->getProgramPipeline(pipelineID);
+    if (pipeline)
     {
-        detachProgramPipeline(pipeline);
+        detachProgramPipeline(pipelineID);
     }
 
-    mState.mProgramPipelineManager->deleteObject(this, pipeline);
+    mState.mProgramPipelineManager->deleteObject(this, pipelineID);
 }
 
 void Context::deleteMemoryObject(MemoryObjectID memoryObject)
@@ -864,110 +855,6 @@ void Context::deleteMemoryObject(MemoryObjectID memoryObject)
 void Context::deleteSemaphore(SemaphoreID semaphore)
 {
     mState.mSemaphoreManager->deleteSemaphore(this, semaphore);
-}
-
-void Context::deletePaths(PathID first, GLsizei range)
-{
-    mState.mPathManager->deletePaths(first, range);
-}
-
-GLboolean Context::isPath(PathID path) const
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (pathObj == nullptr)
-        return false;
-
-    return pathObj->hasPathData();
-}
-
-bool Context::isPathGenerated(PathID path) const
-{
-    return mState.mPathManager->hasPath(path);
-}
-
-void Context::pathCommands(PathID path,
-                           GLsizei numCommands,
-                           const GLubyte *commands,
-                           GLsizei numCoords,
-                           GLenum coordType,
-                           const void *coords)
-{
-    auto *pathObject = mState.mPathManager->getPath(path);
-
-    ANGLE_CONTEXT_TRY(pathObject->setCommands(numCommands, commands, numCoords, coordType, coords));
-}
-
-void Context::pathParameterf(PathID path, GLenum pname, GLfloat value)
-{
-    Path *pathObj = mState.mPathManager->getPath(path);
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-            pathObj->setStrokeWidth(value);
-            break;
-        case GL_PATH_END_CAPS_CHROMIUM:
-            pathObj->setEndCaps(static_cast<GLenum>(value));
-            break;
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-            pathObj->setJoinStyle(static_cast<GLenum>(value));
-            break;
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-            pathObj->setMiterLimit(value);
-            break;
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            pathObj->setStrokeBound(value);
-            break;
-        default:
-            UNREACHABLE();
-            break;
-    }
-}
-
-void Context::pathParameteri(PathID path, GLenum pname, GLint value)
-{
-    // TODO(jmadill): Should use proper clamping/casting.
-    pathParameterf(path, pname, static_cast<GLfloat>(value));
-}
-
-void Context::getPathParameterfv(PathID path, GLenum pname, GLfloat *value)
-{
-    const Path *pathObj = mState.mPathManager->getPath(path);
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-            *value = pathObj->getStrokeWidth();
-            break;
-        case GL_PATH_END_CAPS_CHROMIUM:
-            *value = static_cast<GLfloat>(pathObj->getEndCaps());
-            break;
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-            *value = static_cast<GLfloat>(pathObj->getJoinStyle());
-            break;
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-            *value = pathObj->getMiterLimit();
-            break;
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            *value = pathObj->getStrokeBound();
-            break;
-        default:
-            UNREACHABLE();
-            break;
-    }
-}
-
-void Context::getPathParameteriv(PathID path, GLenum pname, GLint *value)
-{
-    GLfloat val = 0.0f;
-    getPathParameterfv(path, pname, value != nullptr ? &val : nullptr);
-    if (value)
-        *value = static_cast<GLint>(val);
-}
-
-void Context::pathStencilFunc(GLenum func, GLint ref, GLuint mask)
-{
-    mState.setPathStencilFunc(func, ref, mask);
 }
 
 // GL_CHROMIUM_lose_context
@@ -1071,6 +958,8 @@ gl::LabeledObject *Context::getLabeledObject(GLenum identifier, GLuint name) con
             return getRenderbuffer({name});
         case GL_FRAMEBUFFER:
             return getFramebuffer({name});
+        case GL_PROGRAM_PIPELINE:
+            return getProgramPipeline({name});
         default:
             UNREACHABLE();
             return nullptr;
@@ -1153,7 +1042,7 @@ void Context::bindTexture(TextureType target, TextureID handle)
 void Context::bindReadFramebuffer(FramebufferID framebufferHandle)
 {
     Framebuffer *framebuffer = mState.mFramebufferManager->checkFramebufferAllocation(
-        mImplementation.get(), mState.mCaps, framebufferHandle);
+        mImplementation.get(), mState.mCaps, framebufferHandle, mState.getContextID());
     mState.setReadFramebufferBinding(framebuffer);
     mReadFramebufferObserverBinding.bind(framebuffer);
 }
@@ -1161,7 +1050,7 @@ void Context::bindReadFramebuffer(FramebufferID framebufferHandle)
 void Context::bindDrawFramebuffer(FramebufferID framebufferHandle)
 {
     Framebuffer *framebuffer = mState.mFramebufferManager->checkFramebufferAllocation(
-        mImplementation.get(), mState.mCaps, framebufferHandle);
+        mImplementation.get(), mState.mCaps, framebufferHandle, mState.getContextID());
     mState.setDrawFramebufferBinding(framebuffer);
     mDrawFramebufferObserverBinding.bind(framebuffer);
     mStateCache.onDrawFramebufferChange(this);
@@ -1219,7 +1108,14 @@ void Context::useProgramStages(ProgramPipelineID pipeline,
                                GLbitfield stages,
                                ShaderProgramID program)
 {
-    UNIMPLEMENTED();
+    Program *shaderProgram = getProgramNoResolveLink(program);
+    ProgramPipeline *programPipeline =
+        mState.mProgramPipelineManager->checkProgramPipelineAllocation(mImplementation.get(),
+                                                                       pipeline);
+
+    ASSERT(programPipeline);
+    ANGLE_CONTEXT_TRY(mState.useProgramStages(this, programPipeline, stages, shaderProgram));
+    mStateCache.onProgramExecutableChange(this);
 }
 
 void Context::bindTransformFeedback(GLenum target, TransformFeedbackID transformFeedbackHandle)
@@ -1234,7 +1130,8 @@ void Context::bindProgramPipeline(ProgramPipelineID pipelineHandle)
 {
     ProgramPipeline *pipeline = mState.mProgramPipelineManager->checkProgramPipelineAllocation(
         mImplementation.get(), pipelineHandle);
-    mState.setProgramPipelineBinding(this, pipeline);
+    ANGLE_CONTEXT_TRY(mState.setProgramPipelineBinding(this, pipeline));
+    mStateCache.onProgramExecutableChange(this);
 }
 
 void Context::beginQuery(QueryType target, QueryID query)
@@ -1480,25 +1377,6 @@ void Context::getFloatvImpl(GLenum pname, GLfloat *params) const
         case GL_MAX_TEXTURE_LOD_BIAS:
             *params = mState.mCaps.maxLODBias;
             break;
-
-        case GL_PATH_MODELVIEW_MATRIX_CHROMIUM:
-        case GL_PATH_PROJECTION_MATRIX_CHROMIUM:
-        {
-            // GLES1 emulation: // GL_PATH_(MODELVIEW|PROJECTION)_MATRIX_CHROMIUM collides with the
-            // GLES1 constants for modelview/projection matrix.
-            if (getClientVersion() < Version(2, 0))
-            {
-                mState.getFloatv(pname, params);
-            }
-            else
-            {
-                ASSERT(mState.mExtensions.pathRendering);
-                const GLfloat *m = mState.getPathRenderingMatrix(pname);
-                memcpy(params, m, 16 * sizeof(GLfloat));
-            }
-        }
-        break;
-
         default:
             mState.getFloatv(pname, params);
             break;
@@ -1880,8 +1758,18 @@ void Context::getIntegervImpl(GLenum pname, GLint *params) const
         case GL_MAX_LIGHTS:
             *params = mState.mCaps.maxLights;
             break;
+
+        // case GL_MAX_CLIP_DISTANCES_EXT:  Conflict enum value
         case GL_MAX_CLIP_PLANES:
-            *params = mState.mCaps.maxClipPlanes;
+            if (getClientVersion().major >= 2)
+            {
+                // GL_APPLE_clip_distance/GL_EXT_clip_cull_distance
+                *params = mState.mCaps.maxClipDistances;
+            }
+            else
+            {
+                *params = mState.mCaps.maxClipPlanes;
+            }
             break;
         // GLES1 emulation: Vertex attribute queries
         case GL_VERTEX_ARRAY_BUFFER_BINDING:
@@ -2484,215 +2372,6 @@ void Context::bindUniformLocation(ShaderProgramID program,
 void Context::coverageModulation(GLenum components)
 {
     mState.setCoverageModulation(components);
-}
-
-void Context::matrixLoadf(GLenum matrixMode, const GLfloat *matrix)
-{
-    mState.loadPathRenderingMatrix(matrixMode, matrix);
-}
-
-void Context::matrixLoadIdentity(GLenum matrixMode)
-{
-    GLfloat I[16];
-    angle::Matrix<GLfloat>::setToIdentity(I);
-
-    mState.loadPathRenderingMatrix(matrixMode, I);
-}
-
-void Context::stencilFillPath(PathID path, GLenum fillMode, GLuint mask)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilFillPath(pathObj, fillMode, mask);
-}
-
-void Context::stencilStrokePath(PathID path, GLint reference, GLuint mask)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilStrokePath(pathObj, reference, mask);
-}
-
-void Context::coverFillPath(PathID path, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverFillPath(pathObj, coverMode);
-}
-
-void Context::coverStrokePath(PathID path, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverStrokePath(pathObj, coverMode);
-}
-
-void Context::stencilThenCoverFillPath(PathID path, GLenum fillMode, GLuint mask, GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverFillPath(pathObj, fillMode, mask, coverMode);
-}
-
-void Context::stencilThenCoverStrokePath(PathID path,
-                                         GLint reference,
-                                         GLuint mask,
-                                         GLenum coverMode)
-{
-    const auto *pathObj = mState.mPathManager->getPath(path);
-    if (!pathObj)
-        return;
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverStrokePath(pathObj, reference, mask, coverMode);
-}
-
-void Context::coverFillPathInstanced(GLsizei numPaths,
-                                     GLenum pathNameType,
-                                     const void *paths,
-                                     PathID pathBase,
-                                     GLenum coverMode,
-                                     GLenum transformType,
-                                     const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverFillPathInstanced(pathObjects, coverMode, transformType, transformValues);
-}
-
-void Context::coverStrokePathInstanced(GLsizei numPaths,
-                                       GLenum pathNameType,
-                                       const void *paths,
-                                       PathID pathBase,
-                                       GLenum coverMode,
-                                       GLenum transformType,
-                                       const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->coverStrokePathInstanced(pathObjects, coverMode, transformType,
-                                              transformValues);
-}
-
-void Context::stencilFillPathInstanced(GLsizei numPaths,
-                                       GLenum pathNameType,
-                                       const void *paths,
-                                       PathID pathBase,
-                                       GLenum fillMode,
-                                       GLuint mask,
-                                       GLenum transformType,
-                                       const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilFillPathInstanced(pathObjects, fillMode, mask, transformType,
-                                              transformValues);
-}
-
-void Context::stencilStrokePathInstanced(GLsizei numPaths,
-                                         GLenum pathNameType,
-                                         const void *paths,
-                                         PathID pathBase,
-                                         GLint reference,
-                                         GLuint mask,
-                                         GLenum transformType,
-                                         const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilStrokePathInstanced(pathObjects, reference, mask, transformType,
-                                                transformValues);
-}
-
-void Context::stencilThenCoverFillPathInstanced(GLsizei numPaths,
-                                                GLenum pathNameType,
-                                                const void *paths,
-                                                PathID pathBase,
-                                                GLenum fillMode,
-                                                GLuint mask,
-                                                GLenum coverMode,
-                                                GLenum transformType,
-                                                const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverFillPathInstanced(pathObjects, coverMode, fillMode, mask,
-                                                       transformType, transformValues);
-}
-
-void Context::stencilThenCoverStrokePathInstanced(GLsizei numPaths,
-                                                  GLenum pathNameType,
-                                                  const void *paths,
-                                                  PathID pathBase,
-                                                  GLint reference,
-                                                  GLuint mask,
-                                                  GLenum coverMode,
-                                                  GLenum transformType,
-                                                  const GLfloat *transformValues)
-{
-    const auto &pathObjects =
-        GatherPaths(*mState.mPathManager, numPaths, pathNameType, paths, pathBase);
-
-    ANGLE_CONTEXT_TRY(syncStateForPathOperation());
-
-    mImplementation->stencilThenCoverStrokePathInstanced(pathObjects, coverMode, reference, mask,
-                                                         transformType, transformValues);
-}
-
-void Context::bindFragmentInputLocation(ShaderProgramID program, GLint location, const GLchar *name)
-{
-    auto *programObject = getProgramResolveLink(program);
-
-    programObject->bindFragmentInputLocation(location, name);
-}
-
-void Context::programPathFragmentInputGen(ShaderProgramID program,
-                                          GLint location,
-                                          GLenum genMode,
-                                          GLint components,
-                                          const GLfloat *coeffs)
-{
-    auto *programObject = getProgramResolveLink(program);
-
-    programObject->pathFragmentInputGen(location, genMode, components, coeffs);
 }
 
 GLuint Context::getProgramResourceIndex(ShaderProgramID program,
@@ -3379,6 +3058,7 @@ void Context::beginTransformFeedback(PrimitiveMode primitiveMode)
     ASSERT(transformFeedback != nullptr);
     ASSERT(!transformFeedback->isPaused());
 
+    // TODO: http://anglebug.com/3570: Handle PPOs
     ANGLE_CONTEXT_TRY(transformFeedback->begin(this, primitiveMode, mState.getProgram()));
     mStateCache.onActiveTransformFeedbackChange(this);
 }
@@ -3426,6 +3106,7 @@ Extensions Context::generateSupportedExtensions() const
         supportedExtensions.textureMultisample       = false;
         supportedExtensions.drawBuffersIndexedEXT    = false;
         supportedExtensions.drawBuffersIndexedOES    = false;
+        supportedExtensions.eglImageArray            = false;
 
         // Requires glCompressedTexImage3D
         supportedExtensions.textureCompressionASTCOES = false;
@@ -3543,7 +3224,8 @@ Extensions Context::generateSupportedExtensions() const
     supportedExtensions.loseContextCHROMIUM = true;
 
     // The ASTC texture extensions have dependency requirements.
-    if (supportedExtensions.textureCompressionASTCHDRKHR)
+    if (supportedExtensions.textureCompressionASTCHDRKHR ||
+        supportedExtensions.textureCompressionSliced3dASTCKHR)
     {
         // GL_KHR_texture_compression_astc_hdr cannot be exposed without also exposing
         // GL_KHR_texture_compression_astc_ldr
@@ -3583,6 +3265,16 @@ void Context::initCaps()
         mState.mCaps.maxSmoothPointSize            = 1.0f;
         mState.mCaps.minSmoothLineWidth            = 1.0f;
         mState.mCaps.maxSmoothLineWidth            = 1.0f;
+    }
+
+    // If we're capturing application calls for replay, don't expose any binary formats to prevent
+    // traces from trying to use cached results
+    if (getFrameCapture()->enabled())
+    {
+        INFO() << "Limiting binary format support count to zero while FrameCapture enabled"
+               << std::endl;
+        mState.mCaps.shaderBinaryFormats.clear();
+        mState.mCaps.programBinaryFormats.clear();
     }
 
 #if 0
@@ -3896,6 +3588,10 @@ ANGLE_INLINE angle::Result Context::prepareForCopyImage()
 
 ANGLE_INLINE angle::Result Context::prepareForDispatch()
 {
+    // We always assume PPOs are used for draws, until they aren't. If we are executing a dispatch
+    // with a PPO, we need to convert it from a "draw"-type to "dispatch"-type.
+    convertPpoToComputeOrDraw(true);
+
     ANGLE_TRY(syncDirtyObjects(mComputeDirtyObjects));
     return syncDirtyBits(mComputeDirtyBits);
 }
@@ -4405,9 +4101,11 @@ void Context::texImage2D(TextureTarget target,
 {
     ANGLE_CONTEXT_TRY(syncStateForTexImage());
 
+    gl::Buffer *unpackBuffer = mState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
     Extents size(width, height, 1);
     Texture *texture = getTextureByTarget(target);
-    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), target, level,
+    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), unpackBuffer, target, level,
                                         internalformat, size, format, type,
                                         static_cast<const uint8_t *>(pixels)));
 }
@@ -4439,9 +4137,11 @@ void Context::texImage3D(TextureTarget target,
 {
     ANGLE_CONTEXT_TRY(syncStateForTexImage());
 
+    gl::Buffer *unpackBuffer = mState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
     Extents size(width, height, depth);
     Texture *texture = getTextureByTarget(target);
-    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), target, level,
+    ANGLE_CONTEXT_TRY(texture->setImage(this, mState.getUnpackState(), unpackBuffer, target, level,
                                         internalformat, size, format, type,
                                         static_cast<const uint8_t *>(pixels)));
 }
@@ -4901,19 +4601,15 @@ angle::Result Context::syncStateForBlit()
     return syncState(mBlitDirtyBits, mBlitDirtyObjects);
 }
 
-angle::Result Context::syncStateForPathOperation()
-{
-    ANGLE_TRY(syncDirtyObjects(mPathOperationDirtyObjects));
-
-    // TODO(svaisanen@nvidia.com): maybe sync only state required for path rendering?
-    ANGLE_TRY(syncDirtyBits());
-
-    return angle::Result::Continue;
-}
-
 void Context::activeShaderProgram(ProgramPipelineID pipeline, ShaderProgramID program)
 {
-    UNIMPLEMENTED();
+    Program *shaderProgram = getProgramNoResolveLink(program);
+    ProgramPipeline *programPipeline =
+        mState.mProgramPipelineManager->checkProgramPipelineAllocation(mImplementation.get(),
+                                                                       pipeline);
+    ASSERT(programPipeline);
+
+    programPipeline->activeShaderProgram(shaderProgram);
 }
 
 void Context::activeTexture(GLenum texture)
@@ -5092,6 +4788,9 @@ void Context::hint(GLenum target, GLenum mode)
         case GL_LINE_SMOOTH_HINT:
         case GL_FOG_HINT:
             mState.gles1().setHint(target, mode);
+            break;
+        case GL_TEXTURE_FILTERING_HINT_CHROMIUM:
+            mState.setTextureFilteringHint(mode);
             break;
         default:
             UNREACHABLE();
@@ -5556,7 +5255,7 @@ void Context::attachShader(ShaderProgramID program, ShaderProgramID shader)
     Program *programObject = mState.mShaderProgramManager->getProgram(program);
     Shader *shaderObject   = mState.mShaderProgramManager->getShader(shader);
     ASSERT(programObject && shaderObject);
-    programObject->attachShader(shaderObject);
+    programObject->attachShader(this, shaderObject);
 }
 
 void Context::copyBufferSubData(BufferBinding readTarget,
@@ -5833,9 +5532,33 @@ void Context::dispatchCompute(GLuint numGroupsX, GLuint numGroupsY, GLuint numGr
     }
 
     ANGLE_CONTEXT_TRY(prepareForDispatch());
-    ANGLE_CONTEXT_TRY(mImplementation->dispatchCompute(this, numGroupsX, numGroupsY, numGroupsZ));
+
+    angle::Result result =
+        mImplementation->dispatchCompute(this, numGroupsX, numGroupsY, numGroupsZ);
+
+    // We always assume PPOs are used for draws, until they aren't. If we just executed a dispatch
+    // with a PPO, we need to convert it back to a "draw"-type.
+    convertPpoToComputeOrDraw(false);
+
+    if (ANGLE_UNLIKELY(IsError(result)))
+    {
+        return;
+    }
 
     MarkShaderStorageBufferUsage(this);
+}
+
+void Context::convertPpoToComputeOrDraw(bool isCompute)
+{
+    Program *program          = mState.getProgram();
+    ProgramPipeline *pipeline = mState.getProgramPipeline();
+    if (!program && pipeline)
+    {
+        pipeline->getExecutable().setIsCompute(isCompute);
+        pipeline->setDirtyBit(ProgramPipeline::DirtyBitType::DIRTY_BIT_DRAW_DISPATCH_CHANGE);
+        mState.mDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM_PIPELINE);
+        mState.mDirtyBits.set(State::DirtyBitType::DIRTY_BIT_PROGRAM_EXECUTABLE);
+    }
 }
 
 void Context::dispatchComputeIndirect(GLintptr indirect)
@@ -6081,13 +5804,13 @@ void Context::drawArraysInstancedBaseInstance(PrimitiveMode mode,
                                               GLsizei instanceCount,
                                               GLuint baseInstance)
 {
-    ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    Program *programObject = mState.getLinkedProgram(this);
-
     if (noopDraw(mode, count))
     {
         return;
     }
+
+    ANGLE_CONTEXT_TRY(prepareForDraw(mode));
+    Program *programObject = mState.getLinkedProgram(this);
 
     const bool hasBaseInstance = programObject && programObject->hasBaseInstanceUniform();
     if (hasBaseInstance)
@@ -6098,7 +5821,7 @@ void Context::drawArraysInstancedBaseInstance(PrimitiveMode mode,
     ResetBaseVertexBaseInstance resetUniforms(programObject, false, hasBaseInstance);
 
     // The input gl_InstanceID does not follow the baseinstance. gl_InstanceID always falls on
-    // the half-open range [0, instancecount​). No need to set other stuff. Except for Vulkan.
+    // the half-open range [0, instancecount). No need to set other stuff. Except for Vulkan.
 
     ANGLE_CONTEXT_TRY(mImplementation->drawArraysInstancedBaseInstance(
         this, mode, first, count, instanceCount, baseInstance));
@@ -6113,13 +5836,13 @@ void Context::drawElementsInstancedBaseVertexBaseInstance(PrimitiveMode mode,
                                                           GLint baseVertex,
                                                           GLuint baseInstance)
 {
-    ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    Program *programObject = mState.getLinkedProgram(this);
-
     if (noopDraw(mode, count))
     {
         return;
     }
+
+    ANGLE_CONTEXT_TRY(prepareForDraw(mode));
+    Program *programObject = mState.getLinkedProgram(this);
 
     const bool hasBaseVertex = programObject && programObject->hasBaseVertexUniform();
     if (hasBaseVertex)
@@ -6518,7 +6241,12 @@ void Context::getProgramivRobust(ShaderProgramID program,
 
 void Context::getProgramPipelineiv(ProgramPipelineID pipeline, GLenum pname, GLint *params)
 {
-    UNIMPLEMENTED();
+    ProgramPipeline *programPipeline = nullptr;
+    if (!mContextLost)
+    {
+        programPipeline = getProgramPipeline(pipeline);
+    }
+    QueryProgramPipelineiv(this, programPipeline, pname, params);
 }
 
 MemoryObject *Context::getMemoryObject(MemoryObjectID handle) const
@@ -6538,7 +6266,7 @@ void Context::getProgramInfoLog(ShaderProgramID program,
 {
     Program *programObject = getProgramResolveLink(program);
     ASSERT(programObject);
-    programObject->getInfoLog(bufsize, length, infolog);
+    programObject->getExecutable().getInfoLog(bufsize, length, infolog);
 }
 
 void Context::getProgramPipelineInfoLog(ProgramPipelineID pipeline,
@@ -6546,7 +6274,16 @@ void Context::getProgramPipelineInfoLog(ProgramPipelineID pipeline,
                                         GLsizei *length,
                                         GLchar *infoLog)
 {
-    UNIMPLEMENTED();
+    ProgramPipeline *programPipeline = getProgramPipeline(pipeline);
+    if (programPipeline)
+    {
+        programPipeline->getExecutable().getInfoLog(bufSize, length, infoLog);
+    }
+    else
+    {
+        *length  = 0;
+        *infoLog = '\0';
+    }
 }
 
 void Context::getShaderiv(ShaderProgramID shader, GLenum pname, GLint *params)
@@ -6854,15 +6591,30 @@ void Context::patchParameteri(GLenum pname, GLint value)
     UNIMPLEMENTED();
 }
 
+Program *Context::getActiveLinkedProgram() const
+{
+    Program *program = mState.getLinkedProgram(this);
+    if (!program)
+    {
+        ProgramPipeline *programPipelineObject = mState.getProgramPipeline();
+        if (programPipelineObject)
+        {
+            program = programPipelineObject->getLinkedActiveShaderProgram(this);
+        }
+    }
+
+    return program;
+}
+
 void Context::uniform1f(UniformLocation location, GLfloat x)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform1fv(location, 1, &x);
 }
 
 void Context::uniform1fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform1fv(location, count, v);
 }
 
@@ -6882,89 +6634,91 @@ void Context::onSamplerUniformChange(size_t textureUnitIndex)
 
 void Context::uniform1i(UniformLocation location, GLint x)
 {
-    setUniform1iImpl(mState.getProgram(), location, 1, &x);
+    Program *program = getActiveLinkedProgram();
+    setUniform1iImpl(program, location, 1, &x);
 }
 
 void Context::uniform1iv(UniformLocation location, GLsizei count, const GLint *v)
 {
-    setUniform1iImpl(mState.getProgram(), location, count, v);
+    Program *program = getActiveLinkedProgram();
+    setUniform1iImpl(program, location, count, v);
 }
 
 void Context::uniform2f(UniformLocation location, GLfloat x, GLfloat y)
 {
     GLfloat xy[2]    = {x, y};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform2fv(location, 1, xy);
 }
 
 void Context::uniform2fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform2fv(location, count, v);
 }
 
 void Context::uniform2i(UniformLocation location, GLint x, GLint y)
 {
     GLint xy[2]      = {x, y};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform2iv(location, 1, xy);
 }
 
 void Context::uniform2iv(UniformLocation location, GLsizei count, const GLint *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform2iv(location, count, v);
 }
 
 void Context::uniform3f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z)
 {
     GLfloat xyz[3]   = {x, y, z};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform3fv(location, 1, xyz);
 }
 
 void Context::uniform3fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform3fv(location, count, v);
 }
 
 void Context::uniform3i(UniformLocation location, GLint x, GLint y, GLint z)
 {
     GLint xyz[3]     = {x, y, z};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform3iv(location, 1, xyz);
 }
 
 void Context::uniform3iv(UniformLocation location, GLsizei count, const GLint *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform3iv(location, count, v);
 }
 
 void Context::uniform4f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     GLfloat xyzw[4]  = {x, y, z, w};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform4fv(location, 1, xyzw);
 }
 
 void Context::uniform4fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform4fv(location, count, v);
 }
 
 void Context::uniform4i(UniformLocation location, GLint x, GLint y, GLint z, GLint w)
 {
     GLint xyzw[4]    = {x, y, z, w};
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform4iv(location, 1, xyzw);
 }
 
 void Context::uniform4iv(UniformLocation location, GLsizei count, const GLint *v)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform4iv(location, count, v);
 }
 
@@ -6973,7 +6727,7 @@ void Context::uniformMatrix2fv(UniformLocation location,
                                GLboolean transpose,
                                const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix2fv(location, count, transpose, value);
 }
 
@@ -6982,7 +6736,7 @@ void Context::uniformMatrix3fv(UniformLocation location,
                                GLboolean transpose,
                                const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix3fv(location, count, transpose, value);
 }
 
@@ -6991,7 +6745,7 @@ void Context::uniformMatrix4fv(UniformLocation location,
                                GLboolean transpose,
                                const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix4fv(location, count, transpose, value);
 }
 
@@ -7004,7 +6758,12 @@ void Context::validateProgram(ShaderProgramID program)
 
 void Context::validateProgramPipeline(ProgramPipelineID pipeline)
 {
-    UNIMPLEMENTED();
+    ProgramPipeline *programPipeline =
+        mState.mProgramPipelineManager->checkProgramPipelineAllocation(mImplementation.get(),
+                                                                       pipeline);
+    ASSERT(programPipeline);
+
+    programPipeline->validate(this);
 }
 
 void Context::getProgramBinary(ShaderProgramID program,
@@ -7033,51 +6792,51 @@ void Context::programBinary(ShaderProgramID program,
 
 void Context::uniform1ui(UniformLocation location, GLuint v0)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform1uiv(location, 1, &v0);
 }
 
 void Context::uniform2ui(UniformLocation location, GLuint v0, GLuint v1)
 {
-    Program *program  = mState.getProgram();
+    Program *program  = getActiveLinkedProgram();
     const GLuint xy[] = {v0, v1};
     program->setUniform2uiv(location, 1, xy);
 }
 
 void Context::uniform3ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2)
 {
-    Program *program   = mState.getProgram();
+    Program *program   = getActiveLinkedProgram();
     const GLuint xyz[] = {v0, v1, v2};
     program->setUniform3uiv(location, 1, xyz);
 }
 
 void Context::uniform4ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2, GLuint v3)
 {
-    Program *program    = mState.getProgram();
+    Program *program    = getActiveLinkedProgram();
     const GLuint xyzw[] = {v0, v1, v2, v3};
     program->setUniform4uiv(location, 1, xyzw);
 }
 
 void Context::uniform1uiv(UniformLocation location, GLsizei count, const GLuint *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform1uiv(location, count, value);
 }
 void Context::uniform2uiv(UniformLocation location, GLsizei count, const GLuint *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform2uiv(location, count, value);
 }
 
 void Context::uniform3uiv(UniformLocation location, GLsizei count, const GLuint *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform3uiv(location, count, value);
 }
 
 void Context::uniform4uiv(UniformLocation location, GLsizei count, const GLuint *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniform4uiv(location, count, value);
 }
 
@@ -7124,7 +6883,7 @@ void Context::uniformMatrix2x3fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix2x3fv(location, count, transpose, value);
 }
 
@@ -7133,7 +6892,7 @@ void Context::uniformMatrix3x2fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix3x2fv(location, count, transpose, value);
 }
 
@@ -7142,7 +6901,7 @@ void Context::uniformMatrix2x4fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix2x4fv(location, count, transpose, value);
 }
 
@@ -7151,7 +6910,7 @@ void Context::uniformMatrix4x2fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix4x2fv(location, count, transpose, value);
 }
 
@@ -7160,7 +6919,7 @@ void Context::uniformMatrix3x4fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix3x4fv(location, count, transpose, value);
 }
 
@@ -7169,7 +6928,7 @@ void Context::uniformMatrix4x3fv(UniformLocation location,
                                  GLboolean transpose,
                                  const GLfloat *value)
 {
-    Program *program = mState.getProgram();
+    Program *program = getActiveLinkedProgram();
     program->setUniformMatrix4x3fv(location, count, transpose, value);
 }
 
@@ -7892,7 +7651,12 @@ GLboolean Context::isProgramPipeline(ProgramPipelineID pipeline) const
         return GL_FALSE;
     }
 
-    return ConvertToGLBoolean(getProgramPipeline(pipeline));
+    if (getProgramPipeline(pipeline))
+    {
+        return GL_TRUE;
+    }
+
+    return GL_FALSE;
 }
 
 void Context::finishFenceNV(FenceNVID fence)
@@ -8074,16 +7838,18 @@ void Context::createMemoryObjects(GLsizei n, MemoryObjectID *memoryObjects)
     }
 }
 
-void Context::memoryObjectParameteriv(MemoryObjectID memoryObject,
-                                      GLenum pname,
-                                      const GLint *params)
+void Context::memoryObjectParameteriv(MemoryObjectID memory, GLenum pname, const GLint *params)
 {
-    UNIMPLEMENTED();
+    MemoryObject *memoryObject = getMemoryObject(memory);
+    ASSERT(memoryObject);
+    ANGLE_CONTEXT_TRY(SetMemoryObjectParameteriv(this, memoryObject, pname, params));
 }
 
-void Context::getMemoryObjectParameteriv(MemoryObjectID memoryObject, GLenum pname, GLint *params)
+void Context::getMemoryObjectParameteriv(MemoryObjectID memory, GLenum pname, GLint *params)
 {
-    UNIMPLEMENTED();
+    const MemoryObject *memoryObject = getMemoryObject(memory);
+    ASSERT(memoryObject);
+    QueryMemoryObjectParameteriv(memoryObject, pname, params);
 }
 
 void Context::texStorageMem2D(TextureType target,
@@ -8493,7 +8259,8 @@ void Context::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMess
         default:
             if (index < kTextureMaxSubjectIndex)
             {
-                if (message != angle::SubjectMessage::ContentsChanged)
+                if (message != angle::SubjectMessage::ContentsChanged &&
+                    message != angle::SubjectMessage::BindingChanged)
                 {
                     mState.onActiveTextureStateChange(this, index);
                     mStateCache.onActiveTextureChange(this);
@@ -8539,6 +8306,25 @@ angle::Result Context::onProgramLink(Program *programObject)
             ANGLE_TRY(mState.onProgramExecutableChange(this, programObject));
         }
         mStateCache.onProgramExecutableChange(this);
+    }
+
+    // TODO(http://anglebug.com/4559): Use the Subject/Observer pattern for
+    // Programs in PPOs so we can remove this.
+    // Need to mark any PPOs that this Program is bound to as dirty
+    bool foundPipeline = false;
+    for (ResourceMap<ProgramPipeline, ProgramPipelineID>::Iterator ppoIterator =
+             mState.mProgramPipelineManager->begin();
+         ppoIterator != mState.mProgramPipelineManager->end(); ++ppoIterator)
+    {
+        ProgramPipeline *pipeline = ppoIterator->second;
+        pipeline->setDirtyBit(ProgramPipeline::DirtyBitType::DIRTY_BIT_PROGRAM_STAGE);
+        foundPipeline = true;
+    }
+    // Also need to make sure the PPO dirty bits get handled by marking the PPO
+    // objects dirty.
+    if (foundPipeline)
+    {
+        mState.mDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM_PIPELINE);
     }
 
     return angle::Result::Continue;
@@ -8717,7 +8503,8 @@ StateCache::StateCache()
       mCachedInstancedVertexElementLimit(0),
       mCachedBasicDrawStatesError(kInvalidPointer),
       mCachedBasicDrawElementsError(kInvalidPointer),
-      mCachedTransformFeedbackActiveUnpaused(false)
+      mCachedTransformFeedbackActiveUnpaused(false),
+      mCachedCanDraw(false)
 {}
 
 StateCache::~StateCache() = default;
@@ -8738,6 +8525,7 @@ void StateCache::initialize(Context *context)
     updateBasicDrawStatesError();
     updateBasicDrawElementsError();
     updateVertexAttribTypesValidation(context);
+    updateCanDraw(context);
 }
 
 void StateCache::updateActiveAttribsMask(Context *context)
@@ -8745,7 +8533,7 @@ void StateCache::updateActiveAttribsMask(Context *context)
     bool isGLES1         = context->isGLES1();
     const State &glState = context->getState();
 
-    if (!isGLES1 && !glState.getProgram())
+    if (!isGLES1 && !glState.getProgramExecutable())
     {
         mCachedActiveBufferedAttribsMask = AttributesMask();
         mCachedActiveClientAttribsMask   = AttributesMask();
@@ -8753,8 +8541,9 @@ void StateCache::updateActiveAttribsMask(Context *context)
         return;
     }
 
-    AttributesMask activeAttribs = isGLES1 ? glState.gles1().getActiveAttributesMask()
-                                           : glState.getProgram()->getActiveAttribLocationsMask();
+    AttributesMask activeAttribs =
+        isGLES1 ? glState.gles1().getActiveAttributesMask()
+                : glState.getProgramExecutable()->getActiveAttribLocationsMask();
 
     const VertexArray *vao = glState.getVertexArray();
     ASSERT(vao);
@@ -8794,7 +8583,7 @@ void StateCache::updateVertexElementLimitsImpl(Context *context)
 
         const VertexBinding &binding = vertexBindings[attrib.bindingIndex];
         ASSERT(context->isGLES1() ||
-               context->getState().getProgram()->isAttribLocationActive(attributeIndex));
+               context->getState().getProgramExecutable()->isAttribLocationActive(attributeIndex));
 
         GLint64 limit = attrib.getCachedElementLimit();
         if (binding.getDivisor() > 0)
@@ -8848,6 +8637,7 @@ void StateCache::onProgramExecutableChange(Context *context)
     updateBasicDrawStatesError();
     updateValidDrawModes(context);
     updateActiveShaderStorageBufferIndices(context);
+    updateCanDraw(context);
 }
 
 void StateCache::onVertexArrayFormatChange(Context *context)
@@ -8989,13 +8779,14 @@ void StateCache::updateValidDrawModes(Context *context)
         return;
     }
 
-    if (!program || !program->hasLinkedShaderStage(ShaderType::Geometry))
+    const ProgramExecutable *programExecutable = context->getState().getProgramExecutable();
+    if (!programExecutable || !programExecutable->hasLinkedShaderStage(ShaderType::Geometry))
     {
         mCachedValidDrawModes = kValidBasicDrawModes;
         return;
     }
 
-    ASSERT(program && program->hasLinkedShaderStage(ShaderType::Geometry));
+    ASSERT(programExecutable->hasLinkedShaderStage(ShaderType::Geometry));
     PrimitiveMode gsMode = program->getGeometryShaderInputPrimitiveType();
 
     bool pointsOK  = gsMode == PrimitiveMode::Points;
@@ -9022,6 +8813,7 @@ void StateCache::updateValidBindTextureTypes(Context *context)
         {TextureType::External, exts.eglImageExternalOES || exts.eglStreamConsumerExternalNV},
         {TextureType::Rectangle, exts.textureRectangle},
         {TextureType::CubeMap, true},
+        {TextureType::CubeMapArray, exts.textureCubeMapArrayAny()},
         {TextureType::VideoImage, exts.webglVideoTexture},
     }};
 }
@@ -9107,5 +8899,12 @@ void StateCache::updateActiveShaderStorageBufferIndices(Context *context)
             mCachedActiveShaderStorageBufferIndices.set(block.binding);
         }
     }
+}
+
+void StateCache::updateCanDraw(Context *context)
+{
+    mCachedCanDraw = (context->isGLES1() ||
+                      (context->getState().getProgramExecutable() &&
+                       context->getState().getProgramExecutable()->hasVertexAndFragmentShader()));
 }
 }  // namespace gl

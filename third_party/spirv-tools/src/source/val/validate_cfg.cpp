@@ -62,6 +62,15 @@ spv_result_t ValidatePhi(ValidationState_t& _, const Instruction* inst) {
     }
   }
 
+  if (!_.options()->before_hlsl_legalization) {
+    if (type_opcode == SpvOpTypeSampledImage ||
+        (_.HasCapability(SpvCapabilityShader) &&
+         (type_opcode == SpvOpTypeImage || type_opcode == SpvOpTypeSampler))) {
+      return _.diag(SPV_ERROR_INVALID_ID, inst)
+             << "Result type cannot be Op" << spvOpcodeString(type_opcode);
+    }
+  }
+
   // Create a uniqued vector of predecessor ids for comparison against
   // incoming values. OpBranchConditional %cond %label %label produces two
   // predecessors in the CFG.
@@ -1081,8 +1090,9 @@ spv_result_t CfgPass(ValidationState_t& _, const Instruction* inst) {
         return _.diag(SPV_ERROR_INVALID_CFG, inst)
                << "OpReturn can only be called from a function with void "
                << "return type.";
+      _.current_function().RegisterBlockEnd(std::vector<uint32_t>(), opcode);
+      break;
     }
-    // Fallthrough.
     case SpvOpKill:
     case SpvOpReturnValue:
     case SpvOpUnreachable:

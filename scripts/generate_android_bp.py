@@ -82,13 +82,30 @@ def gn_target_to_blueprint_target(target, target_info):
     if 'output_name' in target_info:
         return target_info['output_name']
 
-    # Prefix all targets with angle_
-    # Remove the prefix //: from gn target names
-    cleaned_path = re.sub(r'^//.*:', '', target)
-    prefix = "angle_"
-    if not cleaned_path.startswith(prefix):
-        cleaned_path = prefix + cleaned_path
-    return cleaned_path
+    # Split the gn target name (in the form of //gn_file_path:target_name) into gn_file_path and
+    # target_name
+    target_regex = re.compile(r"^//([a-zA-Z0-9\-_/]*):([a-zA-Z0-9\-_\.]+)$")
+    match = re.match(target_regex, target)
+    assert match != None
+
+    gn_file_path = match.group(1)
+    target_name = match.group(2)
+    assert len(target_name) > 0
+
+    # Clean up the gn file path to be a valid blueprint target name.
+    gn_file_path = gn_file_path.replace("/", "_").replace(".", "_").replace("-", "_")
+
+    # Generate a blueprint target name by merging the gn path and target so each target is unique.
+    # Prepend the 'angle' prefix to all targets in the root path (empty gn_file_path). Skip this step if the target name already starts with 'angle' to avoid target names such as 'angle_angle_common'.
+    root_prefix = "angle"
+    if len(gn_file_path) == 0 and not target_name.startswith(root_prefix):
+        gn_file_path = root_prefix
+
+    # Avoid names such as _angle_common if the gn_file_path is empty.
+    if len(gn_file_path) > 0:
+        gn_file_path += "_"
+
+    return gn_file_path + target_name
 
 
 def remap_gn_path(path):
@@ -217,23 +234,15 @@ def gn_cflags_to_blueprint_cflags(target_info):
     # Only forward cflags that disable warnings
     cflag_whitelist = r'^-Wno-.*$'
 
-    # Some clfags are not supported by the version of clang in Android
-    cflag_blacklist = [
-        '-Wno-bitwise-conditional-parentheses',
-        '-Wno-builtin-assume-aligned-alignment',
-        '-Wno-c99-designator',
-        '-Wno-deprecated-copy',
-        '-Wno-final-dtor-non-final-class',
-        '-Wno-implicit-int-float-conversion',
-        '-Wno-sizeof-array-div',
-        '-Wno-misleading-indentation',
-    ]
-
     for cflag_type in ['cflags', 'cflags_c', 'cflags_cc']:
         if cflag_type in target_info:
             for cflag in target_info[cflag_type]:
-                if re.search(cflag_whitelist, cflag) and not cflag in cflag_blacklist:
+                if re.search(cflag_whitelist, cflag):
                     result.append(cflag)
+
+    # Chrome and Android use different versions of Clang which support differnt warning options.
+    # Ignore errors about unrecognized warning flags.
+    result.append('-Wno-unknown-warning-option')
 
     if 'defines' in target_info:
         for define in target_info['defines']:
@@ -373,6 +382,8 @@ def action_target_to_blueprint(target, build_info):
                                                              target_info['args'])
     bp['cmd'] = ' '.join(cmd)
 
+    bp['sdk_version'] = sdk_version
+
     return (blueprint_type, bp)
 
 
@@ -453,6 +464,7 @@ def main():
                 '--extra-packages com.android.angle.common',
             ],
             'srcs': [':ANGLE_srcs'],
+            'plugins': ['java_api_finder',],
             'privileged':
                 True,
             'owner':
@@ -480,7 +492,6 @@ def main():
         'defaults': ['ANGLE_java_defaults'],
         'static_libs': ['ANGLE_library'],
         'manifest': 'src/android_system_settings/src/com/android/angle/AndroidManifest.xml',
-        'required': ['privapp_whitelist_com.android.angle'],
     }))
 
     output = [
@@ -496,7 +507,7 @@ def main():
     for (blueprint_type, blueprint_data) in blueprint_targets:
         write_blueprint(output, blueprint_type, blueprint_data)
 
-    print '\n'.join(output)
+    print('\n'.join(output))
 
 
 if __name__ == '__main__':

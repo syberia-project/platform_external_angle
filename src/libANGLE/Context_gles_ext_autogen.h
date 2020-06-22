@@ -227,53 +227,9 @@
                         GLboolean unpackUnmultiplyAlpha);                                          \
     /* GL_CHROMIUM_framebuffer_mixed_samples */                                                    \
     void coverageModulation(GLenum components);                                                    \
-    void matrixLoadf(GLenum matrixMode, const GLfloat *matrix);                                    \
-    void matrixLoadIdentity(GLenum matrixMode);                                                    \
     /* GL_CHROMIUM_lose_context */                                                                 \
     void loseContext(GraphicsResetStatus currentPacked, GraphicsResetStatus otherPacked);          \
     /* GL_CHROMIUM_path_rendering */                                                               \
-    GLuint genPaths(GLsizei range);                                                                \
-    void deletePaths(PathID firstPacked, GLsizei range);                                           \
-    GLboolean isPath(PathID pathPacked) const;                                                     \
-    void pathCommands(PathID pathPacked, GLsizei numCommands, const GLubyte *commands,             \
-                      GLsizei numCoords, GLenum coordType, const void *coords);                    \
-    void pathParameterf(PathID pathPacked, GLenum pname, GLfloat value);                           \
-    void pathParameteri(PathID pathPacked, GLenum pname, GLint value);                             \
-    void getPathParameterfv(PathID pathPacked, GLenum pname, GLfloat *value);                      \
-    void getPathParameteriv(PathID pathPacked, GLenum pname, GLint *value);                        \
-    void pathStencilFunc(GLenum func, GLint ref, GLuint mask);                                     \
-    void stencilFillPath(PathID pathPacked, GLenum fillMode, GLuint mask);                         \
-    void stencilStrokePath(PathID pathPacked, GLint reference, GLuint mask);                       \
-    void coverFillPath(PathID pathPacked, GLenum coverMode);                                       \
-    void coverStrokePath(PathID pathPacked, GLenum coverMode);                                     \
-    void stencilThenCoverFillPath(PathID pathPacked, GLenum fillMode, GLuint mask,                 \
-                                  GLenum coverMode);                                               \
-    void stencilThenCoverStrokePath(PathID pathPacked, GLint reference, GLuint mask,               \
-                                    GLenum coverMode);                                             \
-    void coverFillPathInstanced(GLsizei numPath, GLenum pathNameType, const void *paths,           \
-                                PathID pathBasePacked, GLenum coverMode, GLenum transformType,     \
-                                const GLfloat *transformValues);                                   \
-    void coverStrokePathInstanced(GLsizei numPath, GLenum pathNameType, const void *paths,         \
-                                  PathID pathBasePacked, GLenum coverMode, GLenum transformType,   \
-                                  const GLfloat *transformValues);                                 \
-    void stencilStrokePathInstanced(GLsizei numPath, GLenum pathNameType, const void *paths,       \
-                                    PathID pathBasePacked, GLint reference, GLuint mask,           \
-                                    GLenum transformType, const GLfloat *transformValues);         \
-    void stencilFillPathInstanced(GLsizei numPaths, GLenum pathNameType, const void *paths,        \
-                                  PathID pathBasePacked, GLenum fillMode, GLuint mask,             \
-                                  GLenum transformType, const GLfloat *transformValues);           \
-    void stencilThenCoverFillPathInstanced(GLsizei numPaths, GLenum pathNameType,                  \
-                                           const void *paths, PathID pathBasePacked,               \
-                                           GLenum fillMode, GLuint mask, GLenum coverMode,         \
-                                           GLenum transformType, const GLfloat *transformValues);  \
-    void stencilThenCoverStrokePathInstanced(                                                      \
-        GLsizei numPaths, GLenum pathNameType, const void *paths, PathID pathBasePacked,           \
-        GLint reference, GLuint mask, GLenum coverMode, GLenum transformType,                      \
-        const GLfloat *transformValues);                                                           \
-    void bindFragmentInputLocation(ShaderProgramID programsPacked, GLint location,                 \
-                                   const GLchar *name);                                            \
-    void programPathFragmentInputGen(ShaderProgramID programPacked, GLint location,                \
-                                     GLenum genMode, GLint components, const GLfloat *coeffs);     \
                                                                                                    \
     /* GLES2+ Extensions */                                                                        \
                                                                                                    \
@@ -317,6 +273,7 @@
     /* GL_ANGLE_translated_shader_source */                                                        \
     void getTranslatedShaderSource(ShaderProgramID shaderPacked, GLsizei bufsize, GLsizei *length, \
                                    GLchar *source);                                                \
+    /* GL_EXT_EGL_image_array */                                                                   \
     /* GL_EXT_blend_func_extended */                                                               \
     void bindFragDataLocation(ShaderProgramID programPacked, GLuint color, const GLchar *name);    \
     void bindFragDataLocationIndexed(ShaderProgramID programPacked, GLuint colorNumber,            \
@@ -324,6 +281,7 @@
     GLint getFragDataIndex(ShaderProgramID programPacked, const GLchar *name);                     \
     GLint getProgramResourceLocationIndex(ShaderProgramID programPacked, GLenum programInterface,  \
                                           const GLchar *name);                                     \
+    /* GL_EXT_compressed_ETC1_RGB8_sub_texture */                                                  \
     /* GL_EXT_debug_marker */                                                                      \
     void insertEventMarker(GLsizei length, const GLchar *marker);                                  \
     void popGroupMarker();                                                                         \
@@ -400,8 +358,10 @@
     /* GL_EXT_texture_compression_rgtc */                                                          \
     /* GL_EXT_texture_compression_s3tc */                                                          \
     /* GL_EXT_texture_compression_s3tc_srgb */                                                     \
+    /* GL_EXT_texture_cube_map_array */                                                            \
     /* GL_EXT_texture_filter_anisotropic */                                                        \
     /* GL_EXT_texture_format_BGRA8888 */                                                           \
+    /* GL_EXT_texture_sRGB_R8 */                                                                   \
     /* GL_EXT_texture_storage */                                                                   \
     void texStorage1D(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width);        \
     /* GL_KHR_debug */                                                                             \
@@ -429,6 +389,7 @@
     void framebufferTexture3D(GLenum target, GLenum attachment, TextureTarget textargetPacked,     \
                               TextureID texturePacked, GLint level, GLint zoffset);                \
     /* GL_OES_texture_border_clamp */                                                              \
+    /* GL_OES_texture_cube_map_array */                                                            \
     /* GL_OES_texture_half_float */                                                                \
     /* GL_OES_texture_storage_multisample_2d_array */                                              \
     /* GL_OES_vertex_array_object */                                                               \

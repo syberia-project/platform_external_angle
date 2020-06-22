@@ -223,19 +223,32 @@ static bool DeterminePackedDepthStencilSupport(const TextureCapsMap &textureCaps
 // Checks for GL_NV_read_depth support
 static bool DetermineReadDepthSupport(const TextureCapsMap &textureCaps)
 {
-    return false;
+    constexpr GLenum requiredFormats[] = {
+        GL_DEPTH_COMPONENT16,
+    };
+
+    return GetFormatSupport(textureCaps, requiredFormats, true, false, true, false, false);
 }
 
 // Checks for GL_NV_read_stencil support
 static bool DetermineReadStencilSupport(const TextureCapsMap &textureCaps)
 {
-    return false;
+    constexpr GLenum requiredFormats[] = {
+        GL_STENCIL_INDEX8,
+    };
+
+    return GetFormatSupport(textureCaps, requiredFormats, false, false, true, false, false);
 }
 
 // Checks for GL_NV_depth_buffer_float2 support
 static bool DetermineDepthBufferFloat2Support(const TextureCapsMap &textureCaps)
 {
-    return false;
+    constexpr GLenum requiredFormats[] = {
+        GL_DEPTH_COMPONENT32F,
+        GL_DEPTH32F_STENCIL8,
+    };
+
+    return GetFormatSupport(textureCaps, requiredFormats, true, false, true, false, false);
 }
 
 // Checks for GL_OES_rgb8_rgba8 support
@@ -599,6 +612,14 @@ static bool DetermineSRGBTextureSupport(const TextureCapsMap &textureCaps)
            GetFormatSupport(textureCaps, requiredRenderFormats, true, false, true, true, false);
 }
 
+// Check for GL_EXT_texture_sRGB_R8 support
+static bool DetermineSRGBR8TextureSupport(const TextureCapsMap &textureCaps)
+{
+    constexpr GLenum requiredFilterFormats[] = {GL_SR8_EXT};
+
+    return GetFormatSupport(textureCaps, requiredFilterFormats, true, true, false, false, false);
+}
+
 // Check for GL_ANGLE_depth_texture support
 static bool DetermineDepthTextureANGLESupport(const TextureCapsMap &textureCaps)
 {
@@ -807,6 +828,7 @@ void Extensions::setTextureExtensionSupport(const TextureCapsMap &textureCaps)
     compressedEACRG11UnsignedTextureOES = DetermineEACRG11UnsignedTextureSupport(textureCaps);
     compressedEACRG11SignedTextureOES   = DetermineEACRG11SignedTextureSupport(textureCaps);
     sRGB                                = DetermineSRGBTextureSupport(textureCaps);
+    sRGBR8EXT                           = DetermineSRGBR8TextureSupport(textureCaps);
     depthTextureANGLE                   = DetermineDepthTextureANGLESupport(textureCaps);
     depthTextureOES                     = DetermineDepthTextureOESSupport(textureCaps);
     depth24OES                          = DetermineDepth24OESSupport(textureCaps);
@@ -850,9 +872,9 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_OES_packed_depth_stencil"] = esOnlyExtension(&Extensions::packedDepthStencilOES);
         map["GL_OES_get_program_binary"] = enableableExtension(&Extensions::getProgramBinaryOES);
         map["GL_OES_rgb8_rgba8"] = enableableExtension(&Extensions::rgb8rgba8OES);
-        map["GL_NV_read_depth"] = esOnlyExtension(&Extensions::readDepthNV);
-        map["GL_NV_read_stencil"] = esOnlyExtension(&Extensions::readStencilNV);
-        map["GL_NV_depth_buffer_float2"] = esOnlyExtension(&Extensions::depthBufferFloat2NV);
+        map["GL_NV_read_depth"] = enableableExtension(&Extensions::readDepthNV);
+        map["GL_NV_read_stencil"] = enableableExtension(&Extensions::readStencilNV);
+        map["GL_NV_depth_buffer_float2"] = enableableExtension(&Extensions::depthBufferFloat2NV);
         map["GL_EXT_texture_format_BGRA8888"] = enableableExtension(&Extensions::textureFormatBGRA8888);
         map["GL_EXT_texture_type_2_10_10_10_REV"] = enableableExtension(&Extensions::textureFormat2101010REV);
         map["GL_EXT_read_format_bgra"] = enableableExtension(&Extensions::readFormatBGRA);
@@ -872,10 +894,12 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_EXT_texture_compression_s3tc_srgb"] = enableableExtension(&Extensions::textureCompressionS3TCsRGB);
         map["GL_KHR_texture_compression_astc_ldr"] = enableableExtension(&Extensions::textureCompressionASTCLDRKHR);
         map["GL_KHR_texture_compression_astc_hdr"] = enableableExtension(&Extensions::textureCompressionASTCHDRKHR);
+        map["GL_KHR_texture_compression_astc_sliced_3d"] = enableableExtension(&Extensions::textureCompressionSliced3dASTCKHR);
         map["GL_OES_texture_compression_astc"] = enableableExtension(&Extensions::textureCompressionASTCOES);
         map["GL_EXT_texture_compression_bptc"] = enableableExtension(&Extensions::textureCompressionBPTC);
         map["GL_EXT_texture_compression_rgtc"] = enableableExtension(&Extensions::textureCompressionRGTC);
         map["GL_OES_compressed_ETC1_RGB8_texture"] = enableableExtension(&Extensions::compressedETC1RGB8TextureOES);
+        map["GL_EXT_compressed_ETC1_RGB8_sub_texture"] = enableableExtension(&Extensions::compressedETC1RGB8SubTexture);
         map["GL_OES_compressed_ETC2_RGB8_texture"] = enableableExtension(&Extensions::compressedETC2RGB8TextureOES);
         map["GL_OES_compressed_ETC2_sRGB8_texture"] = enableableExtension(&Extensions::compressedETC2sRGB8TextureOES);
         map["GL_OES_compressed_ETC2_punchthroughA_RGBA8_texture"] = enableableExtension(&Extensions::compressedETC2PunchthroughARGB8TextureOES);
@@ -890,6 +914,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_IMG_texture_compression_pvrtc"] = enableableExtension(&Extensions::compressedTexturePVRTC);
         map["GL_EXT_pvrtc_sRGB"] = enableableExtension(&Extensions::compressedTexturePVRTCsRGB);
         map["GL_EXT_sRGB"] = enableableExtension(&Extensions::sRGB);
+        map["GL_EXT_texture_sRGB_R8"] = enableableExtension(&Extensions::sRGBR8EXT);
         map["GL_ANGLE_depth_texture"] = esOnlyExtension(&Extensions::depthTextureANGLE);
         map["GL_OES_depth_texture"] = esOnlyExtension(&Extensions::depthTextureOES);
         map["GL_OES_depth_texture_cube_map"] = enableableExtension(&Extensions::depthTextureCubeMapOES);
@@ -927,6 +952,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_OES_EGL_image"] = enableableExtension(&Extensions::eglImageOES);
         map["GL_OES_EGL_image_external"] = enableableExtension(&Extensions::eglImageExternalOES);
         map["GL_OES_EGL_image_external_essl3"] = enableableExtension(&Extensions::eglImageExternalEssl3OES);
+        map["GL_EXT_EGL_image_external_wrap_modes"] = enableableExtension(&Extensions::eglImageExternalWrapModesEXT);
         map["GL_OES_EGL_sync"] = esOnlyExtension(&Extensions::eglSyncOES);
         map["GL_EXT_memory_object"] = enableableExtension(&Extensions::memoryObject);
         map["GL_EXT_memory_object_fd"] = enableableExtension(&Extensions::memoryObjectFd);
@@ -934,6 +960,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_EXT_semaphore"] = enableableExtension(&Extensions::semaphore);
         map["GL_EXT_semaphore_fd"] = enableableExtension(&Extensions::semaphoreFd);
         map["GL_NV_EGL_stream_consumer_external"] = enableableExtension(&Extensions::eglStreamConsumerExternalNV);
+        map["GL_NV_shader_noperspective_interpolation"] = enableableExtension(&Extensions::noperspectiveInterpolationNV);
         map["GL_ANGLE_semaphore_fuchsia"] = enableableExtension(&Extensions::semaphoreFuchsiaANGLE);
         map["GL_EXT_unpack_subimage"] = enableableExtension(&Extensions::unpackSubimage);
         map["GL_NV_pack_subimage"] = enableableExtension(&Extensions::packSubimage);
@@ -955,13 +982,13 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_CHROMIUM_bind_generates_resource"] = esOnlyExtension(&Extensions::bindGeneratesResource);
         map["GL_ANGLE_robust_client_memory"] = esOnlyExtension(&Extensions::robustClientMemory);
         map["GL_EXT_texture_sRGB_decode"] = esOnlyExtension(&Extensions::textureSRGBDecode);
+        map["GL_EXT_texture_sRGB_override"] = esOnlyExtension(&Extensions::textureSRGBOverride);
         map["GL_EXT_sRGB_write_control"] = esOnlyExtension(&Extensions::sRGBWriteControl);
         map["GL_CHROMIUM_color_buffer_float_rgb"] = enableableExtension(&Extensions::colorBufferFloatRGB);
         map["GL_CHROMIUM_color_buffer_float_rgba"] = enableableExtension(&Extensions::colorBufferFloatRGBA);
         map["GL_EXT_multisample_compatibility"] = esOnlyExtension(&Extensions::multisampleCompatibility);
         map["GL_CHROMIUM_framebuffer_mixed_samples"] = esOnlyExtension(&Extensions::framebufferMixedSamples);
         map["GL_EXT_texture_norm16"] = enableableExtension(&Extensions::textureNorm16);
-        map["GL_CHROMIUM_path_rendering"] = esOnlyExtension(&Extensions::pathRendering);
         map["GL_OES_surfaceless_context"] = esOnlyExtension(&Extensions::surfacelessContextOES);
         map["GL_ANGLE_client_arrays"] = esOnlyExtension(&Extensions::clientArrays);
         map["GL_ANGLE_robust_resource_initialization"] = esOnlyExtension(&Extensions::robustResourceInitialization);
@@ -978,6 +1005,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_ANGLE_texture_multisample"] = enableableExtension(&Extensions::textureMultisample);
         map["GL_ANGLE_multi_draw"] = enableableExtension(&Extensions::multiDraw);
         map["GL_ANGLE_provoking_vertex"] = enableableExtension(&Extensions::provokingVertex);
+        map["GL_CHROMIUM_texture_filtering_hint"] = enableableExtension(&Extensions::textureFilteringCHROMIUM);
         map["GL_CHROMIUM_lose_context"] = enableableExtension(&Extensions::loseContextCHROMIUM);
         map["GL_ANGLE_texture_external_update"] = enableableExtension(&Extensions::textureExternalUpdateANGLE);
         map["GL_ANGLE_base_vertex_base_instance"] = enableableExtension(&Extensions::baseVertexBaseInstance);
@@ -985,13 +1013,18 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_OES_draw_elements_base_vertex"] = enableableExtension(&Extensions::drawElementsBaseVertexOES);
         map["GL_EXT_draw_elements_base_vertex"] = enableableExtension(&Extensions::drawElementsBaseVertexEXT);
         map["GL_EXT_gpu_shader5"] = enableableExtension(&Extensions::gpuShader5EXT);
+        map["GL_APPLE_clip_distance"] = enableableExtension(&Extensions::clipDistanceAPPLE);
+        map["GL_EXT_EGL_image_array"] = enableableExtension(&Extensions::eglImageArray);
         // GLES1 extensions
         map["GL_OES_point_size_array"] = enableableExtension(&Extensions::pointSizeArrayOES);
         map["GL_OES_texture_cube_map"] = enableableExtension(&Extensions::textureCubeMapOES);
         map["GL_OES_point_sprite"] = enableableExtension(&Extensions::pointSpriteOES);
         map["GL_OES_draw_texture"] = enableableExtension(&Extensions::drawTextureOES);
         map["GL_ANGLE_memory_size"] = enableableExtension(&Extensions::memorySize);
+        map["GL_EXT_shader_non_constant_global_initializers"] = enableableExtension(&Extensions::shaderNonConstGlobalInitializersEXT);
         map["GL_WEBGL_video_texture"] = enableableExtension(&Extensions::webglVideoTexture);
+        map["GL_OES_texture_cube_map_array"] = enableableExtension(&Extensions::textureCubeMapArrayOES);
+        map["GL_EXT_texture_cube_map_array"] = enableableExtension(&Extensions::textureCubeMapArrayEXT);
         // clang-format on
 
 #if defined(ANGLE_ENABLE_ASSERTS)
@@ -1311,6 +1344,7 @@ std::vector<std::string> DisplayExtensions::getStrings() const
     InsertExtensionString("EGL_KHR_image",                                       image,                              &extensionStrings);
     InsertExtensionString("EGL_KHR_image_base",                                  imageBase,                          &extensionStrings);
     InsertExtensionString("EGL_KHR_image_pixmap",                                imagePixmap,                        &extensionStrings);
+    InsertExtensionString("EGL_EXT_image_gl_colorspace",                         imageGlColorspace,                  &extensionStrings);
     InsertExtensionString("EGL_KHR_gl_colorspace",                               glColorspace,                       &extensionStrings);
     InsertExtensionString("EGL_EXT_gl_colorspace_scrgb",                         glColorspaceScrgb,                  &extensionStrings);
     InsertExtensionString("EGL_EXT_gl_colorspace_scrgb_linear",                  glColorspaceScrgbLinear,            &extensionStrings);
@@ -1332,6 +1366,7 @@ std::vector<std::string> DisplayExtensions::getStrings() const
     InsertExtensionString("EGL_ANGLE_create_context_webgl_compatibility",        createContextWebGLCompatibility,    &extensionStrings);
     InsertExtensionString("EGL_CHROMIUM_create_context_bind_generates_resource", createContextBindGeneratesResource, &extensionStrings);
     InsertExtensionString("EGL_CHROMIUM_sync_control",                           syncControlCHROMIUM,                &extensionStrings);
+    InsertExtensionString("EGL_ANGLE_sync_control_rate",                         syncControlRateANGLE,               &extensionStrings);
     InsertExtensionString("EGL_KHR_swap_buffers_with_damage",                    swapBuffersWithDamage,              &extensionStrings);
     InsertExtensionString("EGL_EXT_pixel_format_float",                          pixelFormatFloat,                   &extensionStrings);
     InsertExtensionString("EGL_KHR_surfaceless_context",                         surfacelessContext,                 &extensionStrings);
@@ -1355,6 +1390,9 @@ std::vector<std::string> DisplayExtensions::getStrings() const
     InsertExtensionString("EGL_KHR_no_config_context",                           noConfigContext,                    &extensionStrings);
     InsertExtensionString("EGL_IMG_context_priority",                            contextPriority,                    &extensionStrings);
     InsertExtensionString("EGL_KHR_create_context_no_error",                     createContextNoError,               &extensionStrings);
+    InsertExtensionString("EGL_EXT_image_dma_buf_import",                        imageDmaBufImportEXT,               &extensionStrings);
+    InsertExtensionString("EGL_EXT_image_dma_buf_import_modifiers",              imageDmaBufImportModifiersEXT,               &extensionStrings);
+
     // clang-format on
 
     return extensionStrings;
@@ -1390,6 +1428,7 @@ std::vector<std::string> ClientExtensions::getStrings() const
     InsertExtensionString("EGL_ANGLE_platform_angle",                         platformANGLE,                      &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_d3d",                     platformANGLED3D,                   &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_d3d11on12",               platformANGLED3D11ON12,             &extensionStrings);
+    InsertExtensionString("EGL_ANGLE_platform_angle_device_type_egl_angle",   platformANGLEDeviceTypeEGLANGLE,    &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_device_type_swiftshader", platformANGLEDeviceTypeSwiftShader, &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_opengl",                  platformANGLEOpenGL,                &extensionStrings);
     InsertExtensionString("EGL_ANGLE_platform_angle_null",                    platformANGLENULL,                  &extensionStrings);

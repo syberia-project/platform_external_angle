@@ -51,6 +51,7 @@ struct TraceEvent final
     const char *categoryName = nullptr;
     char name[kMaxNameLen]   = {};
     double timestamp         = 0;
+    uint32_t tid             = 0;
 };
 
 class ANGLEPerfTest : public testing::Test, angle::NonCopyable
@@ -60,7 +61,7 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
                   const std::string &backend,
                   const std::string &story,
                   unsigned int iterationsPerStep);
-    virtual ~ANGLEPerfTest();
+    ~ANGLEPerfTest() override;
 
     virtual void step() = 0;
 
@@ -68,6 +69,7 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     virtual void startTest() {}
     // Called right before timer is stopped to let the test wait for asynchronous operations.
     virtual void finishTest() {}
+    virtual void flush() {}
 
   protected:
     void run();
@@ -82,6 +84,9 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
 
     unsigned int getNumStepsPerformed() const { return mNumStepsPerformed; }
     void doRunLoop(double maxRunTime);
+
+    // Overriden in trace perf tests.
+    virtual void saveScreenshot(const std::string &screenshotName) {}
 
     std::string mName;
     std::string mBackend;
@@ -118,7 +123,7 @@ class ANGLERenderTest : public ANGLEPerfTest
 {
   public:
     ANGLERenderTest(const std::string &name, const RenderTestParams &testParams);
-    ~ANGLERenderTest();
+    ~ANGLERenderTest() override;
 
     void addExtensionPrerequisite(const char *extensionName);
 
@@ -150,6 +155,8 @@ class ANGLERenderTest : public ANGLEPerfTest
     void beginGLTraceEvent(const char *name, double hostTimeSec);
     void endGLTraceEvent(const char *name, double hostTimeSec);
 
+    void disableTestHarnessSwap() { mSwapEnabled = false; }
+
     bool mIsTimestampQueryAvailable;
 
   private:
@@ -167,6 +174,7 @@ class ANGLERenderTest : public ANGLEPerfTest
     std::vector<const char *> mExtensionPrerequisites;
     angle::PlatformMethods mPlatformMethods;
     ConfigParameters mConfigParams;
+    bool mSwapEnabled;
 
     GLuint mTimestampQuery;
 

@@ -120,6 +120,20 @@ struct FeaturesVk : FeatureSetBase
         "supports_external_memory_fuchsia", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_FUCHSIA_external_memory extension", &members};
 
+    angle::Feature supportsFilteringPrecision = {
+        "supports_filtering_precision_google", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_GOOGLE_sampler_filtering_precision extension", &members};
+
+    // Whether the VkDevice supports the VK_KHR_external_fence_capabilities extension.
+    Feature supportsExternalFenceCapabilities = {
+        "supports_external_fence_capabilities", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_KHR_external_fence_capabilities extension", &members};
+
+    // Whether the VkDevice supports the VK_KHR_external_semaphore_capabilities extension.
+    Feature supportsExternalSemaphoreCapabilities = {
+        "supports_external_semaphore_capabilities", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_KHR_external_semaphore_capabilities extension", &members};
+
     // Whether the VkDevice supports the VK_KHR_external_semaphore_fd extension, on which the
     // GL_EXT_semaphore_fd extension can be layered.
     Feature supportsExternalSemaphoreFd = {
@@ -131,6 +145,19 @@ struct FeaturesVk : FeatureSetBase
     angle::Feature supportsExternalSemaphoreFuchsia = {
         "supports_external_semaphore_fuchsia", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_FUCHSIA_external_semaphore extension", &members};
+
+    // Whether the VkDevice supports the VK_KHR_external_fence_fd extension, on which the
+    // EGL_ANDROID_native_fence extension can be layered.
+    Feature supportsExternalFenceFd = {"supports_external_fence_fd",
+                                       FeatureCategory::VulkanFeatures,
+                                       "VkDevice supports the VK_KHR_external_fence_fd extension",
+                                       &members, "http://anglebug.com/2517"};
+
+    // Whether the VkDevice can support EGL_ANDROID_native_fence_sync extension.
+    Feature supportsAndroidNativeFenceSync = {
+        "supports_android_native_fence_sync", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the EGL_ANDROID_native_fence_sync extension", &members,
+        "http://anglebug.com/2517"};
 
     // Whether the VkDevice supports the VK_EXT_shader_stencil_export extension, which is used to
     // perform multisampled resolve of stencil buffer.  A multi-step workaround is used instead if
@@ -251,6 +278,13 @@ struct FeaturesVk : FeatureSetBase
         "Fill new allocations with non-zero values to flush out errors.", &members,
         "http://anglebug.com/4384"};
 
+    // Persistently map buffer memory until destroy, saves on map/unmap IOCTL overhead
+    // for buffers that are updated frequently.
+    Feature persistentlyMappedBuffers = {
+        "persistently_mapped_buffers", FeatureCategory::VulkanFeatures,
+        "Persistently map buffer memory to reduce map/unmap IOCTL overhead.", &members,
+        "http://anglebug.com/2162"};
+
     // Android needs to pre-rotate surfaces that are not oriented per the native device's
     // orientation (e.g. a landscape application on a Pixel phone).  This feature works for
     // full-screen applications. http://anglebug.com/3502
@@ -268,6 +302,28 @@ struct FeaturesVk : FeatureSetBase
     Feature enablePrecisionQualifiers = {
         "enable_precision_qualifiers", FeatureCategory::VulkanFeatures,
         "Enable precision qualifiers in shaders", &members, "http://anglebug.com/3078"};
+
+    // Support Depth/Stencil rendering feedback loops by masking out the depth/stencil buffer.
+    // Manhattan uses this feature in a few draw calls.
+    Feature supportDepthStencilRenderingFeedbackLoops = {
+        "support_depth_stencil_rendering_feedback_loops", FeatureCategory::VulkanFeatures,
+        "Suport depth/stencil rendering feedback loops", &members, "http://anglebug.com/4490"};
+
+    // Desktop (at least NVIDIA) drivers prefer combining barriers into one vkCmdPipelineBarrier
+    // call over issuing multiple barrier calls with fine grained dependency information to have
+    // better performance. http://anglebug.com/4633
+    Feature preferAggregateBarrierCalls = {
+        "prefer_aggregate_barrier_calls", FeatureCategory::VulkanWorkarounds,
+        "Single barrier call is preferred over multiple calls with "
+        "fine grained pipeline stage dependency information",
+        &members, "http://anglebug.com/4633"};
+
+    // Enable parallel thread that processes and submits vulkan command buffers.
+    // Currently off by default to enable testing.
+    Feature enableCommandProcessingThread = {
+        "enable_command_processing_thread", FeatureCategory::VulkanFeatures,
+        "Enable parallel processing and submission of Vulkan commands in worker thread", &members,
+        "http://anglebug.com/4324"};
 };
 
 inline FeaturesVk::FeaturesVk()  = default;

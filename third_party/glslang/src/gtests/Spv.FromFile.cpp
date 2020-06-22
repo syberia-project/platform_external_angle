@@ -105,6 +105,7 @@ TEST_P(CompileVulkanToDebugSpirvTest, FromFile)
                             "/baseResults/", false, true);
 }
 
+
 TEST_P(CompileVulkan1_1ToSpirvTest, FromFile)
 {
     loadFileCompileAndCheck(GlobalTestSettings.testRoot, GetParam(),
@@ -229,6 +230,14 @@ INSTANTIATE_TEST_CASE_P(
         "spv.while-continue-break.vert",
         "spv.while-simple.vert",
         // vulkan-specific tests
+        "rayQuery.rgen",
+        "rayQuery-no-cse.rgen",
+        "rayQuery-initialize.rgen",
+        "rayQuery-allOps.rgen",
+        "rayQuery-allOps.Error.rgen",
+        "rayQuery-committed.Error.rgen",
+        "rayQuery-allOps.comp",
+        "rayQuery-allOps.frag",
         "spv.set.vert",
         "spv.double.comp",
         "spv.100ops.frag",
@@ -271,6 +280,7 @@ INSTANTIATE_TEST_CASE_P(
         "spv.always-discard2.frag",
         "spv.arbPostDepthCoverage.frag",
         "spv.arbPostDepthCoverage_Error.frag",
+        "spv.atomicCounter.comp",
         "spv.bitCast.frag",
         "spv.bool.vert",
         "spv.boolInBlock.frag",
@@ -319,6 +329,21 @@ INSTANTIATE_TEST_CASE_P(
         "spv.earlyReturnDiscard.frag",
         "spv.extPostDepthCoverage.frag",
         "spv.extPostDepthCoverage_Error.frag",
+        "spv.ext.AnyHitShader.rahit",
+        "spv.ext.AnyHitShader_Errors.rahit",
+        "spv.ext.ClosestHitShader.rchit",
+        "spv.ext.ClosestHitShader_Errors.rchit",
+        "spv.ext.IntersectShader.rint",
+        "spv.ext.IntersectShader_Errors.rint",
+        "spv.ext.MissShader.rmiss",
+        "spv.ext.MissShader_Errors.rmiss",
+        "spv.ext.RayPrimCull_Errors.rgen",
+        "spv.ext.RayCallable.rcall",
+        "spv.ext.RayCallable_Errors.rcall",
+        "spv.ext.RayConstants.rgen",
+        "spv.ext.RayGenShader.rgen",
+        "spv.ext.RayGenShader11.rgen",
+        "spv.ext.RayGenShaderArray.rgen",
         "spv.float16convertonlyarith.comp",
         "spv.float16convertonlystorage.comp",
         "spv.flowControl.frag",
@@ -574,6 +599,7 @@ INSTANTIATE_TEST_CASE_P(
         "spv.glFragColor.frag",
         "spv.rankShift.comp",
         "spv.specConst.vert",
+        "spv.specTexture.frag",
         "spv.OVR_multiview.vert",
         "spv.xfbOffsetOnBlockMembersAssignment.vert",
         "spv.xfbOffsetOnStructMembersAssignment.vert",

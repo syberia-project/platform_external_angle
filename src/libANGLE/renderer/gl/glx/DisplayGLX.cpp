@@ -92,13 +92,13 @@ DisplayGLX::~DisplayGLX() {}
 egl::Error DisplayGLX::initialize(egl::Display *display)
 {
     mEGLDisplay           = display;
-    mXDisplay             = display->getNativeDisplayId();
+    mXDisplay             = reinterpret_cast<Display *>(display->getNativeDisplayId());
     const auto &attribMap = display->getAttributeMap();
 
     // ANGLE_platform_angle allows the creation of a default display
     // using EGL_DEFAULT_DISPLAY (= nullptr). In this case just open
     // the display specified by the DISPLAY environment variable.
-    if (mXDisplay == EGL_DEFAULT_DISPLAY)
+    if (mXDisplay == reinterpret_cast<Display *>(EGL_DEFAULT_DISPLAY))
     {
         mUsesNewXDisplay = true;
         mXDisplay        = XOpenDisplay(nullptr);
@@ -830,7 +830,9 @@ void DisplayGLX::generateExtensions(egl::DisplayExtensions *outExtensions) const
 
     outExtensions->surfacelessContext = true;
 
-    outExtensions->syncControlCHROMIUM = mGLX.hasExtension("GLX_OML_sync_control");
+    const bool hasSyncControlOML        = mGLX.hasExtension("GLX_OML_sync_control");
+    outExtensions->syncControlCHROMIUM  = hasSyncControlOML;
+    outExtensions->syncControlRateANGLE = hasSyncControlOML;
 
     DisplayGL::generateExtensions(outExtensions);
 }

@@ -23,6 +23,8 @@ class MemoryObjectVk : public MemoryObjectImpl
 
     void onDestroy(const gl::Context *context) override;
 
+    angle::Result setDedicatedMemory(const gl::Context *context, bool dedicatedMemory) override;
+
     angle::Result importFd(gl::Context *context,
                            GLuint64 size,
                            gl::HandleType handleType,
@@ -45,6 +47,9 @@ class MemoryObjectVk : public MemoryObjectImpl
     static constexpr int kInvalidFd = -1;
     angle::Result importOpaqueFd(ContextVk *contextVk, GLuint64 size, GLint fd);
     angle::Result importZirconVmo(ContextVk *contextVk, GLuint64 size, GLuint handle);
+
+    // Imported memory object was a dedicated allocation.
+    bool mDedicatedMemory = false;
 
     GLuint64 mSize             = 0;
     gl::HandleType mHandleType = gl::HandleType::InvalidEnum;

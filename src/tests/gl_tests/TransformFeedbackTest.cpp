@@ -199,6 +199,9 @@ TEST_P(TransformFeedbackTest, BufferRebinding)
 // afterward.
 TEST_P(TransformFeedbackTest, RecordAndDraw)
 {
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
+
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -391,6 +394,9 @@ TEST_P(TransformFeedbackTest, BufferBinding)
 // Test that we can capture varyings only used in the vertex shader.
 TEST_P(TransformFeedbackTest, VertexOnly)
 {
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
+
     constexpr char kVS[] =
         "#version 300 es\n"
         "in vec2 position;\n"
@@ -546,6 +552,9 @@ TEST_P(TransformFeedbackTest, MultiContext)
     ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL());
 
     ANGLE_SKIP_TEST_IF(IsLinux() && IsAMD() && IsOpenGL());
+
+    // Flaky on Win Intel Vulkan. http://anglebug.com/4497
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
 
     EGLint contextAttributes[] = {
         EGL_CONTEXT_MAJOR_VERSION_KHR,
@@ -717,6 +726,9 @@ void main(void)
 // Test that when two vec2s are packed into the same register, we can still capture both of them.
 TEST_P(TransformFeedbackTest, PackingBug)
 {
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
+
     // TODO(jmadill): With points and rasterizer discard?
     constexpr char kVS[] =
         "#version 300 es\n"
@@ -846,6 +858,9 @@ TEST_P(TransformFeedbackTest, OptimizedVaryings)
 // Test an edge case where two varyings are unreferenced in the frag shader.
 TEST_P(TransformFeedbackTest, TwoUnreferencedInFragShader)
 {
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
+
     // TODO(jmadill): With points and rasterizer discard?
     constexpr char kVS[] =
         "#version 300 es\n"
@@ -914,6 +929,9 @@ TEST_P(TransformFeedbackTest, OffsetResetOnBeginTransformFeedback)
     ANGLE_SKIP_TEST_IF(IsOSX() && IsAMD());
 
     ANGLE_SKIP_TEST_IF((IsNexus5X() || IsNexus6P()) && IsOpenGLES());
+
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
 
     constexpr char kVS[] =
         "#version 300 es\n"
@@ -1412,6 +1430,9 @@ TEST_P(TransformFeedbackTest, NonExistentTransformFeedbackVaryingWithGLPrefix)
 // GLSL ES.
 TEST_P(TransformFeedbackTest, VaryingReservedOpenGLName)
 {
+    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
+    ANGLE_SKIP_TEST_IF(IsWindows() && IsIntel() && IsVulkan());
+
     constexpr char kVS[] =
         "#version 300 es\n"
         "in vec3 position;\n"

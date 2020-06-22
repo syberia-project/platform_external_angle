@@ -18,6 +18,7 @@
 #include "libANGLE/Fence.h"
 #include "libANGLE/Framebuffer.h"
 #include "libANGLE/FramebufferAttachment.h"
+#include "libANGLE/MemoryObject.h"
 #include "libANGLE/Renderbuffer.h"
 #include "libANGLE/Shader.h"
 #include "libANGLE/Texture.h"
@@ -64,149 +65,6 @@ bool IsPartialBlit(const Context *context,
     }
 
     return false;
-}
-
-template <typename T>
-bool ValidatePathInstances(const Context *context,
-                           GLsizei numPaths,
-                           const void *paths,
-                           PathID pathBase)
-{
-    const auto *array = static_cast<const T *>(paths);
-
-    for (GLsizei i = 0; i < numPaths; ++i)
-    {
-        const GLuint pathName = array[i] + pathBase.value;
-        if (context->isPathGenerated({pathName}) && !context->isPath({pathName}))
-        {
-            context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-            return false;
-        }
-    }
-    return true;
-}
-
-bool ValidateInstancedPathParameters(const Context *context,
-                                     GLsizei numPaths,
-                                     GLenum pathNameType,
-                                     const void *paths,
-                                     PathID pathBase,
-                                     GLenum transformType,
-                                     const GLfloat *transformValues)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    if (paths == nullptr)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathNameArray);
-        return false;
-    }
-
-    if (numPaths < 0)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathNumPaths);
-        return false;
-    }
-
-    if (!angle::IsValueInRangeForNumericType<std::uint32_t>(numPaths))
-    {
-        context->validationError(GL_INVALID_OPERATION, kIntegerOverflow);
-        return false;
-    }
-
-    std::uint32_t pathNameTypeSize = 0;
-    std::uint32_t componentCount   = 0;
-
-    switch (pathNameType)
-    {
-        case GL_UNSIGNED_BYTE:
-            pathNameTypeSize = sizeof(GLubyte);
-            if (!ValidatePathInstances<GLubyte>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        case GL_BYTE:
-            pathNameTypeSize = sizeof(GLbyte);
-            if (!ValidatePathInstances<GLbyte>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        case GL_UNSIGNED_SHORT:
-            pathNameTypeSize = sizeof(GLushort);
-            if (!ValidatePathInstances<GLushort>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        case GL_SHORT:
-            pathNameTypeSize = sizeof(GLshort);
-            if (!ValidatePathInstances<GLshort>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        case GL_UNSIGNED_INT:
-            pathNameTypeSize = sizeof(GLuint);
-            if (!ValidatePathInstances<GLuint>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        case GL_INT:
-            pathNameTypeSize = sizeof(GLint);
-            if (!ValidatePathInstances<GLint>(context, numPaths, paths, pathBase))
-                return false;
-            break;
-
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidPathNameType);
-            return false;
-    }
-
-    switch (transformType)
-    {
-        case GL_NONE:
-            componentCount = 0;
-            break;
-        case GL_TRANSLATE_X_CHROMIUM:
-        case GL_TRANSLATE_Y_CHROMIUM:
-            componentCount = 1;
-            break;
-        case GL_TRANSLATE_2D_CHROMIUM:
-            componentCount = 2;
-            break;
-        case GL_TRANSLATE_3D_CHROMIUM:
-            componentCount = 3;
-            break;
-        case GL_AFFINE_2D_CHROMIUM:
-        case GL_TRANSPOSE_AFFINE_2D_CHROMIUM:
-            componentCount = 6;
-            break;
-        case GL_AFFINE_3D_CHROMIUM:
-        case GL_TRANSPOSE_AFFINE_3D_CHROMIUM:
-            componentCount = 12;
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidTransformation);
-            return false;
-    }
-    if (componentCount != 0 && transformValues == nullptr)
-    {
-        context->validationError(GL_INVALID_VALUE, kNoTransformArray);
-        return false;
-    }
-
-    angle::CheckedNumeric<std::uint32_t> checkedSize(0);
-    checkedSize += (numPaths * pathNameTypeSize);
-    checkedSize += (numPaths * sizeof(GLfloat) * componentCount);
-    if (!checkedSize.IsValid())
-    {
-        context->validationError(GL_INVALID_OPERATION, kIntegerOverflow);
-        return false;
-    }
-
-    return true;
 }
 
 bool IsValidCopyTextureSourceInternalFormatEnum(GLenum internalFormat)
@@ -673,48 +531,32 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_RGBA_S3TC_DXT3_ANGLE:
                 if (context->getExtensions().textureCompressionDXT3)
                 {
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_RGBA_S3TC_DXT5_ANGLE:
                 if (context->getExtensions().textureCompressionDXT5)
                 {
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_ETC1_RGB8_OES:
                 if (context->getExtensions().compressedETC1RGB8TextureOES)
                 {
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_ETC1_RGB8_LOSSY_DECODE_ANGLE:
             case GL_COMPRESSED_RGB8_LOSSY_DECODE_ETC2_ANGLE:
             case GL_COMPRESSED_SRGB8_LOSSY_DECODE_ETC2_ANGLE:
@@ -725,12 +567,8 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG:
             case GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG:
             case GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG:
@@ -740,12 +578,8 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_SRGB_PVRTC_2BPPV1_EXT:
             case GL_COMPRESSED_SRGB_PVRTC_4BPPV1_EXT:
             case GL_COMPRESSED_SRGB_ALPHA_PVRTC_2BPPV1_EXT:
@@ -755,12 +589,8 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_DEPTH_COMPONENT:
             case GL_DEPTH_COMPONENT16:
             case GL_DEPTH_COMPONENT32_OES:
@@ -769,12 +599,8 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_DEPTH_STENCIL_OES:
             case GL_DEPTH24_STENCIL8_OES:
                 if (context->getExtensions().depthTextureAny() ||
@@ -784,12 +610,8 @@ bool ValidateES2CopyTexImageParameters(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             default:
                 context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
                 return false;
@@ -843,7 +665,34 @@ bool ValidCap(const Context *context, GLenum cap, bool queryOnly)
         case GL_ROBUST_RESOURCE_INITIALIZATION_ANGLE:
             return queryOnly && context->getExtensions().robustResourceInitialization;
 
-        // GLES1 emulation: GLES1-specific caps
+        case GL_TEXTURE_RECTANGLE_ANGLE:
+            return context->getExtensions().webglCompatibility;
+
+        // GL_APPLE_clip_distance/GL_EXT_clip_cull_distance
+        case GL_CLIP_DISTANCE0_EXT:
+        case GL_CLIP_DISTANCE1_EXT:
+        case GL_CLIP_DISTANCE2_EXT:
+        case GL_CLIP_DISTANCE3_EXT:
+        case GL_CLIP_DISTANCE4_EXT:
+        case GL_CLIP_DISTANCE5_EXT:
+        case GL_CLIP_DISTANCE6_EXT:
+        case GL_CLIP_DISTANCE7_EXT:
+            if (context->getClientVersion() >= Version(2, 0) &&
+                context->getExtensions().clipDistanceAPPLE)
+            {
+                return true;
+            }
+            break;
+    }
+
+    // GLES1 emulation: GLES1-specific caps after this point
+    if (context->getClientVersion().major != 1)
+    {
+        return false;
+    }
+
+    switch (cap)
+    {
         case GL_ALPHA_TEST:
         case GL_VERTEX_ARRAY:
         case GL_NORMAL_ARRAY:
@@ -882,8 +731,6 @@ bool ValidCap(const Context *context, GLenum cap, bool queryOnly)
         case GL_POINT_SPRITE_OES:
             return context->getClientVersion() < Version(2, 0) &&
                    context->getExtensions().pointSpriteOES;
-        case GL_TEXTURE_RECTANGLE_ANGLE:
-            return context->getExtensions().webglCompatibility;
         default:
             return false;
     }
@@ -1085,22 +932,6 @@ bool ValidateWebGLNameLength(const Context *context, size_t length)
     return true;
 }
 
-bool ValidateMatrixMode(const Context *context, GLenum matrixMode)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    if (matrixMode != GL_PATH_MODELVIEW_CHROMIUM && matrixMode != GL_PATH_PROJECTION_CHROMIUM)
-    {
-        context->validationError(GL_INVALID_ENUM, kInvalidMatrixMode);
-        return false;
-    }
-    return true;
-}
-
 bool ValidBlendFunc(const Context *context, GLenum val)
 {
     const Extensions &ext = context->getExtensions();
@@ -1208,6 +1039,18 @@ bool ValidateES2TexImageParameters(const Context *context,
     return ValidateES2TexImageParametersBase(context, target, level, internalformat, isCompressed,
                                              isSubImage, xoffset, yoffset, width, height, border,
                                              format, type, imageSize, pixels);
+}
+
+bool IsValidMemoryObjectParamater(const Context *context, GLenum pname)
+{
+    switch (pname)
+    {
+        case GL_DEDICATED_MEMORY_OBJECT_EXT:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 }  // anonymous namespace
@@ -1338,10 +1181,14 @@ bool ValidateES2TexImageParametersBase(const Context *context,
         if (isSubImage)
         {
             // From the OES_compressed_ETC1_RGB8_texture spec:
+            //
             // INVALID_OPERATION is generated by CompressedTexSubImage2D, TexSubImage2D, or
             // CopyTexSubImage2D if the texture image <level> bound to <target> has internal format
             // ETC1_RGB8_OES.
-            if (actualInternalFormat == GL_ETC1_RGB8_OES)
+            //
+            // This is relaxed if GL_EXT_compressed_ETC1_RGB8_sub_texture is supported.
+            if (actualInternalFormat == GL_ETC1_RGB8_OES &&
+                !context->getExtensions().compressedETC1RGB8SubTexture)
             {
                 context->validationError(GL_INVALID_OPERATION, kInvalidInternalFormat);
                 return false;
@@ -1539,6 +1386,14 @@ bool ValidateES2TexImageParametersBase(const Context *context,
                     case GL_UNSIGNED_SHORT:
                     case GL_UNSIGNED_INT:
                         break;
+                    case GL_FLOAT:
+                        if (!context->getExtensions().depthBufferFloat2NV)
+                        {
+                            context->validationError(GL_INVALID_OPERATION,
+                                                     kMismatchedTypeAndFormat);
+                            return false;
+                        }
+                        break;
                     default:
                         context->validationError(GL_INVALID_OPERATION, kMismatchedTypeAndFormat);
                         return false;
@@ -1580,36 +1435,24 @@ bool ValidateES2TexImageParametersBase(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_RGBA_S3TC_DXT5_ANGLE:
                 if (context->getExtensions().textureCompressionDXT5)
                 {
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_ETC1_RGB8_OES:
                 if (context->getExtensions().compressedETC1RGB8TextureOES)
                 {
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_ETC1_RGB8_LOSSY_DECODE_ANGLE:
             case GL_COMPRESSED_RGB8_LOSSY_DECODE_ETC2_ANGLE:
             case GL_COMPRESSED_SRGB8_LOSSY_DECODE_ETC2_ANGLE:
@@ -1620,12 +1463,8 @@ bool ValidateES2TexImageParametersBase(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG:
             case GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG:
             case GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG:
@@ -1635,12 +1474,8 @@ bool ValidateES2TexImageParametersBase(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_COMPRESSED_SRGB_PVRTC_2BPPV1_EXT:
             case GL_COMPRESSED_SRGB_PVRTC_4BPPV1_EXT:
             case GL_COMPRESSED_SRGB_ALPHA_PVRTC_2BPPV1_EXT:
@@ -1650,12 +1485,8 @@ bool ValidateES2TexImageParametersBase(const Context *context,
                     context->validationError(GL_INVALID_OPERATION, kInvalidFormat);
                     return false;
                 }
-                else
-                {
-                    context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
-                    return false;
-                }
-                break;
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
             case GL_DEPTH_COMPONENT:
             case GL_DEPTH_STENCIL_OES:
                 if (!context->getExtensions().depthTextureANGLE &&
@@ -2656,6 +2487,14 @@ static bool ValidateObjectIdentifierAndName(const Context *context, GLenum ident
             }
             return true;
 
+        case GL_PROGRAM_PIPELINE:
+            if (context->getProgramPipeline({name}) == nullptr)
+            {
+                context->validationError(GL_INVALID_VALUE, kInvalidProgramPipelineName);
+                return false;
+            }
+            return true;
+
         default:
             context->validationError(GL_INVALID_ENUM, kInvalidIndentifier);
             return false;
@@ -3450,8 +3289,19 @@ bool ValidateGetMemoryObjectParameterivEXT(const Context *context,
         return false;
     }
 
-    UNIMPLEMENTED();
-    return false;
+    const MemoryObject *memory = context->getMemoryObject(memoryObject);
+    if (memory == nullptr)
+    {
+        context->validationError(GL_INVALID_VALUE, kInvalidMemoryObject);
+    }
+
+    if (!IsValidMemoryObjectParamater(context, pname))
+    {
+        context->validationError(GL_INVALID_ENUM, kInvalidMemoryObjectParameter);
+        return false;
+    }
+
+    return true;
 }
 
 bool ValidateGetUnsignedBytevEXT(const Context *context, GLenum pname, const GLubyte *data)
@@ -3503,8 +3353,26 @@ bool ValidateMemoryObjectParameterivEXT(const Context *context,
         return false;
     }
 
-    UNIMPLEMENTED();
-    return false;
+    const MemoryObject *memory = context->getMemoryObject(memoryObject);
+    if (memory == nullptr)
+    {
+        context->validationError(GL_INVALID_VALUE, kInvalidMemoryObject);
+        return false;
+    }
+
+    if (memory->isImmutable())
+    {
+        context->validationError(GL_INVALID_OPERATION, kImmutableMemoryObject);
+        return false;
+    }
+
+    if (!IsValidMemoryObjectParamater(context, pname))
+    {
+        context->validationError(GL_INVALID_ENUM, kInvalidMemoryObjectParameter);
+        return false;
+    }
+
+    return true;
 }
 
 bool ValidateTexStorageMem2DEXT(const Context *context,
@@ -3873,799 +3741,6 @@ bool ValidateCoverageModulationCHROMIUM(const Context *context, GLenum component
             return false;
     }
 
-    return true;
-}
-
-// CHROMIUM_path_rendering
-
-bool ValidateMatrixLoadfCHROMIUM(const Context *context, GLenum matrixMode, const GLfloat *matrix)
-{
-    if (!ValidateMatrixMode(context, matrixMode))
-    {
-        return false;
-    }
-
-    if (matrix == nullptr)
-    {
-        context->validationError(GL_INVALID_OPERATION, kInvalidPathMatrix);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateMatrixLoadIdentityCHROMIUM(const Context *context, GLenum matrixMode)
-{
-    return ValidateMatrixMode(context, matrixMode);
-}
-
-bool ValidateGenPathsCHROMIUM(const Context *context, GLsizei range)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    // range = 0 is undefined in NV_path_rendering.
-    // we add stricter semantic check here and require a non zero positive range.
-    if (range <= 0)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidRange);
-        return false;
-    }
-
-    if (!angle::IsValueInRangeForNumericType<std::uint32_t>(range))
-    {
-        context->validationError(GL_INVALID_OPERATION, kIntegerOverflow);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateDeletePathsCHROMIUM(const Context *context, PathID path, GLsizei range)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    // range = 0 is undefined in NV_path_rendering.
-    // we add stricter semantic check here and require a non zero positive range.
-    if (range <= 0)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidRange);
-        return false;
-    }
-
-    angle::CheckedNumeric<std::uint32_t> checkedRange(path.value);
-    checkedRange += range;
-
-    if (!angle::IsValueInRangeForNumericType<std::uint32_t>(range) || !checkedRange.IsValid())
-    {
-        context->validationError(GL_INVALID_OPERATION, kIntegerOverflow);
-        return false;
-    }
-    return true;
-}
-
-bool ValidatePathCommandsCHROMIUM(const Context *context,
-                                  PathID path,
-                                  GLsizei numCommands,
-                                  const GLubyte *commands,
-                                  GLsizei numCoords,
-                                  GLenum coordType,
-                                  const void *coords)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-    if (!context->isPathGenerated(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-        return false;
-    }
-
-    if (numCommands < 0)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathNumCommands);
-        return false;
-    }
-    else if (numCommands > 0)
-    {
-        if (!commands)
-        {
-            context->validationError(GL_INVALID_VALUE, kInvalidPathCommandsArray);
-            return false;
-        }
-    }
-
-    if (numCoords < 0)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathNumCoords);
-        return false;
-    }
-    else if (numCoords > 0)
-    {
-        if (!coords)
-        {
-            context->validationError(GL_INVALID_VALUE, kInvalidPathNumCoordsArray);
-            return false;
-        }
-    }
-
-    std::uint32_t coordTypeSize = 0;
-    switch (coordType)
-    {
-        case GL_BYTE:
-            coordTypeSize = sizeof(GLbyte);
-            break;
-
-        case GL_UNSIGNED_BYTE:
-            coordTypeSize = sizeof(GLubyte);
-            break;
-
-        case GL_SHORT:
-            coordTypeSize = sizeof(GLshort);
-            break;
-
-        case GL_UNSIGNED_SHORT:
-            coordTypeSize = sizeof(GLushort);
-            break;
-
-        case GL_FLOAT:
-            coordTypeSize = sizeof(GLfloat);
-            break;
-
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidPathCoordinateType);
-            return false;
-    }
-
-    angle::CheckedNumeric<std::uint32_t> checkedSize(numCommands);
-    checkedSize += (coordTypeSize * numCoords);
-    if (!checkedSize.IsValid())
-    {
-        context->validationError(GL_INVALID_OPERATION, kIntegerOverflow);
-        return false;
-    }
-
-    // early return skips command data validation when it doesn't exist.
-    if (!commands)
-        return true;
-
-    GLsizei expectedNumCoords = 0;
-    for (GLsizei i = 0; i < numCommands; ++i)
-    {
-        switch (commands[i])
-        {
-            case GL_CLOSE_PATH_CHROMIUM:  // no coordinates.
-                break;
-            case GL_MOVE_TO_CHROMIUM:
-            case GL_LINE_TO_CHROMIUM:
-                expectedNumCoords += 2;
-                break;
-            case GL_QUADRATIC_CURVE_TO_CHROMIUM:
-                expectedNumCoords += 4;
-                break;
-            case GL_CUBIC_CURVE_TO_CHROMIUM:
-                expectedNumCoords += 6;
-                break;
-            case GL_CONIC_CURVE_TO_CHROMIUM:
-                expectedNumCoords += 5;
-                break;
-            default:
-                context->validationError(GL_INVALID_ENUM, kInvalidPathCommand);
-                return false;
-        }
-    }
-
-    if (expectedNumCoords != numCoords)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathNumCoords);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidatePathParameterfCHROMIUM(const Context *context,
-                                    PathID path,
-                                    GLenum pname,
-                                    GLfloat value)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-    if (!context->isPathGenerated(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-        return false;
-    }
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-            if (value < 0.0f)
-            {
-                context->validationError(GL_INVALID_VALUE, kInvalidPathStrokeWidth);
-                return false;
-            }
-            break;
-        case GL_PATH_END_CAPS_CHROMIUM:
-            switch (static_cast<GLenum>(value))
-            {
-                case GL_FLAT_CHROMIUM:
-                case GL_SQUARE_CHROMIUM:
-                case GL_ROUND_CHROMIUM:
-                    break;
-                default:
-                    context->validationError(GL_INVALID_ENUM, kInvalidPathEndCaps);
-                    return false;
-            }
-            break;
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-            switch (static_cast<GLenum>(value))
-            {
-                case GL_MITER_REVERT_CHROMIUM:
-                case GL_BEVEL_CHROMIUM:
-                case GL_ROUND_CHROMIUM:
-                    break;
-                default:
-                    context->validationError(GL_INVALID_ENUM, kInvalidPathJoinStyle);
-                    return false;
-            }
-            break;
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-            if (value < 0.0f)
-            {
-                context->validationError(GL_INVALID_VALUE, kInvalidPathMiterLimit);
-                return false;
-            }
-            break;
-
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            // no errors, only clamping.
-            break;
-
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidPathParameter);
-            return false;
-    }
-    return true;
-}
-
-bool ValidatePathParameteriCHROMIUM(const Context *context, PathID path, GLenum pname, GLint value)
-{
-    // TODO(jmadill): Use proper clamping cast.
-    return ValidatePathParameterfCHROMIUM(context, path, pname, static_cast<GLfloat>(value));
-}
-
-bool ValidateGetPathParameterfvCHROMIUM(const Context *context,
-                                        PathID path,
-                                        GLenum pname,
-                                        const GLfloat *value)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    if (!context->isPathGenerated(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-        return false;
-    }
-
-    if (!value)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidPathValueArray);
-        return false;
-    }
-
-    switch (pname)
-    {
-        case GL_PATH_STROKE_WIDTH_CHROMIUM:
-        case GL_PATH_END_CAPS_CHROMIUM:
-        case GL_PATH_JOIN_STYLE_CHROMIUM:
-        case GL_PATH_MITER_LIMIT_CHROMIUM:
-        case GL_PATH_STROKE_BOUND_CHROMIUM:
-            break;
-
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidPathParameter);
-            return false;
-    }
-
-    return true;
-}
-
-bool ValidateGetPathParameterivCHROMIUM(const Context *context,
-                                        PathID path,
-                                        GLenum pname,
-                                        const GLint *value)
-{
-    return ValidateGetPathParameterfvCHROMIUM(context, path, pname,
-                                              reinterpret_cast<const GLfloat *>(value));
-}
-
-bool ValidatePathStencilFuncCHROMIUM(const Context *context, GLenum func, GLint ref, GLuint mask)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    switch (func)
-    {
-        case GL_NEVER:
-        case GL_ALWAYS:
-        case GL_LESS:
-        case GL_LEQUAL:
-        case GL_EQUAL:
-        case GL_GEQUAL:
-        case GL_GREATER:
-        case GL_NOTEQUAL:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidStencil);
-            return false;
-    }
-
-    return true;
-}
-
-// Note that the spec specifies that for the path drawing commands
-// if the path object is not an existing path object the command
-// does nothing and no error is generated.
-// However if the path object exists but has not been specified any
-// commands then an error is generated.
-
-bool ValidateStencilFillPathCHROMIUM(const Context *context,
-                                     PathID path,
-                                     GLenum fillMode,
-                                     GLuint mask)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-    if (context->isPathGenerated(path) && !context->isPath(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-        return false;
-    }
-
-    switch (fillMode)
-    {
-        case GL_INVERT:
-        case GL_COUNT_UP_CHROMIUM:
-        case GL_COUNT_DOWN_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidFillMode);
-            return false;
-    }
-
-    if (!isPow2(mask + 1))
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidStencilBitMask);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateStencilStrokePathCHROMIUM(const Context *context,
-                                       PathID path,
-                                       GLint reference,
-                                       GLuint mask)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    if (context->isPathGenerated(path) && !context->isPath(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoPathOrNoPathData);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateCoverPathCHROMIUM(const Context *context, PathID path, GLenum coverMode)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-    if (context->isPathGenerated(path) && !context->isPath(path))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNoSuchPath);
-        return false;
-    }
-
-    switch (coverMode)
-    {
-        case GL_CONVEX_HULL_CHROMIUM:
-        case GL_BOUNDING_BOX_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidCoverMode);
-            return false;
-    }
-    return true;
-}
-
-bool ValidateCoverFillPathCHROMIUM(const Context *context, PathID path, GLenum coverMode)
-{
-    return ValidateCoverPathCHROMIUM(context, path, coverMode);
-}
-
-bool ValidateCoverStrokePathCHROMIUM(const Context *context, PathID path, GLenum coverMode)
-{
-    return ValidateCoverPathCHROMIUM(context, path, coverMode);
-}
-
-bool ValidateStencilThenCoverFillPathCHROMIUM(const Context *context,
-                                              PathID path,
-                                              GLenum fillMode,
-                                              GLuint mask,
-                                              GLenum coverMode)
-{
-    return ValidateStencilFillPathCHROMIUM(context, path, fillMode, mask) &&
-           ValidateCoverPathCHROMIUM(context, path, coverMode);
-}
-
-bool ValidateStencilThenCoverStrokePathCHROMIUM(const Context *context,
-                                                PathID path,
-                                                GLint reference,
-                                                GLuint mask,
-                                                GLenum coverMode)
-{
-    return ValidateStencilStrokePathCHROMIUM(context, path, reference, mask) &&
-           ValidateCoverPathCHROMIUM(context, path, coverMode);
-}
-
-bool ValidateIsPathCHROMIUM(const Context *context, PathID path)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-    return true;
-}
-
-bool ValidateCoverFillPathInstancedCHROMIUM(const Context *context,
-                                            GLsizei numPaths,
-                                            GLenum pathNameType,
-                                            const void *paths,
-                                            PathID pathBase,
-                                            GLenum coverMode,
-                                            GLenum transformType,
-                                            const GLfloat *transformValues)
-{
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    switch (coverMode)
-    {
-        case GL_CONVEX_HULL_CHROMIUM:
-        case GL_BOUNDING_BOX_CHROMIUM:
-        case GL_BOUNDING_BOX_OF_BOUNDING_BOXES_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidCoverMode);
-            return false;
-    }
-
-    return true;
-}
-
-bool ValidateCoverStrokePathInstancedCHROMIUM(const Context *context,
-                                              GLsizei numPaths,
-                                              GLenum pathNameType,
-                                              const void *paths,
-                                              PathID pathBase,
-                                              GLenum coverMode,
-                                              GLenum transformType,
-                                              const GLfloat *transformValues)
-{
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    switch (coverMode)
-    {
-        case GL_CONVEX_HULL_CHROMIUM:
-        case GL_BOUNDING_BOX_CHROMIUM:
-        case GL_BOUNDING_BOX_OF_BOUNDING_BOXES_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidCoverMode);
-            return false;
-    }
-
-    return true;
-}
-
-bool ValidateStencilFillPathInstancedCHROMIUM(const Context *context,
-                                              GLsizei numPaths,
-                                              GLenum pathNameType,
-                                              const void *paths,
-                                              PathID pathBase,
-                                              GLenum fillMode,
-                                              GLuint mask,
-                                              GLenum transformType,
-                                              const GLfloat *transformValues)
-{
-
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    switch (fillMode)
-    {
-        case GL_INVERT:
-        case GL_COUNT_UP_CHROMIUM:
-        case GL_COUNT_DOWN_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidFillMode);
-            return false;
-    }
-    if (!isPow2(mask + 1))
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidStencilBitMask);
-        return false;
-    }
-    return true;
-}
-
-bool ValidateStencilStrokePathInstancedCHROMIUM(const Context *context,
-                                                GLsizei numPaths,
-                                                GLenum pathNameType,
-                                                const void *paths,
-                                                PathID pathBase,
-                                                GLint reference,
-                                                GLuint mask,
-                                                GLenum transformType,
-                                                const GLfloat *transformValues)
-{
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    // no more validation here.
-
-    return true;
-}
-
-bool ValidateStencilThenCoverFillPathInstancedCHROMIUM(const Context *context,
-                                                       GLsizei numPaths,
-                                                       GLenum pathNameType,
-                                                       const void *paths,
-                                                       PathID pathBase,
-                                                       GLenum fillMode,
-                                                       GLuint mask,
-                                                       GLenum coverMode,
-                                                       GLenum transformType,
-                                                       const GLfloat *transformValues)
-{
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    switch (coverMode)
-    {
-        case GL_CONVEX_HULL_CHROMIUM:
-        case GL_BOUNDING_BOX_CHROMIUM:
-        case GL_BOUNDING_BOX_OF_BOUNDING_BOXES_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidCoverMode);
-            return false;
-    }
-
-    switch (fillMode)
-    {
-        case GL_INVERT:
-        case GL_COUNT_UP_CHROMIUM:
-        case GL_COUNT_DOWN_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidFillMode);
-            return false;
-    }
-    if (!isPow2(mask + 1))
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidStencilBitMask);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateStencilThenCoverStrokePathInstancedCHROMIUM(const Context *context,
-                                                         GLsizei numPaths,
-                                                         GLenum pathNameType,
-                                                         const void *paths,
-                                                         PathID pathBase,
-                                                         GLint reference,
-                                                         GLuint mask,
-                                                         GLenum coverMode,
-                                                         GLenum transformType,
-                                                         const GLfloat *transformValues)
-{
-    if (!ValidateInstancedPathParameters(context, numPaths, pathNameType, paths, pathBase,
-                                         transformType, transformValues))
-        return false;
-
-    switch (coverMode)
-    {
-        case GL_CONVEX_HULL_CHROMIUM:
-        case GL_BOUNDING_BOX_CHROMIUM:
-        case GL_BOUNDING_BOX_OF_BOUNDING_BOXES_CHROMIUM:
-            break;
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidCoverMode);
-            return false;
-    }
-
-    return true;
-}
-
-bool ValidateBindFragmentInputLocationCHROMIUM(const Context *context,
-                                               ShaderProgramID program,
-                                               GLint location,
-                                               const GLchar *name)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    const GLint MaxLocation = context->getCaps().maxVaryingVectors * 4;
-    if (location >= MaxLocation)
-    {
-        context->validationError(GL_INVALID_VALUE, kInvalidVaryingLocation);
-        return false;
-    }
-
-    const auto *programObject = context->getProgramNoResolveLink(program);
-    if (!programObject)
-    {
-        context->validationError(GL_INVALID_OPERATION, kProgramNotBound);
-        return false;
-    }
-
-    if (!name)
-    {
-        context->validationError(GL_INVALID_VALUE, kMissingName);
-        return false;
-    }
-
-    if (angle::BeginsWith(name, "gl_"))
-    {
-        context->validationError(GL_INVALID_OPERATION, kNameBeginsWithGL);
-        return false;
-    }
-
-    return true;
-}
-
-bool ValidateProgramPathFragmentInputGenCHROMIUM(const Context *context,
-                                                 ShaderProgramID program,
-                                                 GLint location,
-                                                 GLenum genMode,
-                                                 GLint components,
-                                                 const GLfloat *coeffs)
-{
-    if (!context->getExtensions().pathRendering)
-    {
-        context->validationError(GL_INVALID_OPERATION, kExtensionNotEnabled);
-        return false;
-    }
-
-    const auto *programObject = context->getProgramResolveLink(program);
-    if (!programObject || programObject->isFlaggedForDeletion())
-    {
-        context->validationError(GL_INVALID_OPERATION, kProgramDoesNotExist);
-        return false;
-    }
-
-    if (!programObject->isLinked())
-    {
-        context->validationError(GL_INVALID_OPERATION, kProgramNotLinked);
-        return false;
-    }
-
-    switch (genMode)
-    {
-        case GL_NONE:
-            if (components != 0)
-            {
-                context->validationError(GL_INVALID_VALUE, kInvalidComponents);
-                return false;
-            }
-            break;
-
-        case GL_OBJECT_LINEAR_CHROMIUM:
-        case GL_EYE_LINEAR_CHROMIUM:
-        case GL_CONSTANT_CHROMIUM:
-            if (components < 1 || components > 4)
-            {
-                context->validationError(GL_INVALID_VALUE, kInvalidComponents);
-                return false;
-            }
-            if (!coeffs)
-            {
-                context->validationError(GL_INVALID_VALUE, kInvalidPathCoefficientsArray);
-                return false;
-            }
-            break;
-
-        default:
-            context->validationError(GL_INVALID_ENUM, kInvalidPathGenMode);
-            return false;
-    }
-
-    // If the location is -1 then the command is silently ignored
-    // and no further validation is needed.
-    if (location == -1)
-        return true;
-
-    const auto &binding = programObject->getFragmentInputBindingInfo(location);
-
-    if (!binding.valid)
-    {
-        context->validationError(GL_INVALID_OPERATION, kInvalidFragmentInputBinding);
-        return false;
-    }
-
-    if (binding.type != GL_NONE)
-    {
-        GLint expectedComponents = 0;
-        switch (binding.type)
-        {
-            case GL_FLOAT:
-                expectedComponents = 1;
-                break;
-            case GL_FLOAT_VEC2:
-                expectedComponents = 2;
-                break;
-            case GL_FLOAT_VEC3:
-                expectedComponents = 3;
-                break;
-            case GL_FLOAT_VEC4:
-                expectedComponents = 4;
-                break;
-            default:
-                context->validationError(GL_INVALID_OPERATION, kFragmentInputTypeNotFloatingPoint);
-                return false;
-        }
-        if (expectedComponents != components && genMode != GL_NONE)
-        {
-            context->validationError(GL_INVALID_OPERATION, kInvalidPathComponents);
-            return false;
-        }
-    }
     return true;
 }
 
@@ -5184,7 +4259,8 @@ bool ValidateAttachShader(const Context *context, ShaderProgramID program, Shade
         return false;
     }
 
-    if (programObject->getAttachedShader(shaderObject->getType()))
+    if (programObject->getAttachedShader(shaderObject->getType()) &&
+        !programObject->getState().isShaderMarkedForDetach(shaderObject->getType()))
     {
         context->validationError(GL_INVALID_OPERATION, kShaderAttachmentHasShader);
         return false;
@@ -5981,6 +5057,14 @@ bool ValidateHint(const Context *context, GLenum target, GLenum mode)
     switch (target)
     {
         case GL_GENERATE_MIPMAP_HINT:
+            break;
+
+        case GL_TEXTURE_FILTERING_HINT_CHROMIUM:
+            if (!context->getExtensions().textureFilteringCHROMIUM)
+            {
+                context->validationError(GL_INVALID_ENUM, kEnumNotSupported);
+                return false;
+            }
             break;
 
         case GL_FRAGMENT_SHADER_DERIVATIVE_HINT:

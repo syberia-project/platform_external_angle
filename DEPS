@@ -19,13 +19,13 @@ vars = {
   'checkout_angle_internal': False,
 
   # Version of Chromium our Chromium-based DEPS are mirrored from.
-  'chromium_revision': '86e00b5dd2f15e46f20b7877c15c3c862336fd40',
+  'chromium_revision': 'b0410bba028cf153be2d02e36b6e99b59fdcb000',
 
   # Current revision of VK-GL-CTS (a.k.a dEQP).
-  'vk_gl_cts_revision': 'a6b249819f7177821d4b7eefff36af07fef71825',
+  'vk_gl_cts_revision': '60972ed7fa8fb66b64e21186e7fb13dc082bdac8',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': '9b620aa0c12d12dd7ec7ced43ce9e58f275d47c1',
+  'glslang_revision': 'e00d27c6d65b7d3e72506a311d7f053da4051295',
 
   # Current revision of googletest.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -40,25 +40,25 @@ vars = {
   'patched_yasm_revision': '720b70524a4424b15fc57e82263568c8ba0496ad',
 
   # Current revision of spirv-cross, the Khronos SPIRV cross compiler.
-  'spirv_cross_revision': 'fd5aa3ad51ece55a1b51fe6bfb271db6844ae291',
+  'spirv_cross_revision': 'f38cbeb814c73510b85697adbe5e894f9eac978f',
 
   # Current revision fo the SPIRV-Headers Vulkan support library.
-  'spirv_headers_revision': 'dc77030acc9c6fe7ca21fff54c5a9d7b532d7da6',
+  'spirv_headers_revision': 'ac638f1815425403e946d0ab78bac71d2bdbf3be',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': 'dd3d91691f1e1dc4c0f42818756cf5e165c8918c',
+  'spirv_tools_revision': '8dfdbeff84f3e058ca33a08755ab47bc572a1c50',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '74556a131735598a5ae7a94ec5500a9d9f908b3a',
+  'vulkan_headers_revision': '9250d5ae8f50202005233dc0512a1d460c8b4833',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': '29adf277cb191eb1ff5d0156143c284891c0f124',
+  'vulkan_loader_revision': '006586926adece57adea3e006140b5df19826371',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': '94ed4c384c3425963b459a735045706e5f83f01b',
+  'vulkan_tools_revision': '2bc4fcd9eba505d867cc83cdc4401e427399ed8f',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': 'be663d752e45d93b11e81ee2e180e23974809d12',
+  'vulkan_validation_revision': '424cdd54fe806c0ce3b1f2789243b9fd9090453f',
 
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
@@ -69,23 +69,28 @@ vars = {
 deps = {
 
   'build': {
-    'url': '{chromium_git}/chromium/src/build.git@5d6bdfc4f1eb62cf03db782dd1d528f49781536b',
+    'url': '{chromium_git}/chromium/src/build.git@45ab3c89af6fc3126b0ca5a7836f0db85ad1ba0e',
     'condition': 'not build_with_chromium',
   },
 
   'buildtools': {
-    'url': '{chromium_git}/chromium/src/buildtools.git@feb2d0c562195d2cc127045597053cc8ade51b4a',
+    'url': '{chromium_git}/chromium/src/buildtools.git@204a35a2a64f7179f8b76d7a0385653690839e21',
     'condition': 'not build_with_chromium',
   },
 
   'testing': {
-    'url': '{chromium_git}/chromium/src/testing@74854b3f7b8c6e2e728e1b6ea655fa8f1c96de9f',
+    'url': '{chromium_git}/chromium/src/testing@3993ef1f527b206d8d3bf3f9824f4fe0e4bbdb0e',
     'condition': 'not build_with_chromium',
   },
 
   # Cherry is a dEQP/VK-GL-CTS management GUI written in Go. We use it for viewing test results.
   'third_party/cherry': {
     'url': '{android_git}/platform/external/cherry@4f8fb08d33ca5ff05a1c638f04c85bbb8d8b52cc',
+    'condition': 'not build_with_chromium',
+  },
+
+  'third_party/vulkan_memory_allocator': {
+    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@dac952eb0a27736571bf10ac42fbfcc59192f310',
     'condition': 'not build_with_chromium',
   },
 
@@ -115,13 +120,13 @@ deps = {
   },
 
   'third_party/googletest': {
-    'url': '{chromium_git}/chromium/src/third_party/googletest@703ca235f0a83aeebf2dfe2cc56a7eac362cf078',
+    'url': '{chromium_git}/chromium/src/third_party/googletest@217407c4787f361aa5814ec609379bfc9b21d307',
     'condition': 'not build_with_chromium',
   },
 
   # libjpeg_turbo is used by glmark2.
   'third_party/libjpeg_turbo': {
-    'url': '{chromium_git}/chromium/deps/libjpeg_turbo.git@ce0e57e8e636f5132fe6f0590a4dba91f92fd935',
+    'url': '{chromium_git}/chromium/deps/libjpeg_turbo.git@7e3ad79800a7945fb37173149842b494ab8982b2',
     'condition': 'not build_with_chromium',
   },
 
@@ -131,9 +136,14 @@ deps = {
   },
 
   'third_party/jsoncpp': {
-    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@493c9385c91023c3819b51ee0de552d52229a1e5',
+    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@ec647b85b61f525a1a74e4da7477b0c5371c50f4',
     'condition': 'not build_with_chromium',
    },
+
+  'third_party/nasm': {
+    'url': '{chromium_git}/chromium/deps/nasm@4fa54ca5f7fc3a15a8c78ac94688e64d3e4e4fa1',
+    'condition': 'not build_with_chromium',
+  },
 
   'third_party/Python-Markdown': {
     'url': '{chromium_git}/chromium/src/third_party/Python-Markdown@36657c103ce5964733bbbb29377085e9cc1a9472',
@@ -182,7 +192,7 @@ deps = {
   },
 
   'third_party/SwiftShader': {
-    'url': '{swiftshader_git}/SwiftShader@16ae92a4ee5212883f1dbeefd1a91f924b2c2548',
+    'url': '{swiftshader_git}/SwiftShader@9e718f962f87c30d08e91053f0e9ce3467cbd488',
     'condition': 'not build_with_chromium',
   },
 
@@ -202,18 +212,13 @@ deps = {
     'url': '{chromium_git}/external/github.com/KhronosGroup/Vulkan-ValidationLayers@{vulkan_validation_revision}',
   },
 
-  'third_party/yasm': {
-    'url': '{chromium_git}/chromium/src/third_party/yasm@8e4e548d0b199df58740336024c1b3baf7c0abd7',
-    'condition': 'not build_with_chromium',
-  },
-
   'third_party/zlib': {
-    'url': '{chromium_git}/chromium/src/third_party/zlib@c2eb8a7f7a0fa7884234ebc1b836644084ccbec9',
+    'url': '{chromium_git}/chromium/src/third_party/zlib@ae385786edb15f57e992c5e9dd9464e376d69399',
     'condition': 'not build_with_chromium',
   },
 
   'tools/clang': {
-    'url': '{chromium_git}/chromium/src/tools/clang.git@eeaa53b76fa7c2e84f655a63a8e66c6db9d72fff',
+    'url': '{chromium_git}/chromium/src/tools/clang.git@04b99e7bf9160d551c3a5562f583014b6afc90f9',
     'condition': 'not build_with_chromium',
   },
 
@@ -229,7 +234,7 @@ deps = {
   },
 
   'tools/md_browser': {
-    'url': '{chromium_git}/chromium/src/tools/md_browser@0bfd826f8566a99923e64a782908faca72bc457c',
+    'url': '{chromium_git}/chromium/src/tools/md_browser@aae45d8d82400e90483d4fee2ca3e648f2313cb2',
     'condition': 'not build_with_chromium',
   },
 
@@ -432,5 +437,4 @@ recursedeps = [
   'buildtools',
   'third_party/googletest',
   'third_party/jsoncpp',
-  'third_party/yasm',
 ]
