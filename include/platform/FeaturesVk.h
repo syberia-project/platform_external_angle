@@ -108,6 +108,12 @@ struct FeaturesVk : FeatureSetBase
         "VkDevice supports the VK_ANDROID_external_memory_android_hardware_buffer extension",
         &members};
 
+    // Whether the VkDevice supports the VK_GGP_frame_token extension, on which
+    // the EGL_ANGLE_swap_with_frame_token extension can be layered.
+    Feature supportsGGPFrameToken = {"supports_ggp_frame_token", FeatureCategory::VulkanFeatures,
+                                     "VkDevice supports the VK_GGP_frame_token extension",
+                                     &members};
+
     // Whether the VkDevice supports the VK_KHR_external_memory_fd extension, on which the
     // GL_EXT_memory_object_fd extension can be layered.
     Feature supportsExternalMemoryFd = {
@@ -116,11 +122,11 @@ struct FeaturesVk : FeatureSetBase
 
     // Whether the VkDevice supports the VK_FUCHSIA_external_memory
     // extension, on which the GL_ANGLE_memory_object_fuchsia extension can be layered.
-    angle::Feature supportsExternalMemoryFuchsia = {
+    Feature supportsExternalMemoryFuchsia = {
         "supports_external_memory_fuchsia", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_FUCHSIA_external_memory extension", &members};
 
-    angle::Feature supportsFilteringPrecision = {
+    Feature supportsFilteringPrecision = {
         "supports_filtering_precision_google", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_GOOGLE_sampler_filtering_precision extension", &members};
 
@@ -165,6 +171,12 @@ struct FeaturesVk : FeatureSetBase
     Feature supportsShaderStencilExport = {
         "supports_shader_stencil_export", FeatureCategory::VulkanFeatures,
         "VkDevice supports the VK_EXT_shader_stencil_export extension", &members};
+
+    // Whether the VkDevice supports the VK_KHR_sampler_ycbcr_conversion extension, which is needed
+    // to support Ycbcr conversion with external images.
+    Feature supportsYUVSamplerConversion = {
+        "supports_yuv_sampler_conversion", FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_KHR_sampler_ycbcr_conversion extension", &members};
 
     // Where VK_EXT_transform_feedback is not support, an emulation path is used.
     // http://anglebug.com/3205
@@ -277,6 +289,14 @@ struct FeaturesVk : FeatureSetBase
         "allocate_non_zero_memory", FeatureCategory::VulkanFeatures,
         "Fill new allocations with non-zero values to flush out errors.", &members,
         "http://anglebug.com/4384"};
+
+    // Allocate a "shadow" buffer for GL buffer objects. For GPU-read only buffers
+    // glMap* latency can be reduced by maintaining a copy of the buffer which is
+    // writeable only by the CPU. We then return this shadow buffer on glMap* calls.
+    Feature shadowBuffers = {
+        "shadow_buffers", FeatureCategory::VulkanFeatures,
+        "Allocate a shadow buffer for GL buffer objects to reduce glMap* latency.", &members,
+        "http://anglebug.com/4339"};
 
     // Persistently map buffer memory until destroy, saves on map/unmap IOCTL overhead
     // for buffers that are updated frequently.

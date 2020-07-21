@@ -53,7 +53,7 @@ angle_static_library("angle_test_expectations") {
   sources = test_expectations_sources
   if (is_mac) {
     sources += test_expectations_sources_mac
-    libs = [ "Cocoa.framework" ]
+    frameworks = [ "Cocoa.framework" ]
   }
 }
 
@@ -94,7 +94,7 @@ template("angle_common_test_utils") {
       ]
     }
     data_deps = []
-    if (angle_enable_vulkan) {
+    if (angle_enable_vulkan_validation_layers) {
       data_deps += [ "$angle_root/src/common/vulkan:vulkan_validation_layers" ]
     }
   }
@@ -146,7 +146,7 @@ if (is_win || is_linux || is_mac || is_android || is_fuchsia) {
 
     if (is_mac) {
       sources += angle_end2end_tests_mac_sources
-      libs += [
+      frameworks = [
         "CoreFoundation.framework",
         "IOSurface.framework",
       ]
@@ -166,6 +166,10 @@ if (is_win || is_linux || is_mac || is_android || is_fuchsia) {
       "$angle_root:angle_image_util",
     ]
 
+    if (is_android) {
+      include_dirs += [ "${android_ndk_root}/sysroot/usr/includes" ]
+    }
+
     data_deps = [
       "$angle_root:libEGL",
       "$angle_root:libGLESv1_CM",
@@ -178,10 +182,7 @@ if (is_win || is_linux || is_mac || is_android || is_fuchsia) {
         "test_utils/VulkanExternalHelper.cpp",
         "test_utils/VulkanExternalHelper.h",
       ]
-      deps += [
-        "$angle_root/src/common/vulkan",
-        "$angle_root/src/libANGLE/renderer/vulkan:angle_vulkan_entry_points",
-      ]
+      deps += [ "$angle_root/src/common/vulkan" ]
     }
 
     if (is_fuchsia) {
@@ -217,9 +218,7 @@ if (is_win || is_linux || is_mac || is_android) {
 
     if (angle_enable_vulkan) {
       sources += angle_white_box_tests_vulkan_sources
-      deps += [
-        "$angle_root/src/libANGLE/renderer/vulkan:angle_vulkan_entry_points",
-      ]
+      deps += [ "$angle_root/src/common/vulkan:angle_vulkan_entry_points" ]
     }
   }
 }
@@ -277,8 +276,8 @@ if (is_win || is_linux || is_android || is_mac) {
     if (angle_enable_vulkan && !is_mac) {
       sources += angle_white_box_perf_tests_vulkan_sources
       deps += [
-        "$angle_glslang_dir:glslang_sources",
-        "$angle_root/src/libANGLE/renderer/vulkan:angle_vulkan_entry_points",
+        "$angle_glslang_dir:glslang_lib_sources",
+        "$angle_root/src/common/vulkan:angle_vulkan_entry_points",
       ]
     }
   }
@@ -343,15 +342,6 @@ if (is_win || is_linux || is_android || is_mac || is_fuchsia) {
         suppressed_configs += [ "//build/config/compiler:default_optimization" ]
         configs += [ "//build/config/compiler:no_optimize" ]
       }
-
-      # TODO(jmadill/cnorthrop): Lift after traces updated. http://anglebug.com/3630
-      if (is_win && current_cpu == "x86") {
-        if (is_clang) {
-          cflags_cc = [ "-Wno-shorten-64-to-32" ]
-        } else {
-          cflags_cc = [ "/wd4244" ]
-        }
-      }
     }
   }
 
@@ -371,6 +361,10 @@ if (is_win || is_linux || is_android || is_mac || is_fuchsia) {
       "${angle_root}:libEGL",
       "${angle_root}:libGLESv2",
     ]
+
+    if (build_with_chromium) {
+      data_deps += [ "//testing:run_perf_test" ]
+    }
 
     if (is_win || is_linux) {
       data_deps += [ "${angle_root}/third_party/glmark2:glmark2_angle" ]
@@ -403,7 +397,6 @@ if (build_angle_gles1_conform_tests) {
       "$gles1_conform_root/conform/conformshell",
       "$gles1_conform_root/ctk",
       "$gles1_conform_root/fixed",
-      "$gles1_conform_root/include",
       "$gles1_conform_root/platform",
     ]
 
@@ -752,10 +745,7 @@ if (build_angle_gles1_conform_tests) {
       ":angle_gles1_primtest_no_gtest",
     ]
 
-    include_dirs = [
-      ".",
-      "$gles1_conform_root/conform",
-    ]
+    include_dirs = [ "$gles1_conform_root/conform" ]
 
     sources = [
       "gles1_conformance_tests/PrimtestTests.cpp",
@@ -1311,7 +1301,7 @@ if (build_angle_deqp_tests && !is_fuchsia) {
     public_deps = [
       ":angle_deqp_framework_egl",
       ":angle_deqp_glshared",
-      "${angle_glslang_dir}:glslang_sources",
+      "${angle_glslang_dir}:glslang_lib_sources",
       "${angle_spirv_tools_dir}:spvtools_val",
     ]
     public_configs = [ ":angle_deqp_khr_common_config" ]
@@ -1352,6 +1342,7 @@ group("angle_tests") {
     ":angle_end2end_tests",
     ":angle_perftests",
     ":angle_unittests",
+    "capture_replay_tests",
   ]
   if (!is_fuchsia) {
     deps += [

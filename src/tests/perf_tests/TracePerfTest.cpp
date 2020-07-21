@@ -13,7 +13,7 @@
 #include "tests/perf_tests/ANGLEPerfTest.h"
 #include "tests/perf_tests/DrawCallPerfParams.h"
 #include "util/egl_loader_autogen.h"
-#include "util/frame_capture_utils.h"
+#include "util/frame_capture_test_utils.h"
 #include "util/png_utils.h"
 
 #include "restricted_traces/restricted_traces_autogen.h"
@@ -36,8 +36,6 @@ struct TracePerfParams final : public RenderTestParams
     {
         majorVersion = 3;
         minorVersion = 0;
-        windowWidth  = 1920;
-        windowHeight = 1080;
         trackGpuTime = true;
 
         // Display the frame after every drawBenchmark invocation
@@ -104,10 +102,18 @@ class TracePerfTest : public ANGLERenderTest, public ::testing::WithParamInterfa
 TracePerfTest::TracePerfTest()
     : ANGLERenderTest("TracePerf", GetParam()), mStartFrame(0), mEndFrame(0)
 {
-    // TODO(anglebug.com/4533) This fails after the upgrade to the 26.20.100.7870 driver.
-    if (IsWindows() && IsIntel() &&
-        GetParam().getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE &&
-        GetParam().testID == RestrictedTraceID::manhattan_10)
+    const TracePerfParams &param = GetParam();
+
+    // TODO: http://anglebug.com/4533 This fails after the upgrade to the 26.20.100.7870 driver.
+    if (IsWindows() && IsIntel() && param.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE &&
+        param.testID == RestrictedTraceID::manhattan_10)
+    {
+        mSkipTest = true;
+    }
+
+    // TODO: http://anglebug.com/4731 Fails on older Intel drivers. Passes in newer.
+    if (IsWindows() && IsIntel() && param.driver != GLESDriverType::AngleEGL &&
+        param.testID == RestrictedTraceID::angry_birds_2_1500)
     {
         mSkipTest = true;
     }
@@ -138,6 +144,12 @@ void TracePerfTest::initializeBenchmark()
     testDataDirStr << ANGLE_TRACE_DATA_DIR << "/" << traceInfo.name;
     std::string testDataDir = testDataDirStr.str();
     SetBinaryDataDir(params.testID, testDataDir.c_str());
+
+    if (IsAndroid())
+    {
+        // On Android, set the orientation used by the app, based on width/height
+        getWindow()->setOrientation(mTestParams.windowWidth, mTestParams.windowHeight);
+    }
 
     // Potentially slow. Can load a lot of resources.
     SetupReplay(params.testID);
@@ -182,7 +194,7 @@ void TracePerfTest::drawBenchmark()
 
     startGpuTimer();
 
-    for (uint32_t frame = mStartFrame; frame < mEndFrame; ++frame)
+    for (uint32_t frame = mStartFrame; frame <= mEndFrame; ++frame)
     {
         char frameName[32];
         sprintf(frameName, "Frame %u", frame);
@@ -353,6 +365,8 @@ TracePerfParams CombineTestID(const TracePerfParams &in, RestrictedTraceID id)
 {
     TracePerfParams out = in;
     out.testID          = id;
+    out.windowWidth     = kTraceInfos[id].drawSurfaceWidth;
+    out.windowHeight    = kTraceInfos[id].drawSurfaceHeight;
     return out;
 }
 
@@ -361,7 +375,7 @@ using P = TracePerfParams;
 
 std::vector<P> gTestsWithID =
     CombineWithValues({P()}, AllEnums<RestrictedTraceID>(), CombineTestID);
-std::vector<P> gTestsWithRenderer = CombineWithFuncs(gTestsWithID, {Vulkan<P>, EGL<P>});
+std::vector<P> gTestsWithRenderer = CombineWithFuncs(gTestsWithID, {Vulkan<P>, Native<P>});
 ANGLE_INSTANTIATE_TEST_ARRAY(TracePerfTest, gTestsWithRenderer);
 
 }  // anonymous namespace

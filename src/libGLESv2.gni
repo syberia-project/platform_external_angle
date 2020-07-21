@@ -176,6 +176,7 @@ libangle_includes = [
   "include/platform/FeaturesVk.h",
   "include/platform/FrontendFeatures.h",
   "include/platform/Platform.h",
+  "include/platform/PlatformMethods.h",
   "include/vulkan/vulkan_fuchsia_ext.h",
 ]
 
@@ -411,6 +412,7 @@ libangle_sources = [
   "src/libANGLE/formatutils.cpp",
   "src/libANGLE/queryconversions.cpp",
   "src/libANGLE/queryutils.cpp",
+  "src/libANGLE/renderer/BufferImpl.cpp",
   "src/libANGLE/renderer/ContextImpl.cpp",
   "src/libANGLE/renderer/DeviceImpl.cpp",
   "src/libANGLE/renderer/DisplayImpl.cpp",
@@ -806,12 +808,16 @@ libangle_gl_glx_sources = [
   "src/libANGLE/renderer/gl/glx/FunctionsGLX.h",
   "src/libANGLE/renderer/gl/glx/PbufferSurfaceGLX.cpp",
   "src/libANGLE/renderer/gl/glx/PbufferSurfaceGLX.h",
+  "src/libANGLE/renderer/gl/glx/PixmapSurfaceGLX.cpp",
+  "src/libANGLE/renderer/gl/glx/PixmapSurfaceGLX.h",
   "src/libANGLE/renderer/gl/glx/RendererGLX.cpp",
   "src/libANGLE/renderer/gl/glx/RendererGLX.h",
   "src/libANGLE/renderer/gl/glx/SurfaceGLX.h",
   "src/libANGLE/renderer/gl/glx/WindowSurfaceGLX.cpp",
   "src/libANGLE/renderer/gl/glx/WindowSurfaceGLX.h",
   "src/libANGLE/renderer/gl/glx/functionsglx_typedefs.h",
+  "src/libANGLE/renderer/gl/glx/glx_utils.cpp",
+  "src/libANGLE/renderer/gl/glx/glx_utils.h",
   "src/libANGLE/renderer/gl/glx/platform_glx.h",
 ]
 
@@ -846,11 +852,11 @@ libangle_gl_egl_dl_sources = [
   "src/libANGLE/renderer/gl/egl/FunctionsEGLDL.h",
 ]
 
-libangle_gl_ozone_sources = [
-  "src/libANGLE/renderer/gl/egl/ozone/DisplayOzone.cpp",
-  "src/libANGLE/renderer/gl/egl/ozone/DisplayOzone.h",
-  "src/libANGLE/renderer/gl/egl/ozone/SurfaceOzone.cpp",
-  "src/libANGLE/renderer/gl/egl/ozone/SurfaceOzone.h",
+libangle_gl_gbm_sources = [
+  "src/libANGLE/renderer/gl/egl/gbm/DisplayGbm.cpp",
+  "src/libANGLE/renderer/gl/egl/gbm/DisplayGbm.h",
+  "src/libANGLE/renderer/gl/egl/gbm/SurfaceGbm.cpp",
+  "src/libANGLE/renderer/gl/egl/gbm/SurfaceGbm.h",
 ]
 
 libangle_gl_egl_android_sources = [
@@ -908,6 +914,8 @@ libangle_capture_sources = [
   "src/libANGLE/capture_gles_ext_autogen.cpp",
   "src/libANGLE/capture_gles_ext_params.cpp",
   "src/libANGLE/frame_capture_replay_autogen.cpp",
+  "src/libANGLE/frame_capture_utils.cpp",
+  "src/libANGLE/frame_capture_utils.h",
   "src/libANGLE/frame_capture_utils_autogen.cpp",
   "src/libANGLE/gl_enum_utils.cpp",
   "src/libANGLE/gl_enum_utils_autogen.cpp",
