@@ -103,7 +103,8 @@ struct Box
     Box(int x_in, int y_in, int z_in, int width_in, int height_in, int depth_in)
         : x(x_in), y(y_in), z(z_in), width(width_in), height(height_in), depth(depth_in)
     {}
-    Box(const Offset &offset, const Extents &size)
+    template <typename O, typename E>
+    Box(const O &offset, const E &size)
         : x(offset.x),
           y(offset.y),
           z(offset.z),
@@ -114,6 +115,9 @@ struct Box
     bool operator==(const Box &other) const;
     bool operator!=(const Box &other) const;
     Rectangle toRect() const;
+
+    // Whether the Box has offset 0 and the same extents as argument.
+    bool coversSameExtent(const Extents &size) const;
 
     int x;
     int y;
@@ -170,6 +174,8 @@ struct BlendState final
 
 bool operator==(const BlendState &a, const BlendState &b);
 bool operator!=(const BlendState &a, const BlendState &b);
+
+using BlendStateArray = std::array<BlendState, IMPLEMENTATION_MAX_DRAW_BUFFERS>;
 
 struct DepthStencilState final
 {
@@ -633,6 +639,8 @@ using StorageBuffersMask = angle::BitSet<IMPLEMENTATION_MAX_SHADER_STORAGE_BUFFE
 
 template <typename T>
 using TexLevelArray = std::array<T, IMPLEMENTATION_MAX_TEXTURE_LEVELS>;
+
+using TexLevelMask = angle::BitSet<IMPLEMENTATION_MAX_TEXTURE_LEVELS>;
 
 enum class ComponentType
 {

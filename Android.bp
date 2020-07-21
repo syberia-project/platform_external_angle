@@ -7,6 +7,62 @@
 //
 
 cc_defaults {
+    name: "third_party_zlib_zlib_crc32_simd",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DZLIB_IMPLEMENTATION",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            srcs: [
+                "third_party/zlib/crc32_simd.c",
+            ],
+            cflags: [
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-mpclmul",
+            ],
+        },
+        x86: {
+            srcs: [
+                "third_party/zlib/crc32_simd.c",
+            ],
+            cflags: [
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-mpclmul",
+            ],
+        },
+    },
+}
+cc_defaults {
     name: "third_party_jsoncpp_jsoncpp",
     stl: "libc++_static",
     local_include_dirs: [
@@ -62,11 +118,6 @@ cc_library_shared {
         "angle_common",
         "angle_gpu_info_util",
     ],
-    shared_libs: [
-        "libdl",
-        "liblog",
-        "libm",
-    ],
     local_include_dirs: [
         "",
         "include/",
@@ -74,6 +125,11 @@ cc_library_shared {
         "src/common/third_party/base/",
         "third_party/jsoncpp/generated/",
         "third_party/jsoncpp/source/include/",
+    ],
+    shared_libs: [
+        "libdl",
+        "liblog",
+        "libm",
     ],
     srcs: [
         "src/feature_support_util/feature_support_util.cpp",
@@ -112,15 +168,7 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "third_party_jsoncpp_jsoncpp",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -136,7 +184,15 @@ cc_library_shared {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "third_party_jsoncpp_jsoncpp",
+    ],
 }
 cc_defaults {
     name: "angle_libEGL_egl_loader",
@@ -181,15 +237,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -205,11 +253,20 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+    ],
 }
 cc_library_shared {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -232,21 +289,22 @@ cc_library_shared {
         "angle_image_util",
         "angle_preprocessor",
         "angle_translator",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "libGLESv2_angle",
-        "libdl",
-        "liblog",
-        "libm",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "libGLESv2_angle",
+        "libdl",
+        "liblog",
+        "libm",
     ],
     srcs: [
         "src/libEGL/libEGL.cpp",
@@ -288,18 +346,7 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-        "angle_libEGL_egl_loader",
-        "angle_system_utils",
-        "angle_version",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -315,11 +362,23 @@ cc_library_shared {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+        "angle_libEGL_egl_loader",
+        "angle_system_utils",
+        "angle_version",
+    ],
 }
 cc_library_shared {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -342,19 +401,20 @@ cc_library_shared {
         "angle_image_util",
         "angle_preprocessor",
         "angle_translator",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "libGLESv2_angle",
-        "libdl",
-        "libm",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
+    ],
+    shared_libs: [
+        "libGLESv2_angle",
+        "libdl",
+        "libm",
     ],
     srcs: [
         "src/libGLESv1_CM/libGLESv1_CM.cpp",
@@ -393,451 +453,30 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+    },
     defaults: [
         "angle_includes",
-    ],
-    arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86_64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-        arm: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-    },
-}
-cc_defaults {
-    name: "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "",
-        "third_party/vulkan_memory_allocator/src/",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-nullability-completeness",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-        "-Wno-unused-private-field",
-        "-Wno-unused-variable",
-    ],
-}
-cc_defaults {
-    name: "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "include/",
-        "src/",
-        "src/third_party/volk/",
-        "third_party/vulkan-headers/src/include/",
-        "third_party/vulkan_memory_allocator/src/",
-    ],
-    srcs: [
-        "src/libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.cpp",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_SHARED_LIBVULKAN=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-DVK_USE_PLATFORM_ANDROID_KHR",
-        "-DVMA_IMPLEMENTATION",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-extra-semi-stmt",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-nullability-completeness",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-        "-Wno-unused-private-field",
-        "-Wno-unused-variable",
-    ],
-    defaults: [
-        "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-        "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
-    ],
-    arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86_64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-        arm: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-    },
-}
-cc_defaults {
-    name: "src_third_party_volk_volk",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "",
-        "src/third_party/volk/",
-        "third_party/vulkan-headers/src/include/",
-    ],
-    srcs: [
-        "src/third_party/volk/volk.c",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-DVK_USE_PLATFORM_ANDROID_KHR",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
-    defaults: [
-        "third_party_vulkan_headers_src_vulkan_headers",
-    ],
-}
-cc_defaults {
-    name: "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "include/",
-        "src/",
-        "src/third_party/volk/",
-        "third_party/vulkan-headers/src/include/",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_SHARED_LIBVULKAN=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-DVK_USE_PLATFORM_ANDROID_KHR",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
-    defaults: [
-        "src_third_party_volk_volk",
-    ],
-    arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86_64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-        arm: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-    },
-}
-cc_defaults {
-    name: "src_libANGLE_renderer_vulkan_angle_vulkan_entry_points",
-    stl: "libc++_static",
-    shared_libs: [
-        "libvulkan",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-Wno-unknown-warning-option",
-    ],
-    defaults: [
-        "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-    ],
-}
-cc_defaults {
-    generated_headers: [
-        "angle_commit_id",
-    ],
-    name: "src_common_vulkan_vulkan",
-    stl: "libc++_static",
-    static_libs: [
-        "angle_common",
-    ],
-    shared_libs: [
-        "liblog",
-        "libvulkan",
-    ],
-    local_include_dirs: [
-        "",
-        "include/",
-        "src/",
-        "src/common/third_party/base/",
-        "src/third_party/volk/",
-        "third_party/vulkan-headers/src/include/",
-    ],
-    srcs: [
-        "src/common/vulkan/vulkan_icd.cpp",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DANGLE_SHARED_LIBVULKAN=1",
-        "-DANGLE_VK_LAYERS_DIR=\"angledata\"",
-        "-DANGLE_VK_MOCK_ICD_JSON=\"angledata/VkICD_mock_icd.json\"",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-DVK_USE_PLATFORM_ANDROID_KHR",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
-    defaults: [
-        "src_libANGLE_renderer_vulkan_angle_vulkan_entry_points",
-    ],
-    arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86_64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
-        x86: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-        arm: {
-            cflags: [
-                "-DANGLE_IS_32_BIT_CPU",
-            ],
-        },
-    },
-}
-cc_library_static {
-    generated_headers: [
-        "third_party_spirv_tools_src_spvtools_core_enums_unified1",
-        "third_party_spirv_tools_src_spvtools_core_tables_unified1",
-        "third_party_spirv_tools_src_spvtools_generators_inc",
-        "third_party_spirv_tools_src_spvtools_glsl_tables_glsl1-0",
-        "third_party_spirv_tools_src_spvtools_language_header_cldebuginfo100",
-        "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
-        "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
-    ],
-    name: "third_party_spirv_tools_src_spvtools_val",
-    stl: "libc++_static",
-    static_libs: [
-        "third_party_spirv_tools_src_spvtools",
-    ],
-    local_include_dirs: [
-        "",
-        "third_party/spirv-headers/src/include/",
-        "third_party/spirv-tools/src/",
-        "third_party/spirv-tools/src/include/",
-    ],
-    srcs: [
-        "third_party/spirv-tools/src/source/val/basic_block.cpp",
-        "third_party/spirv-tools/src/source/val/construct.cpp",
-        "third_party/spirv-tools/src/source/val/function.cpp",
-        "third_party/spirv-tools/src/source/val/instruction.cpp",
-        "third_party/spirv-tools/src/source/val/validate.cpp",
-        "third_party/spirv-tools/src/source/val/validate_adjacency.cpp",
-        "third_party/spirv-tools/src/source/val/validate_annotation.cpp",
-        "third_party/spirv-tools/src/source/val/validate_arithmetics.cpp",
-        "third_party/spirv-tools/src/source/val/validate_atomics.cpp",
-        "third_party/spirv-tools/src/source/val/validate_barriers.cpp",
-        "third_party/spirv-tools/src/source/val/validate_bitwise.cpp",
-        "third_party/spirv-tools/src/source/val/validate_builtins.cpp",
-        "third_party/spirv-tools/src/source/val/validate_capability.cpp",
-        "third_party/spirv-tools/src/source/val/validate_cfg.cpp",
-        "third_party/spirv-tools/src/source/val/validate_composites.cpp",
-        "third_party/spirv-tools/src/source/val/validate_constants.cpp",
-        "third_party/spirv-tools/src/source/val/validate_conversion.cpp",
-        "third_party/spirv-tools/src/source/val/validate_debug.cpp",
-        "third_party/spirv-tools/src/source/val/validate_decorations.cpp",
-        "third_party/spirv-tools/src/source/val/validate_derivatives.cpp",
-        "third_party/spirv-tools/src/source/val/validate_execution_limitations.cpp",
-        "third_party/spirv-tools/src/source/val/validate_extensions.cpp",
-        "third_party/spirv-tools/src/source/val/validate_function.cpp",
-        "third_party/spirv-tools/src/source/val/validate_id.cpp",
-        "third_party/spirv-tools/src/source/val/validate_image.cpp",
-        "third_party/spirv-tools/src/source/val/validate_instruction.cpp",
-        "third_party/spirv-tools/src/source/val/validate_interfaces.cpp",
-        "third_party/spirv-tools/src/source/val/validate_layout.cpp",
-        "third_party/spirv-tools/src/source/val/validate_literals.cpp",
-        "third_party/spirv-tools/src/source/val/validate_logicals.cpp",
-        "third_party/spirv-tools/src/source/val/validate_memory.cpp",
-        "third_party/spirv-tools/src/source/val/validate_memory_semantics.cpp",
-        "third_party/spirv-tools/src/source/val/validate_misc.cpp",
-        "third_party/spirv-tools/src/source/val/validate_mode_setting.cpp",
-        "third_party/spirv-tools/src/source/val/validate_non_uniform.cpp",
-        "third_party/spirv-tools/src/source/val/validate_primitives.cpp",
-        "third_party/spirv-tools/src/source/val/validate_scopes.cpp",
-        "third_party/spirv-tools/src/source/val/validate_small_type_uses.cpp",
-        "third_party/spirv-tools/src/source/val/validate_type.cpp",
-        "third_party/spirv-tools/src/source/val/validation_state.cpp",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-newline-eof",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
-    defaults: [
-        "third_party_spirv_tools_src_spvtools_headers",
     ],
 }
 cc_genrule {
@@ -969,42 +608,6 @@ cc_genrule {
         "OpenCLDebugInfo100.h",
     ],
 }
-cc_defaults {
-    name: "third_party_spirv_tools_src_spvtools_headers",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "",
-        "third_party/spirv-tools/src/include/",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
-}
 cc_genrule {
     name: "third_party_spirv_tools_src_spvtools_glsl_tables_glsl1-0",
     tool_files: [
@@ -1068,42 +671,6 @@ cc_genrule {
     out: [
         "enum_string_mapping.inc",
         "extension_enum.inc",
-    ],
-}
-cc_defaults {
-    name: "third_party_spirv_headers_src_spv_headers",
-    stl: "libc++_static",
-    local_include_dirs: [
-        "",
-        "third_party/spirv-headers/src/include/",
-    ],
-    sdk_version: "28",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
     ],
 }
 cc_library_static {
@@ -1206,7 +773,7 @@ cc_library_static {
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
     ],
-    name: "third_party_spirv_tools_src_spvtools_opt",
+    name: "third_party_spirv_tools_src_spvtools_val",
     stl: "libc++_static",
     static_libs: [
         "third_party_spirv_tools_src_spvtools",
@@ -1218,110 +785,46 @@ cc_library_static {
         "third_party/spirv-tools/src/include/",
     ],
     srcs: [
-        "third_party/spirv-tools/src/source/opt/aggressive_dead_code_elim_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/amd_ext_to_khr.cpp",
-        "third_party/spirv-tools/src/source/opt/basic_block.cpp",
-        "third_party/spirv-tools/src/source/opt/block_merge_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/block_merge_util.cpp",
-        "third_party/spirv-tools/src/source/opt/build_module.cpp",
-        "third_party/spirv-tools/src/source/opt/ccp_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/cfg.cpp",
-        "third_party/spirv-tools/src/source/opt/cfg_cleanup_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/code_sink.cpp",
-        "third_party/spirv-tools/src/source/opt/combine_access_chains.cpp",
-        "third_party/spirv-tools/src/source/opt/compact_ids_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/composite.cpp",
-        "third_party/spirv-tools/src/source/opt/const_folding_rules.cpp",
-        "third_party/spirv-tools/src/source/opt/constants.cpp",
-        "third_party/spirv-tools/src/source/opt/convert_to_half_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/copy_prop_arrays.cpp",
-        "third_party/spirv-tools/src/source/opt/dead_branch_elim_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/dead_insert_elim_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/dead_variable_elimination.cpp",
-        "third_party/spirv-tools/src/source/opt/debug_info_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/decompose_initialized_variables_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/decoration_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/def_use_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/desc_sroa.cpp",
-        "third_party/spirv-tools/src/source/opt/dominator_analysis.cpp",
-        "third_party/spirv-tools/src/source/opt/dominator_tree.cpp",
-        "third_party/spirv-tools/src/source/opt/eliminate_dead_constant_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/eliminate_dead_functions_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/eliminate_dead_functions_util.cpp",
-        "third_party/spirv-tools/src/source/opt/eliminate_dead_members_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/feature_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/fix_storage_class.cpp",
-        "third_party/spirv-tools/src/source/opt/flatten_decoration_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/fold.cpp",
-        "third_party/spirv-tools/src/source/opt/fold_spec_constant_op_and_composite_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/folding_rules.cpp",
-        "third_party/spirv-tools/src/source/opt/freeze_spec_constant_value_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/function.cpp",
-        "third_party/spirv-tools/src/source/opt/generate_webgpu_initializers_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/graphics_robust_access_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/if_conversion.cpp",
-        "third_party/spirv-tools/src/source/opt/inline_exhaustive_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/inline_opaque_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/inline_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/inst_bindless_check_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/inst_buff_addr_check_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/inst_debug_printf_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/instruction.cpp",
-        "third_party/spirv-tools/src/source/opt/instruction_list.cpp",
-        "third_party/spirv-tools/src/source/opt/instrument_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/ir_context.cpp",
-        "third_party/spirv-tools/src/source/opt/ir_loader.cpp",
-        "third_party/spirv-tools/src/source/opt/legalize_vector_shuffle_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/licm_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/local_access_chain_convert_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/local_redundancy_elimination.cpp",
-        "third_party/spirv-tools/src/source/opt/local_single_block_elim_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/local_single_store_elim_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_dependence.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_dependence_helpers.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_descriptor.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_fission.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_fusion.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_fusion_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_peeling.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_unroller.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_unswitch_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/loop_utils.cpp",
-        "third_party/spirv-tools/src/source/opt/mem_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/merge_return_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/module.cpp",
-        "third_party/spirv-tools/src/source/opt/optimizer.cpp",
-        "third_party/spirv-tools/src/source/opt/pass.cpp",
-        "third_party/spirv-tools/src/source/opt/pass_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/private_to_local_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/process_lines_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/propagator.cpp",
-        "third_party/spirv-tools/src/source/opt/reduce_load_size.cpp",
-        "third_party/spirv-tools/src/source/opt/redundancy_elimination.cpp",
-        "third_party/spirv-tools/src/source/opt/register_pressure.cpp",
-        "third_party/spirv-tools/src/source/opt/relax_float_ops_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/remove_duplicates_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/replace_invalid_opc.cpp",
-        "third_party/spirv-tools/src/source/opt/scalar_analysis.cpp",
-        "third_party/spirv-tools/src/source/opt/scalar_analysis_simplification.cpp",
-        "third_party/spirv-tools/src/source/opt/scalar_replacement_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/set_spec_constant_default_value_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/simplification_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/split_invalid_unreachable_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/ssa_rewrite_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/strength_reduction_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/strip_atomic_counter_memory_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/strip_debug_info_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/strip_reflect_info_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/struct_cfg_analysis.cpp",
-        "third_party/spirv-tools/src/source/opt/type_manager.cpp",
-        "third_party/spirv-tools/src/source/opt/types.cpp",
-        "third_party/spirv-tools/src/source/opt/unify_const_pass.cpp",
-        "third_party/spirv-tools/src/source/opt/upgrade_memory_model.cpp",
-        "third_party/spirv-tools/src/source/opt/value_number_table.cpp",
-        "third_party/spirv-tools/src/source/opt/vector_dce.cpp",
-        "third_party/spirv-tools/src/source/opt/workaround1209.cpp",
-        "third_party/spirv-tools/src/source/opt/wrap_opkill.cpp",
+        "third_party/spirv-tools/src/source/val/basic_block.cpp",
+        "third_party/spirv-tools/src/source/val/construct.cpp",
+        "third_party/spirv-tools/src/source/val/function.cpp",
+        "third_party/spirv-tools/src/source/val/instruction.cpp",
+        "third_party/spirv-tools/src/source/val/validate.cpp",
+        "third_party/spirv-tools/src/source/val/validate_adjacency.cpp",
+        "third_party/spirv-tools/src/source/val/validate_annotation.cpp",
+        "third_party/spirv-tools/src/source/val/validate_arithmetics.cpp",
+        "third_party/spirv-tools/src/source/val/validate_atomics.cpp",
+        "third_party/spirv-tools/src/source/val/validate_barriers.cpp",
+        "third_party/spirv-tools/src/source/val/validate_bitwise.cpp",
+        "third_party/spirv-tools/src/source/val/validate_builtins.cpp",
+        "third_party/spirv-tools/src/source/val/validate_capability.cpp",
+        "third_party/spirv-tools/src/source/val/validate_cfg.cpp",
+        "third_party/spirv-tools/src/source/val/validate_composites.cpp",
+        "third_party/spirv-tools/src/source/val/validate_constants.cpp",
+        "third_party/spirv-tools/src/source/val/validate_conversion.cpp",
+        "third_party/spirv-tools/src/source/val/validate_debug.cpp",
+        "third_party/spirv-tools/src/source/val/validate_decorations.cpp",
+        "third_party/spirv-tools/src/source/val/validate_derivatives.cpp",
+        "third_party/spirv-tools/src/source/val/validate_execution_limitations.cpp",
+        "third_party/spirv-tools/src/source/val/validate_extensions.cpp",
+        "third_party/spirv-tools/src/source/val/validate_function.cpp",
+        "third_party/spirv-tools/src/source/val/validate_id.cpp",
+        "third_party/spirv-tools/src/source/val/validate_image.cpp",
+        "third_party/spirv-tools/src/source/val/validate_instruction.cpp",
+        "third_party/spirv-tools/src/source/val/validate_interfaces.cpp",
+        "third_party/spirv-tools/src/source/val/validate_layout.cpp",
+        "third_party/spirv-tools/src/source/val/validate_literals.cpp",
+        "third_party/spirv-tools/src/source/val/validate_logicals.cpp",
+        "third_party/spirv-tools/src/source/val/validate_memory.cpp",
+        "third_party/spirv-tools/src/source/val/validate_memory_semantics.cpp",
+        "third_party/spirv-tools/src/source/val/validate_misc.cpp",
+        "third_party/spirv-tools/src/source/val/validate_mode_setting.cpp",
+        "third_party/spirv-tools/src/source/val/validate_non_uniform.cpp",
+        "third_party/spirv-tools/src/source/val/validate_primitives.cpp",
+        "third_party/spirv-tools/src/source/val/validate_scopes.cpp",
+        "third_party/spirv-tools/src/source/val/validate_small_type_uses.cpp",
+        "third_party/spirv-tools/src/source/val/validate_type.cpp",
+        "third_party/spirv-tools/src/source/val/validation_state.cpp",
     ],
     sdk_version: "28",
     cflags: [
@@ -1357,32 +860,420 @@ cc_library_static {
     ],
 }
 cc_defaults {
-    generated_headers: [
-        "third_party_spirv_tools_src_spvtools_core_enums_unified1",
-        "third_party_spirv_tools_src_spvtools_core_tables_unified1",
-        "third_party_spirv_tools_src_spvtools_generators_inc",
-        "third_party_spirv_tools_src_spvtools_glsl_tables_glsl1-0",
-        "third_party_spirv_tools_src_spvtools_language_header_cldebuginfo100",
-        "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
-        "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
-    ],
-    name: "third_party_glslang_src_glslang_sources",
     stl: "libc++_static",
-    static_libs: [
-        "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
-        "third_party_spirv_tools_src_spvtools_val",
+    sdk_version: "28",
+    name: "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-nullability-completeness",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+        "-Wno-unused-private-field",
+        "-Wno-unused-variable",
     ],
     local_include_dirs: [
         "",
-        "third_party/glslang/src/",
+        "third_party/vulkan_memory_allocator/src/",
+    ],
+}
+cc_defaults {
+    name: "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "include/",
+        "src/",
+        "src/third_party/volk/",
+        "third_party/vulkan-headers/src/include/",
+        "third_party/vulkan_memory_allocator/src/",
+    ],
+    srcs: [
+        "src/libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.cpp",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DANGLE_SHARED_LIBVULKAN=1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DVK_USE_PLATFORM_ANDROID_KHR",
+        "-DVMA_IMPLEMENTATION",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-extra-semi-stmt",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-nullability-completeness",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+        "-Wno-unused-private-field",
+        "-Wno-unused-variable",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+    },
+    defaults: [
+        "src_common_vulkan_angle_vulkan_headers",
+        "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
+    ],
+}
+cc_defaults {
+    generated_headers: [
+        "angle_commit_id",
+    ],
+    name: "src_common_vulkan_vulkan",
+    stl: "libc++_static",
+    static_libs: [
+        "angle_common",
+    ],
+    local_include_dirs: [
+        "",
+        "include/",
+        "src/",
+        "src/common/third_party/base/",
+        "src/third_party/volk/",
+        "third_party/vulkan-headers/src/include/",
+    ],
+    shared_libs: [
+        "liblog",
+        "libvulkan",
+    ],
+    srcs: [
+        "src/common/vulkan/vulkan_icd.cpp",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DANGLE_SHARED_LIBVULKAN=1",
+        "-DANGLE_VK_LAYERS_DIR=\"angledata\"",
+        "-DANGLE_VK_MOCK_ICD_JSON=\"angledata/VkICD_mock_icd.json\"",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DVK_USE_PLATFORM_ANDROID_KHR",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+    },
+    defaults: [
+        "src_common_vulkan_angle_vulkan_entry_points",
+    ],
+}
+cc_defaults {
+    name: "src_third_party_volk_volk",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "src/third_party/volk/",
+        "third_party/vulkan-headers/src/include/",
+    ],
+    srcs: [
+        "src/third_party/volk/volk.c",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DVK_USE_PLATFORM_ANDROID_KHR",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    defaults: [
+        "third_party_vulkan_headers_src_vulkan_headers",
+    ],
+}
+cc_defaults {
+    name: "src_common_vulkan_angle_vulkan_headers",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "include/",
+        "src/",
+        "src/third_party/volk/",
+        "third_party/vulkan-headers/src/include/",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DANGLE_SHARED_LIBVULKAN=1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DVK_USE_PLATFORM_ANDROID_KHR",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
+    },
+    defaults: [
+        "src_third_party_volk_volk",
+    ],
+}
+cc_defaults {
+    name: "src_common_vulkan_angle_vulkan_entry_points",
+    stl: "libc++_static",
+    shared_libs: [
+        "libvulkan",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-Wno-unknown-warning-option",
+    ],
+    defaults: [
+        "src_common_vulkan_angle_vulkan_headers",
+    ],
+}
+cc_defaults {
+    stl: "libc++_static",
+    sdk_version: "28",
+    name: "third_party_spirv_tools_src_spvtools_headers",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    local_include_dirs: [
+        "",
         "third_party/spirv-tools/src/include/",
+    ],
+}
+cc_defaults {
+    stl: "libc++_static",
+    sdk_version: "28",
+    name: "third_party_spirv_headers_src_spv_headers",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    local_include_dirs: [
+        "",
+        "third_party/spirv-headers/src/include/",
+    ],
+}
+cc_genrule {
+    name: "third_party_glslang_src_glslang_build_info",
+    tool_files: [
+        "third_party/glslang/src/build_info.py",
+    ],
+    cmd: "$(location) external/angle/third_party/glslang/src -i external/angle/third_party/glslang/src/build_info.h.tmpl -o $(location glslang/build_info.h)",
+    srcs: [
+        "third_party/glslang/src/CHANGES.md",
+        "third_party/glslang/src/build_info.h.tmpl",
+    ],
+    sdk_version: "28",
+    out: [
+        "glslang/build_info.h",
+    ],
+}
+cc_defaults {
+    generated_headers: [
+        "third_party_glslang_src_glslang_build_info",
+    ],
+    name: "third_party_glslang_src_glslang_lib_sources",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/glslang/src/",
     ],
     srcs: [
         "third_party/glslang/src/OGLCompilersDLL/InitializeDll.cpp",
@@ -1425,13 +1316,6 @@ cc_defaults {
         "third_party/glslang/src/glslang/MachineIndependent/propagateNoContraction.cpp",
         "third_party/glslang/src/glslang/MachineIndependent/reflection.cpp",
         "third_party/glslang/src/glslang/OSDependent/Unix/ossource.cpp",
-        "third_party/glslang/src/hlsl/hlslAttributes.cpp",
-        "third_party/glslang/src/hlsl/hlslGrammar.cpp",
-        "third_party/glslang/src/hlsl/hlslOpMap.cpp",
-        "third_party/glslang/src/hlsl/hlslParseHelper.cpp",
-        "third_party/glslang/src/hlsl/hlslParseables.cpp",
-        "third_party/glslang/src/hlsl/hlslScanContext.cpp",
-        "third_party/glslang/src/hlsl/hlslTokenStream.cpp",
     ],
     sdk_version: "28",
     cflags: [
@@ -1439,8 +1323,6 @@ cc_defaults {
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DENABLE_HLSL=1",
-        "-DENABLE_OPT=1",
         "-DGLSLANG_OSINCLUDE_UNIX",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1470,28 +1352,8 @@ cc_defaults {
     ],
 }
 cc_defaults {
-    generated_headers: [
-        "third_party_spirv_tools_src_spvtools_core_enums_unified1",
-        "third_party_spirv_tools_src_spvtools_core_tables_unified1",
-        "third_party_spirv_tools_src_spvtools_generators_inc",
-        "third_party_spirv_tools_src_spvtools_glsl_tables_glsl1-0",
-        "third_party_spirv_tools_src_spvtools_language_header_cldebuginfo100",
-        "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
-        "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
-    ],
     name: "third_party_glslang_src_glslang_default_resource_limits_sources",
     stl: "libc++_static",
-    static_libs: [
-        "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
-        "third_party_spirv_tools_src_spvtools_val",
-    ],
     local_include_dirs: [
         "",
         "third_party/glslang/src/",
@@ -1505,7 +1367,6 @@ cc_defaults {
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DENABLE_HLSL=1",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
         "-DNVALGRIND",
@@ -1527,38 +1388,16 @@ cc_defaults {
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
-    defaults: [
-        "third_party_glslang_src_glslang_sources",
-    ],
 }
 cc_defaults {
     generated_headers: [
         "angle_commit_id",
-        "third_party_spirv_tools_src_spvtools_core_enums_unified1",
-        "third_party_spirv_tools_src_spvtools_core_tables_unified1",
-        "third_party_spirv_tools_src_spvtools_generators_inc",
-        "third_party_spirv_tools_src_spvtools_glsl_tables_glsl1-0",
-        "third_party_spirv_tools_src_spvtools_language_header_cldebuginfo100",
-        "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
-        "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-explicit-vertex-parameter",
-        "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-trinary-minmax",
+        "third_party_glslang_src_glslang_build_info",
     ],
     name: "angle_glslang_wrapper",
     stl: "libc++_static",
     static_libs: [
         "angle_common",
-        "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
-        "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "liblog",
-        "libnativewindow",
     ],
     local_include_dirs: [
         "",
@@ -1569,6 +1408,10 @@ cc_defaults {
         "third_party/spirv-headers/src/include/",
         "third_party/spirv-tools/src/include/",
     ],
+    shared_libs: [
+        "liblog",
+        "libnativewindow",
+    ],
     srcs: [
         "src/libANGLE/renderer/glslang_wrapper_utils.cpp",
     ],
@@ -1578,7 +1421,6 @@ cc_defaults {
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DENABLE_HLSL=1",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
         "-DNDEBUG",
@@ -1602,19 +1444,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_libANGLE_headers",
-        "third_party_glslang_src_glslang_default_resource_limits_sources",
-        "third_party_glslang_src_glslang_sources",
-        "third_party_spirv_headers_src_spv_headers",
-        "third_party_spirv_tools_src_spvtools_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -1630,11 +1460,24 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_libANGLE_headers",
+        "third_party_glslang_src_glslang_default_resource_limits_sources",
+        "third_party_glslang_src_glslang_lib_sources",
+        "third_party_spirv_headers_src_spv_headers",
+        "third_party_spirv_tools_src_spvtools_headers",
+    ],
 }
 cc_defaults {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -1655,14 +1498,10 @@ cc_defaults {
         "angle_common",
         "angle_gpu_info_util",
         "angle_image_util",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "liblog",
-        "libnativewindow",
-        "libvulkan",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
@@ -1672,6 +1511,13 @@ cc_defaults {
         "src/third_party/volk/",
         "third_party/spirv-tools/src/include/",
         "third_party/vulkan-headers/src/include/",
+        "third_party/zlib/",
+        "third_party/zlib/google/",
+    ],
+    shared_libs: [
+        "liblog",
+        "libnativewindow",
+        "libvulkan",
     ],
     srcs: [
         "src/libANGLE/renderer/vulkan/BufferVk.cpp",
@@ -1752,20 +1598,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_glslang_wrapper",
-        "angle_libANGLE_headers",
-        "src_common_vulkan_vulkan",
-        "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
-        "src_libANGLE_renderer_vulkan_angle_vulkan_entry_points",
-        "src_libANGLE_renderer_vulkan_angle_vulkan_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -1781,7 +1614,21 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_compression",
+        "angle_glslang_wrapper",
+        "angle_libANGLE_headers",
+        "src_common_vulkan_angle_vulkan_entry_points",
+        "src_common_vulkan_angle_vulkan_headers",
+        "src_common_vulkan_vulkan",
+        "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
+    ],
 }
 cc_library_static {
     generated_headers: [
@@ -1792,14 +1639,14 @@ cc_library_static {
     static_libs: [
         "angle_common",
     ],
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     srcs: [
         "src/compiler/preprocessor/DiagnosticsBase.cpp",
@@ -1842,15 +1689,7 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_translator_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -1866,7 +1705,15 @@ cc_library_static {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_translator_headers",
+    ],
 }
 cc_library_static {
     generated_headers: [
@@ -1878,14 +1725,14 @@ cc_library_static {
         "angle_common",
         "angle_preprocessor",
     ],
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     srcs: [
         "src/compiler/translator/BuiltInFunctionEmulator.cpp",
@@ -2031,16 +1878,7 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-        "angle_translator_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2056,7 +1894,16 @@ cc_library_static {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+        "angle_translator_headers",
+    ],
 }
 cc_defaults {
     name: "angle_translator_headers",
@@ -2093,15 +1940,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2117,7 +1956,15 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+    ],
 }
 cc_defaults {
     generated_headers: [
@@ -2128,15 +1975,15 @@ cc_defaults {
     static_libs: [
         "angle_common",
     ],
-    shared_libs: [
-        "liblog",
-        "libnativewindow",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
+        "libnativewindow",
     ],
     srcs: [
         "src/libANGLE/Overlay.cpp",
@@ -2173,15 +2020,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_translator_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2197,7 +2036,15 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_translator_headers",
+    ],
 }
 cc_defaults {
     generated_headers: [
@@ -2208,14 +2055,14 @@ cc_defaults {
     static_libs: [
         "angle_common",
     ],
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     sdk_version: "28",
     cflags: [
@@ -2246,11 +2093,6 @@ cc_defaults {
         "-Wno-unused-parameter",
     ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2266,6 +2108,11 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
 }
 cc_library_static {
@@ -2277,14 +2124,14 @@ cc_library_static {
     static_libs: [
         "angle_common",
     ],
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     srcs: [
         "src/image_util/copyimage.cpp",
@@ -2320,15 +2167,7 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_image_util_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2344,16 +2183,20 @@ cc_library_static {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_image_util_headers",
+    ],
 }
 cc_defaults {
-    name: "third_party_vulkan_headers_src_vulkan_headers",
     stl: "libc++_static",
-    local_include_dirs: [
-        "",
-        "third_party/vulkan-headers/src/include/",
-    ],
     sdk_version: "28",
+    name: "third_party_vulkan_headers_src_vulkan_headers",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
@@ -2382,6 +2225,10 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    local_include_dirs: [
+        "",
+        "third_party/vulkan-headers/src/include/",
+    ],
 }
 cc_library_static {
     generated_headers: [
@@ -2392,15 +2239,15 @@ cc_library_static {
     static_libs: [
         "angle_common",
     ],
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
         "third_party/vulkan-headers/src/include/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     srcs: [
         "src/gpu_info_util/SystemInfo.cpp",
@@ -2440,15 +2287,7 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "third_party_vulkan_headers_src_vulkan_headers",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2464,7 +2303,482 @@ cc_library_static {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "third_party_vulkan_headers_src_vulkan_headers",
+    ],
+}
+cc_defaults {
+    name: "third_party_zlib_zlib_x86_simd",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DZLIB_IMPLEMENTATION",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            srcs: [
+                "third_party/zlib/crc_folding.c",
+                "third_party/zlib/fill_window_sse.c",
+            ],
+            cflags: [
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-mpclmul",
+            ],
+        },
+        x86: {
+            srcs: [
+                "third_party/zlib/crc_folding.c",
+                "third_party/zlib/fill_window_sse.c",
+            ],
+            cflags: [
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-mpclmul",
+            ],
+        },
+    },
+}
+cc_defaults {
+    name: "third_party_zlib_zlib_inflate_chunk_simd",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/zlib/",
+    ],
+    srcs: [
+        "third_party/zlib/contrib/optimizations/inffast_chunk.c",
+        "third_party/zlib/contrib/optimizations/inflate.c",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DZLIB_IMPLEMENTATION",
+        "-D_GNU_SOURCE",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-misleading-indentation",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DINFLATE_CHUNK_READ_64LE",
+                "-DINFLATE_CHUNK_SIMD_SSE2",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DINFLATE_CHUNK_SIMD_SSE2",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DINFLATE_CHUNK_SIMD_NEON",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DINFLATE_CHUNK_READ_64LE",
+                "-DINFLATE_CHUNK_SIMD_NEON",
+            ],
+        },
+    },
+}
+cc_defaults {
+    stl: "libc++_static",
+    sdk_version: "28",
+    arch: {
+        arm: {
+            srcs: [
+                "third_party/zlib/crc32_simd.c",
+            ],
+            local_include_dirs: [
+                "",
+                "third_party/zlib/",
+            ],
+            cflags: [
+                "-DANDROID",
+                "-DANDROID_NDK_VERSION_ROLL=r20_1",
+                "-DARMV8_OS_ANDROID",
+                "-DCRC32_ARMV8_CRC32",
+                "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+                "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+                "-DHAVE_SYS_UIO_H",
+                "-DNDEBUG",
+                "-DNVALGRIND",
+                "-DZLIB_IMPLEMENTATION",
+                "-D_FORTIFY_SOURCE=2",
+                "-D_GNU_SOURCE",
+                "-D__STDC_CONSTANT_MACROS",
+                "-D__STDC_FORMAT_MACROS",
+                "-Wno-builtin-assume-aligned-alignment",
+                "-Wno-builtin-macro-redefined",
+                "-Wno-c++11-narrowing",
+                "-Wno-deprecated-copy",
+                "-Wno-final-dtor-non-final-class",
+                "-Wno-ignored-pragma-optimize",
+                "-Wno-implicit-fallthrough",
+                "-Wno-implicit-int-float-conversion",
+                "-Wno-missing-field-initializers",
+                "-Wno-non-c-typedef-for-linkage",
+                "-Wno-undefined-var-template",
+                "-Wno-unknown-warning-option",
+                "-Wno-unneeded-internal-declaration",
+                "-Wno-unused-parameter",
+            ],
+        },
+        arm64: {
+            srcs: [
+                "third_party/zlib/crc32_simd.c",
+            ],
+            local_include_dirs: [
+                "",
+                "third_party/zlib/",
+            ],
+            cflags: [
+                "-DANDROID",
+                "-DANDROID_NDK_VERSION_ROLL=r20_1",
+                "-DARMV8_OS_ANDROID",
+                "-DCRC32_ARMV8_CRC32",
+                "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+                "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+                "-DHAVE_SYS_UIO_H",
+                "-DNDEBUG",
+                "-DNVALGRIND",
+                "-DZLIB_IMPLEMENTATION",
+                "-D_FORTIFY_SOURCE=2",
+                "-D_GNU_SOURCE",
+                "-D__STDC_CONSTANT_MACROS",
+                "-D__STDC_FORMAT_MACROS",
+                "-Wno-builtin-assume-aligned-alignment",
+                "-Wno-builtin-macro-redefined",
+                "-Wno-c++11-narrowing",
+                "-Wno-deprecated-copy",
+                "-Wno-final-dtor-non-final-class",
+                "-Wno-ignored-pragma-optimize",
+                "-Wno-implicit-fallthrough",
+                "-Wno-implicit-int-float-conversion",
+                "-Wno-missing-field-initializers",
+                "-Wno-non-c-typedef-for-linkage",
+                "-Wno-undefined-var-template",
+                "-Wno-unknown-warning-option",
+                "-Wno-unneeded-internal-declaration",
+                "-Wno-unused-parameter",
+            ],
+        },
+    },
+    name: "third_party_zlib_zlib_arm_crc32",
+}
+cc_defaults {
+    name: "third_party_zlib_zlib_adler32_simd",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+    ],
+    srcs: [
+        "third_party/zlib/adler32_simd.c",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DZLIB_IMPLEMENTATION",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DADLER32_SIMD_SSSE3",
+                "-DX86_NOT_WINDOWS",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DADLER32_SIMD_SSSE3",
+                "-DX86_NOT_WINDOWS",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DADLER32_SIMD_NEON",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DADLER32_SIMD_NEON",
+            ],
+        },
+    },
+}
+cc_defaults {
+    name: "third_party_android_ndk_cpu_features",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/android_ndk/sources/android/cpufeatures/",
+    ],
+    srcs: [
+        "third_party/android_ndk/sources/android/cpufeatures/cpu-features.c",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_GNU_SOURCE",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-misleading-indentation",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
+    ],
+}
+cc_library_static {
+    name: "chrome_zlib",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/android_ndk/sources/android/cpufeatures/",
+        "third_party/zlib/",
+    ],
+    srcs: [
+        "third_party/zlib/adler32.c",
+        "third_party/zlib/compress.c",
+        "third_party/zlib/cpu_features.c",
+        "third_party/zlib/crc32.c",
+        "third_party/zlib/deflate.c",
+        "third_party/zlib/gzclose.c",
+        "third_party/zlib/gzlib.c",
+        "third_party/zlib/gzread.c",
+        "third_party/zlib/gzwrite.c",
+        "third_party/zlib/infback.c",
+        "third_party/zlib/inffast.c",
+        "third_party/zlib/inftrees.c",
+        "third_party/zlib/trees.c",
+        "third_party/zlib/uncompr.c",
+        "third_party/zlib/zutil.c",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-DZLIB_IMPLEMENTATION",
+        "-D_GNU_SOURCE",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-misleading-indentation",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-DADLER32_SIMD_SSSE3",
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-DINFLATE_CHUNK_READ_64LE",
+                "-DINFLATE_CHUNK_SIMD_SSE2",
+                "-DX86_NOT_WINDOWS",
+                "-Wno-incompatible-pointer-types",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-DADLER32_SIMD_SSSE3",
+                "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-DINFLATE_CHUNK_SIMD_SSE2",
+                "-DX86_NOT_WINDOWS",
+                "-Wno-incompatible-pointer-types",
+            ],
+        },
+        arm: {
+            cflags: [
+                "-DADLER32_SIMD_NEON",
+                "-DARMV8_OS_ANDROID",
+                "-DCRC32_ARMV8_CRC32",
+                "-DINFLATE_CHUNK_SIMD_NEON",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DADLER32_SIMD_NEON",
+                "-DARMV8_OS_ANDROID",
+                "-DCRC32_ARMV8_CRC32",
+                "-DINFLATE_CHUNK_READ_64LE",
+                "-DINFLATE_CHUNK_SIMD_NEON",
+            ],
+        },
+    },
+    defaults: [
+        "third_party_android_ndk_cpu_features",
+        "third_party_zlib_zlib_adler32_simd",
+        "third_party_zlib_zlib_arm_crc32",
+        "third_party_zlib_zlib_crc32_simd",
+        "third_party_zlib_zlib_inflate_chunk_simd",
+        "third_party_zlib_zlib_x86_simd",
+    ],
+}
+cc_library_static {
+    name: "third_party_zlib_google_compression_utils_portable",
+    stl: "libc++_static",
+    static_libs: [
+        "chrome_zlib",
+    ],
+    local_include_dirs: [
+        "",
+        "third_party/zlib/",
+    ],
+    srcs: [
+        "third_party/zlib/google/compression_utils_portable.cc",
+    ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+}
+cc_defaults {
+    stl: "libc++_static",
+    static_libs: [
+        "chrome_zlib",
+        "third_party_zlib_google_compression_utils_portable",
+    ],
+    sdk_version: "28",
+    name: "angle_compression",
+    cflags: [
+        "-Wno-unknown-warning-option",
+    ],
 }
 cc_defaults {
     name: "angle_xxhash",
@@ -2505,11 +2819,6 @@ cc_defaults {
         "-Wno-unused-parameter",
     ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2523,6 +2832,11 @@ cc_defaults {
         arm: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+            ],
+        },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
             ],
         },
     },
@@ -2568,11 +2882,6 @@ cc_defaults {
         "-Wno-unused-parameter",
     ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2588,6 +2897,11 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
 }
 cc_library_static {
@@ -2596,14 +2910,14 @@ cc_library_static {
     ],
     name: "angle_common",
     stl: "libc++_static",
-    shared_libs: [
-        "liblog",
-    ],
     local_include_dirs: [
         "",
         "include/",
         "src/",
         "src/common/third_party/base/",
+    ],
+    shared_libs: [
+        "liblog",
     ],
     srcs: [
         "src/common/Float16ToFloat32.cpp",
@@ -2654,18 +2968,7 @@ cc_library_static {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-        "angle_system_utils",
-        "angle_version",
-        "angle_xxhash",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2681,11 +2984,23 @@ cc_library_static {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+        "angle_system_utils",
+        "angle_version",
+        "angle_xxhash",
+    ],
 }
 cc_defaults {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -2708,14 +3023,10 @@ cc_defaults {
         "angle_image_util",
         "angle_preprocessor",
         "angle_translator",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "liblog",
-        "libnativewindow",
-        "libvulkan",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
@@ -2725,6 +3036,13 @@ cc_defaults {
         "src/third_party/khronos/",
         "src/third_party/volk/",
         "third_party/vulkan-headers/src/include/",
+        "third_party/zlib/",
+        "third_party/zlib/google/",
+    ],
+    shared_libs: [
+        "liblog",
+        "libnativewindow",
+        "libvulkan",
     ],
     srcs: [
         "src/libANGLE/AttributeMap.cpp",
@@ -2784,6 +3102,7 @@ cc_defaults {
         "src/libANGLE/formatutils.cpp",
         "src/libANGLE/queryconversions.cpp",
         "src/libANGLE/queryutils.cpp",
+        "src/libANGLE/renderer/BufferImpl.cpp",
         "src/libANGLE/renderer/ContextImpl.cpp",
         "src/libANGLE/renderer/DeviceImpl.cpp",
         "src/libANGLE/renderer/DisplayImpl.cpp",
@@ -2902,18 +3221,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-        "angle_libANGLE_headers",
-        "angle_version",
-        "src_libANGLE_renderer_vulkan_angle_vulkan_backend",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -2929,11 +3237,24 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_compression",
+        "angle_includes",
+        "angle_libANGLE_headers",
+        "angle_version",
+        "src_libANGLE_renderer_vulkan_angle_vulkan_backend",
+    ],
 }
 cc_defaults {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -2956,14 +3277,10 @@ cc_defaults {
         "angle_image_util",
         "angle_preprocessor",
         "angle_translator",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "liblog",
-        "libnativewindow",
-        "libvulkan",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
@@ -2972,6 +3289,11 @@ cc_defaults {
         "src/common/third_party/base/",
         "src/third_party/volk/",
         "third_party/vulkan-headers/src/include/",
+    ],
+    shared_libs: [
+        "liblog",
+        "libnativewindow",
+        "libvulkan",
     ],
     srcs: [
         "src/libANGLE/FrameCapture_mock.cpp",
@@ -3012,15 +3334,7 @@ cc_defaults {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_libANGLE_base",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -3036,7 +3350,15 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_libANGLE_base",
+    ],
 }
 cc_defaults {
     name: "angle_includes",
@@ -3074,11 +3396,6 @@ cc_defaults {
         "-Wno-unused-parameter",
     ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -3094,6 +3411,11 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
 }
 cc_genrule {
@@ -3102,6 +3424,9 @@ cc_genrule {
         "src/commit_id.py",
     ],
     cmd: "$(location) gen $(location commit.h)",
+    srcs: [
+        ".git/HEAD",
+    ],
     sdk_version: "28",
     out: [
         "commit.h",
@@ -3147,11 +3472,6 @@ cc_defaults {
         "-Wno-unused-parameter",
     ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -3167,11 +3487,17 @@ cc_defaults {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
 }
 cc_library_shared {
     generated_headers: [
         "angle_commit_id",
+        "third_party_glslang_src_glslang_build_info",
         "third_party_spirv_tools_src_spvtools_core_enums_unified1",
         "third_party_spirv_tools_src_spvtools_core_tables_unified1",
         "third_party_spirv_tools_src_spvtools_generators_inc",
@@ -3194,16 +3520,10 @@ cc_library_shared {
         "angle_image_util",
         "angle_preprocessor",
         "angle_translator",
+        "chrome_zlib",
         "third_party_spirv_tools_src_spvtools",
-        "third_party_spirv_tools_src_spvtools_opt",
         "third_party_spirv_tools_src_spvtools_val",
-    ],
-    shared_libs: [
-        "libdl",
-        "liblog",
-        "libm",
-        "libnativewindow",
-        "libvulkan",
+        "third_party_zlib_google_compression_utils_portable",
     ],
     local_include_dirs: [
         "",
@@ -3212,6 +3532,13 @@ cc_library_shared {
         "src/common/third_party/base/",
         "src/third_party/volk/",
         "third_party/vulkan-headers/src/include/",
+    ],
+    shared_libs: [
+        "libdl",
+        "liblog",
+        "libm",
+        "libnativewindow",
+        "libvulkan",
     ],
     srcs: [
         "src/libGLESv2/entry_points_egl.cpp",
@@ -3269,17 +3596,7 @@ cc_library_shared {
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    defaults: [
-        "angle_includes",
-        "angle_libANGLE",
-        "angle_version",
-    ],
     arch: {
-        arm64: {
-            cflags: [
-                "-DANGLE_IS_64_BIT_CPU",
-            ],
-        },
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
@@ -3295,7 +3612,17 @@ cc_library_shared {
                 "-DANGLE_IS_32_BIT_CPU",
             ],
         },
+        arm64: {
+            cflags: [
+                "-DANGLE_IS_64_BIT_CPU",
+            ],
+        },
     },
+    defaults: [
+        "angle_includes",
+        "angle_libANGLE",
+        "angle_version",
+    ],
 }
 filegroup {
     srcs: [
