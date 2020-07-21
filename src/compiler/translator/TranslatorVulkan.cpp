@@ -196,6 +196,19 @@ constexpr size_t kNumComputeDriverUniforms                                      
 constexpr std::array<const char *, kNumComputeDriverUniforms> kComputeDriverUniformNames = {
     {kAcbBufferOffsets}};
 
+size_t FindFieldIndex(const TFieldList &fieldList, const char *fieldName)
+{
+    for (size_t fieldIndex = 0; fieldIndex < fieldList.size(); ++fieldIndex)
+    {
+        if (strcmp(fieldList[fieldIndex]->name().data(), fieldName) == 0)
+        {
+            return fieldIndex;
+        }
+    }
+    UNREACHABLE();
+    return 0;
+}
+
 TIntermBinary *CreateDriverUniformRef(const TVariable *driverUniforms, const char *fieldName)
 {
     size_t fieldIndex =
@@ -376,9 +389,7 @@ ANGLE_NO_DISCARD bool AppendVertexShaderTransformFeedbackOutputToMain(TCompiler 
 // variable.
 //
 // There are Graphics and Compute variations as they require different uniforms.
-const TVariable *AddGraphicsDriverUniformsToShader(TIntermBlock *root,
-                                                   TSymbolTable *symbolTable,
-                                                   const std::vector<TField *> &additionalFields)
+const TVariable *AddGraphicsDriverUniformsToShader(TIntermBlock *root, TSymbolTable *symbolTable)
 {
     // Init the depth range type.
     TFieldList *depthRangeParamsFields = new TFieldList();
@@ -433,10 +444,6 @@ const TVariable *AddGraphicsDriverUniformsToShader(TIntermBlock *root,
                        SymbolType::AngleInternal);
         driverFieldList->push_back(driverUniformField);
     }
-
-    // Back-end specific fields
-    driverFieldList->insert(driverFieldList->end(), additionalFields.begin(),
-                            additionalFields.end());
 
     // Define a driver uniform block "ANGLEUniformBlock" with instance name "ANGLEUniforms".
     return DeclareInterfaceBlock(
@@ -858,10 +865,7 @@ bool TranslatorVulkan::translateImpl(TIntermBlock *root,
     }
     else
     {
-        std::vector<TField *> additionalFields;
-        createAdditionalGraphicsDriverUniformFields(&additionalFields);
-        driverUniforms =
-            AddGraphicsDriverUniformsToShader(root, &getSymbolTable(), additionalFields);
+        driverUniforms = AddGraphicsDriverUniformsToShader(root, &getSymbolTable());
     }
 
     if (atomicCounterCount > 0)
@@ -992,9 +996,9 @@ bool TranslatorVulkan::translateImpl(TIntermBlock *root,
 
         {
             TIntermBinary *flipXY       = CreateDriverUniformRef(driverUniforms, kFlipXY);
-            TIntermBinary *fragRotation = CreateDriverUniformRef(driverUniforms, kFragRotation);
-            if (!RewriteDfdy(this, root, getSymbolTable(), getShaderVersion(), flipXY,
-                             fragRotation))
+            TVector<int> swizzleOffsetY = {1};
+            TIntermSwizzle *flipY       = new TIntermSwizzle(flipXY, swizzleOffsetY);
+            if (!RewriteDfdy(this, root, getSymbolTable(), getShaderVersion(), flipY))
             {
                 return false;
             }

@@ -309,43 +309,26 @@ struct TSymbolValidater
         TIntermSymbol* base = ent1.symbol;
         const TType& type = ent1.symbol->getType();
         const TString& name = entKey.first;
-        EShLanguage stage = ent1.stage;
         TString mangleName1, mangleName2;
+        type.appendMangledName(mangleName1);
+        EShLanguage stage = ent1.stage;
         if (currentStage != stage) {
             preStage = currentStage;
             currentStage = stage;
             nextStage = EShLangCount;
             for (int i = currentStage + 1; i < EShLangCount; i++) {
-                if (inVarMaps[i] != nullptr) {
+                if (inVarMaps[i] != nullptr)
                     nextStage = static_cast<EShLanguage>(i);
-                    break;
-                }
             }
         }
-
-        if (type.getQualifier().isArrayedIo(stage)) {
-            TType subType(type, 0);
-            subType.appendMangledName(mangleName1);
-        } else {
-            type.appendMangledName(mangleName1);
-        }
-
         if (base->getQualifier().storage == EvqVaryingIn) {
             // validate stage in;
             if (preStage == EShLangCount)
                 return;
-            if (name == "gl_PerVertex")
-                return;
             if (outVarMaps[preStage] != nullptr) {
                 auto ent2 = outVarMaps[preStage]->find(name);
                 if (ent2 != outVarMaps[preStage]->end()) {
-                    if (ent2->second.symbol->getType().getQualifier().isArrayedIo(preStage)) {
-                        TType subType(ent2->second.symbol->getType(), 0);
-                        subType.appendMangledName(mangleName2);
-                    }
-                    else {
-                        ent2->second.symbol->getType().appendMangledName(mangleName2);
-                    }
+                    ent2->second.symbol->getType().appendMangledName(mangleName2);
                     if (mangleName1 == mangleName2)
                         return;
                     else {
@@ -360,18 +343,10 @@ struct TSymbolValidater
             // validate stage out;
             if (nextStage == EShLangCount)
                 return;
-            if (name == "gl_PerVertex")
-                return;
             if (outVarMaps[nextStage] != nullptr) {
                 auto ent2 = inVarMaps[nextStage]->find(name);
                 if (ent2 != inVarMaps[nextStage]->end()) {
-                    if (ent2->second.symbol->getType().getQualifier().isArrayedIo(nextStage)) {
-                        TType subType(ent2->second.symbol->getType(), 0);
-                        subType.appendMangledName(mangleName2);
-                    }
-                    else {
-                        ent2->second.symbol->getType().appendMangledName(mangleName2);
-                    }
+                    ent2->second.symbol->getType().appendMangledName(mangleName2);
                     if (mangleName1 == mangleName2)
                         return;
                     else {

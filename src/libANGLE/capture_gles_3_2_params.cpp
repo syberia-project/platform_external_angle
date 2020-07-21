@@ -250,8 +250,7 @@ void CaptureGetSamplerParameterIiv_params(const State &glState,
                                           GLint *params,
                                           ParamCapture *paramsParam)
 {
-    // page 458 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    paramsParam->readBufferSizeBytes = sizeof(GLint) * 4;
+    UNIMPLEMENTED();
 }
 
 void CaptureGetSamplerParameterIuiv_params(const State &glState,
@@ -261,8 +260,7 @@ void CaptureGetSamplerParameterIuiv_params(const State &glState,
                                            GLuint *params,
                                            ParamCapture *paramsParam)
 {
-    // page 458 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    paramsParam->readBufferSizeBytes = sizeof(GLuint) * 4;
+    UNIMPLEMENTED();
 }
 
 void CaptureGetTexParameterIiv_params(const State &glState,
@@ -272,9 +270,7 @@ void CaptureGetTexParameterIiv_params(const State &glState,
                                       GLint *params,
                                       ParamCapture *paramsParam)
 {
-    // page 192 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    // TEXTURE_BORDER_COLOR: 4 floats, ints, uints
-    paramsParam->readBufferSizeBytes = sizeof(GLint) * 4;
+    UNIMPLEMENTED();
 }
 
 void CaptureGetTexParameterIuiv_params(const State &glState,
@@ -284,9 +280,7 @@ void CaptureGetTexParameterIuiv_params(const State &glState,
                                        GLuint *params,
                                        ParamCapture *paramsParam)
 {
-    // page 192 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    // TEXTURE_BORDER_COLOR: 4 floats, ints, uints
-    paramsParam->readBufferSizeBytes = sizeof(GLuint) * 4;
+    UNIMPLEMENTED();
 }
 
 void CaptureGetnUniformfv_params(const State &glState,
@@ -386,7 +380,7 @@ void CaptureSamplerParameterIiv_param(const State &glState,
                                       const GLint *param,
                                       ParamCapture *paramParam)
 {
-    CaptureTextureAndSamplerParameter_params<GLint>(pname, param, paramParam);
+    UNIMPLEMENTED();
 }
 
 void CaptureSamplerParameterIuiv_param(const State &glState,
@@ -396,7 +390,7 @@ void CaptureSamplerParameterIuiv_param(const State &glState,
                                        const GLuint *param,
                                        ParamCapture *paramParam)
 {
-    CaptureTextureAndSamplerParameter_params<GLuint>(pname, param, paramParam);
+    UNIMPLEMENTED();
 }
 
 void CaptureTexParameterIiv_params(const State &glState,
@@ -406,7 +400,7 @@ void CaptureTexParameterIiv_params(const State &glState,
                                    const GLint *params,
                                    ParamCapture *paramParam)
 {
-    CaptureTextureAndSamplerParameter_params<GLint>(pname, params, paramParam);
+    UNIMPLEMENTED();
 }
 
 void CaptureTexParameterIuiv_params(const State &glState,
@@ -416,7 +410,7 @@ void CaptureTexParameterIuiv_params(const State &glState,
                                     const GLuint *params,
                                     ParamCapture *paramParam)
 {
-    CaptureTextureAndSamplerParameter_params<GLuint>(pname, params, paramParam);
+    UNIMPLEMENTED();
 }
 
 }  // namespace gl

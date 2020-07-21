@@ -205,7 +205,7 @@ void main()
     // Set the viewport
     glViewport(0, 0, getWindow()->getWidth(), getWindow()->getHeight());
 
-    if (params.surfaceType == SurfaceType::Offscreen)
+    if (params.offscreen)
     {
         CreateColorFBO(getWindow()->getWidth(), getWindow()->getHeight(), &mFBOTexture, &mFBO);
     }

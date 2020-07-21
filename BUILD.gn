@@ -98,12 +98,6 @@ config("internal_config") {
     defines += [ "ANGLE_IS_32_BIT_CPU" ]
   }
 
-  if (is_win) {
-    defines += [ "ANGLE_IS_WIN" ]
-  } else if (is_linux) {
-    defines += [ "ANGLE_IS_LINUX" ]
-  }
-
   if (angle_enable_trace) {
     defines += [ "ANGLE_ENABLE_DEBUG_TRACE=1" ]
   }
@@ -147,7 +141,6 @@ config("extra_warnings") {
       "-Wfloat-conversion",
       "-Winconsistent-missing-destructor-override",
       "-Wmissing-field-initializers",
-      "-Wnewline-eof",
       "-Wnon-virtual-dtor",
       "-Wredundant-parens",
       "-Wshadow-field",
@@ -347,7 +340,8 @@ angle_static_library("angle_gpu_info_util") {
 
   if (is_fuchsia) {
     sources += libangle_gpu_info_util_fuchsia_sources
-    deps += [ "$angle_root/src/common/vulkan:angle_vulkan_entry_points" ]
+    deps +=
+        [ "$angle_root/src/libANGLE/renderer/vulkan:angle_vulkan_entry_points" ]
   }
 
   if (is_win) {
@@ -381,7 +375,7 @@ angle_static_library("angle_gpu_info_util") {
 
   if (is_mac) {
     sources += libangle_gpu_info_util_mac_sources
-    frameworks = [
+    libs += [
       "IOKit.framework",
       "CoreFoundation.framework",
       "CoreGraphics.framework",
@@ -510,9 +504,6 @@ config("angle_backend_config") {
   if (angle_enable_null) {
     defines += [ "ANGLE_ENABLE_NULL" ]
   }
-  if (angle_delegate_workers) {
-    defines += [ "ANGLE_DELEGATE_WORKERS" ]
-  }
 
   configs = []
 
@@ -578,7 +569,7 @@ if (angle_enable_vulkan || angle_enable_metal) {
     deps = [
       ":libANGLE_headers",
       "${angle_glslang_dir}:glslang_default_resource_limits_sources",
-      "${angle_glslang_dir}:glslang_lib_sources",
+      "${angle_glslang_dir}:glslang_sources",
       "${angle_spirv_headers_dir}:spv_headers",
       "${angle_spirv_tools_dir}:spvtools_headers",
     ]
@@ -603,7 +594,6 @@ angle_source_set("libANGLE_base") {
     ":translator",
   ]
   deps = [
-    ":angle_compression",
     ":angle_image_util",
     ":includes",
   ]
@@ -678,7 +668,7 @@ angle_source_set("libANGLE_base") {
     }
     if (is_mac) {
       sources += libangle_gl_cgl_sources
-      frameworks = [
+      libs += [
         "Cocoa.framework",
         "IOSurface.framework",
         "OpenGL.framework",
@@ -696,9 +686,9 @@ angle_source_set("libANGLE_base") {
     }
     if (ozone_platform_gbm) {
       configs += [ ":libdrm" ]
-      defines += [ "ANGLE_USE_GBM" ]
+      defines += [ "ANGLE_USE_OZONE" ]
       deps += [ "//third_party/minigbm" ]
-      sources += libangle_gl_gbm_sources
+      sources += libangle_gl_ozone_sources
     }
   }
 
@@ -913,14 +903,6 @@ angle_static_library("libGLESv2_static") {
   public_deps = [ ":libANGLE" ]
 }
 
-angle_static_library("libGLESv2_with_capture_static") {
-  sources = libglesv2_sources
-  configs += [ ":debug_annotations_config" ]
-  public_configs += [ ":angle_static" ]
-  deps = [ ":includes" ]
-  public_deps = [ ":libANGLE_with_capture" ]
-}
-
 angle_shared_library("libGLESv1_CM") {
   sources = libglesv1_cm_sources
   output_name = "libGLESv1_CM${angle_libs_suffix}"
@@ -1001,30 +983,17 @@ angle_shared_library("libEGL") {
 
 angle_static_library("libEGL_static") {
   sources = libegl_sources
+
   configs += [
     ":debug_annotations_config",
     ":library_name_config",
   ]
+
   public_configs += [ ":angle_static" ]
+
   deps = [
     ":includes",
     ":libGLESv2_static",
-  ]
-}
-
-angle_static_library("libEGL_with_capture_static") {
-  sources = libegl_sources
-
-  configs += [
-    ":debug_annotations_config",
-    ":library_name_config",
-  ]
-
-  public_configs += [ ":angle_static" ]
-
-  deps = [
-    ":includes",
-    ":libGLESv2_with_capture_static",
   ]
 }
 

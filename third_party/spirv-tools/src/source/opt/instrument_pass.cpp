@@ -174,9 +174,7 @@ void InstrumentPass::GenStageStreamWriteCode(uint32_t stage_idx,
           context()->GetBuiltinInputVarId(SpvBuiltInInstanceIndex),
           kInstVertOutInstanceIndex, base_offset_id, builder);
     } break;
-    case SpvExecutionModelGLCompute:
-    case SpvExecutionModelTaskNV:
-    case SpvExecutionModelMeshNV: {
+    case SpvExecutionModelGLCompute: {
       // Load and store GlobalInvocationId.
       uint32_t load_id = GenVarLoad(
           context()->GetBuiltinInputVarId(SpvBuiltInGlobalInvocationId),
@@ -916,7 +914,6 @@ bool InstrumentPass::InstProcessEntryPointCallTree(InstProcessFunction& pfn) {
       stage != SpvExecutionModelGLCompute &&
       stage != SpvExecutionModelTessellationControl &&
       stage != SpvExecutionModelTessellationEvaluation &&
-      stage != SpvExecutionModelTaskNV && stage != SpvExecutionModelMeshNV &&
       stage != SpvExecutionModelRayGenerationNV &&
       stage != SpvExecutionModelIntersectionNV &&
       stage != SpvExecutionModelAnyHitNV &&

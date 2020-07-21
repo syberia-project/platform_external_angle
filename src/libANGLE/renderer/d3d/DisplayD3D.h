@@ -16,9 +16,6 @@
 
 namespace rx
 {
-class ShareGroupD3D : public ShareGroupImpl
-{};
-
 class DisplayD3D : public DisplayImpl, public d3d::Context
 {
   public:
@@ -59,8 +56,6 @@ class DisplayD3D : public DisplayImpl, public d3d::Context
                                                          EGLenum target,
                                                          EGLClientBuffer buffer,
                                                          const egl::AttributeMap &attribs) override;
-
-    ShareGroupImpl *createShareGroup() override;
 
     egl::Error makeCurrent(egl::Surface *drawSurface,
                            egl::Surface *readSurface,

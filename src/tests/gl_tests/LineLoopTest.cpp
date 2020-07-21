@@ -286,9 +286,6 @@ class LineLoopIndirectTest : public LineLoopTest
 
 TEST_P(LineLoopIndirectTest, UByteIndexIndirectBuffer)
 {
-    // Old drivers buggy with optimized ConvertIndexIndirectLineLoop shader.
-    // http://anglebug.com/4720
-    ANGLE_SKIP_TEST_IF(IsAMD() && IsWindows() && IsVulkan());
 
     // Disable D3D11 SDK Layers warnings checks, see ANGLE issue 667 for details
     ignoreD3D11SDKLayersWarnings();
@@ -301,9 +298,6 @@ TEST_P(LineLoopIndirectTest, UByteIndexIndirectBuffer)
 
 TEST_P(LineLoopIndirectTest, UShortIndexIndirectBuffer)
 {
-    // Old drivers buggy with optimized ConvertIndexIndirectLineLoop shader.
-    // http://anglebug.com/4720
-    ANGLE_SKIP_TEST_IF(IsAMD() && IsWindows() && IsVulkan());
 
     // Disable D3D11 SDK Layers warnings checks, see ANGLE issue 667 for details
     ignoreD3D11SDKLayersWarnings();

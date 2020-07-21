@@ -29,7 +29,7 @@
 #    include "egluPlatform.hpp"
 #endif
 
-#include "platform/PlatformMethods.h"
+#include "platform/Platform.h"
 #include "tcuANGLENativeDisplayFactory.h"
 
 namespace tcu

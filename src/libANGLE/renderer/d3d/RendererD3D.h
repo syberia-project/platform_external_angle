@@ -141,7 +141,6 @@ class BufferFactoryD3D : angle::NonCopyable
                                                  const gl::VertexBinding &binding,
                                                  size_t count,
                                                  GLsizei instances,
-                                                 GLuint baseInstance,
                                                  unsigned int *bytesRequiredOut) const = 0;
 };
 

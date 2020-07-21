@@ -371,8 +371,6 @@ bool X11Window::initialize(const std::string &name, int width, int height)
     return true;
 }
 
-void X11Window::disableErrorMessageDialog() {}
-
 void X11Window::destroy()
 {
     if (mWindow)
@@ -415,12 +413,6 @@ void X11Window::messageLoop()
 void X11Window::setMousePosition(int x, int y)
 {
     XWarpPointer(mDisplay, None, mWindow, 0, 0, 0, 0, x, y);
-}
-
-bool X11Window::setOrientation(int width, int height)
-{
-    UNIMPLEMENTED();
-    return false;
 }
 
 bool X11Window::setPosition(int x, int y)

@@ -18,8 +18,10 @@ namespace spvtools {
 namespace fuzz {
 
 TransformationContext::TransformationContext(
-    FactManager* fact_manager, spv_validator_options validator_options)
-    : fact_manager_(fact_manager), validator_options_(validator_options) {}
+    FactManager* transformation_context,
+    spv_validator_options validator_options)
+    : fact_manager_(transformation_context),
+      validator_options_(validator_options) {}
 
 TransformationContext::~TransformationContext() = default;
 

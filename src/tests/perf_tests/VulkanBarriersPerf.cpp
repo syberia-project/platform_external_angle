@@ -21,19 +21,18 @@ constexpr unsigned int kIterationsPerStep = 10;
 
 struct VulkanBarriersPerfParams final : public RenderTestParams
 {
-    VulkanBarriersPerfParams(bool bufferCopy, bool largeTransfers, bool slowFS)
+    VulkanBarriersPerfParams(bool largeTransfers, bool slowFS)
     {
         iterationsPerStep = kIterationsPerStep;
 
         // Common default parameters
         eglParameters = egl_platform::VULKAN();
-        majorVersion  = 3;
+        majorVersion  = 2;
         minorVersion  = 0;
         windowWidth   = 256;
         windowHeight  = 256;
         trackGpuTime  = true;
 
-        doBufferCopy          = bufferCopy;
         doLargeTransfers      = largeTransfers;
         doSlowFragmentShaders = slowFS;
     }
@@ -42,9 +41,7 @@ struct VulkanBarriersPerfParams final : public RenderTestParams
 
     // Static parameters
     static constexpr int kImageSizes[3] = {256, 512, 4096};
-    static constexpr int kBufferSize    = 4096 * 4096;
 
-    bool doBufferCopy;
     bool doLargeTransfers;
     bool doSlowFragmentShaders;
 };
@@ -69,7 +66,6 @@ class VulkanBarriersPerfBenchmark : public ANGLERenderTest,
 
   private:
     void createTexture(uint32_t textureIndex, uint32_t sizeIndex, bool compressed);
-    void createUniformBuffer();
     void createFramebuffer(uint32_t fboIndex, uint32_t textureIndex, uint32_t sizeIndex);
     void createResources();
 
@@ -86,9 +82,6 @@ class VulkanBarriersPerfBenchmark : public ANGLERenderTest,
     // Texture handles
     GLTexture mTextures[4];
 
-    // Uniform buffer handles
-    GLBuffer mUniformBuffers[2];
-
     // Framebuffer handles
     GLFramebuffer mFbos[2];
 
@@ -98,9 +91,6 @@ class VulkanBarriersPerfBenchmark : public ANGLERenderTest,
 
     static constexpr size_t kSmallFboIndex = 0;
     static constexpr size_t kLargeFboIndex = 1;
-
-    static constexpr size_t kUniformBuffer1Index = 0;
-    static constexpr size_t kUniformBuffer2Index = 1;
 
     static constexpr size_t kSmallTextureIndex     = 0;
     static constexpr size_t kLargeTextureIndex     = 1;
@@ -118,10 +108,6 @@ std::string VulkanBarriersPerfParams::story() const
 
     sout << RenderTestParams::story();
 
-    if (doBufferCopy)
-    {
-        sout << "_buffer_copy";
-    }
     if (doLargeTransfers)
     {
         sout << "_transfer";
@@ -139,13 +125,7 @@ VulkanBarriersPerfBenchmark::VulkanBarriersPerfBenchmark()
       mPositionLoc(-1),
       mTexCoordLoc(-1),
       mSamplerLoc(-1)
-{
-    // Fails on Windows7 NVIDIA Vulkan, presumably due to old drivers. http://crbug.com/1096510
-    if (IsNVIDIA() && IsWindows7())
-    {
-        mSkipTest = true;
-    }
-}
+{}
 
 constexpr char kVS[] = R"(attribute vec4 a_position;
 attribute vec2 a_texCoord;
@@ -196,17 +176,6 @@ void VulkanBarriersPerfBenchmark::createTexture(uint32_t textureIndex,
     // Disable mipmapping
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-}
-
-void VulkanBarriersPerfBenchmark::createUniformBuffer()
-{
-    const auto &params = GetParam();
-
-    glBindBuffer(GL_UNIFORM_BUFFER, mUniformBuffers[kUniformBuffer1Index]);
-    glBufferData(GL_UNIFORM_BUFFER, params.kBufferSize, nullptr, GL_DYNAMIC_COPY);
-    glBindBuffer(GL_UNIFORM_BUFFER, mUniformBuffers[kUniformBuffer2Index]);
-    glBufferData(GL_UNIFORM_BUFFER, params.kBufferSize, nullptr, GL_DYNAMIC_COPY);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
 void VulkanBarriersPerfBenchmark::createFramebuffer(uint32_t fboIndex,
@@ -260,7 +229,6 @@ void VulkanBarriersPerfBenchmark::createResources()
     // transfers.
     createFramebuffer(kSmallFboIndex, kSmallTextureIndex, kSmallSizeIndex);
     createFramebuffer(kLargeFboIndex, kLargeTextureIndex, kLargeSizeIndex);
-    createUniformBuffer();
 
     if (params.doLargeTransfers)
     {
@@ -308,10 +276,7 @@ void VulkanBarriersPerfBenchmark::drawBenchmark()
      * - Alternately clear and draw from fbo 1 into fbo 2 and back.  This would use the color
      * attachment and shader read-only layouts in the fragment shader and color attachment stages.
      *
-     * - Alternately copy data between the 2 uniform buffers. This would use the transfer layouts
-     * in the transfer stage.
-     *
-     * Once compressed texture copies are supported, alternately copy large chunks of data from
+     * Once compressed texture copies are supported, alternately transfer large chunks of data from
      * texture 1 into texture 2 and back.  This would use the transfer layouts in the transfer
      * stage.
      *
@@ -325,31 +290,30 @@ void VulkanBarriersPerfBenchmark::drawBenchmark()
      * The above operations for example should ideally run on the GPU threads in parallel:
      *
      * + |---draw---||---draw---||---draw---||---draw---||---draw---|
-     * + |----buffer copy----||----buffer copy----||----buffer copy----|
-     * + |-----------texture copy------------||-----------texture copy------------|
+     * + |-----------transfer------------||-----------transfer------------|
      * + |-----dispatch------||------dispatch------||------dispatch------|
      *
      * If barriers are too restrictive, situations like this could happen (draw is blocking
-     * copy):
+     * transfer):
      *
      * + |---draw---||---draw---||---draw---||---draw---||---draw---|
-     * +             |------------copy------------||-----------copy------------|
+     * +             |-----------transfer------------||-----------transfer------------|
      *
-     * Or like this (copy is blocking draw):
+     * Or like this (transfer is blocking draw):
      *
      * + |---draw---|                     |---draw---|                     |---draw---|
-     * + |--------------copy-------------||-------------copy--------------|
+     * + |-----------transfer------------||-----------transfer------------|
      *
-     * Or like this (draw and copy blocking each other):
+     * Or like this (draw and transfer blocking each other):
      *
      * + |---draw---|                                 |---draw---|
-     * +             |------------copy---------------|            |------------copy------------|
+     * +             |-----------transfer------------|            |-----------transfer------------|
      *
      * The idea of doing slow FS calls is to make the second case above slower (by making the draw
      * slower than the transfer):
      *
      * + |------------------draw------------------|                                 |-...draw...-|
-     * + |--------------copy----------------|       |-------------copy-------------|
+     * + |-----------transfer------------|         |-----------transfer------------|
      */
 
     startGpuTimer();
@@ -357,30 +321,18 @@ void VulkanBarriersPerfBenchmark::drawBenchmark()
     {
         bool altEven = iteration % 2 == 0;
 
-        const int fboDestIndex            = altEven ? kLargeFboIndex : kSmallFboIndex;
-        const int fboTexSrcIndex          = altEven ? kSmallTextureIndex : kLargeTextureIndex;
-        const int fboDestSizeIndex        = altEven ? kLargeSizeIndex : kSmallSizeIndex;
-        const int uniformBufferReadIndex  = altEven ? kUniformBuffer1Index : kUniformBuffer2Index;
-        const int uniformBufferWriteIndex = altEven ? kUniformBuffer2Index : kUniformBuffer1Index;
-
-        if (params.doBufferCopy)
-        {
-            // Transfer data between the 2 Uniform buffers
-            glBindBuffer(GL_COPY_READ_BUFFER, mUniformBuffers[uniformBufferReadIndex]);
-            glBindBuffer(GL_COPY_WRITE_BUFFER, mUniformBuffers[uniformBufferWriteIndex]);
-            glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0,
-                                params.kBufferSize);
-        }
-
-        // Bind the framebuffer
-        glBindFramebuffer(GL_FRAMEBUFFER, mFbos[fboDestIndex]);
+        const int fboDestIndex     = altEven ? kLargeFboIndex : kSmallFboIndex;
+        const int fboTexSrcIndex   = altEven ? kSmallTextureIndex : kLargeTextureIndex;
+        const int fboDestSizeIndex = altEven ? kLargeSizeIndex : kSmallSizeIndex;
 
         // Set the viewport
-        glViewport(0, 0, params.kImageSizes[fboDestSizeIndex],
-                   params.kImageSizes[fboDestSizeIndex]);
+        glViewport(0, 0, fboDestSizeIndex, fboDestSizeIndex);
 
         // Clear the color buffer
         glClear(GL_COLOR_BUFFER_BIT);
+
+        // Bind the framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, mFbos[fboDestIndex]);
 
         // Bind the texture
         glActiveTexture(GL_TEXTURE0);
@@ -403,7 +355,6 @@ TEST_P(VulkanBarriersPerfBenchmark, Run)
 }
 
 ANGLE_INSTANTIATE_TEST(VulkanBarriersPerfBenchmark,
-                       VulkanBarriersPerfParams(false, false, false),
-                       VulkanBarriersPerfParams(true, false, false),
-                       VulkanBarriersPerfParams(false, true, false),
-                       VulkanBarriersPerfParams(false, true, true));
+                       VulkanBarriersPerfParams(false, false),
+                       VulkanBarriersPerfParams(true, false),
+                       VulkanBarriersPerfParams(true, true));

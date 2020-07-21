@@ -13,7 +13,6 @@
 #include "common/angleutils.h"
 #include "libANGLE/Error.h"
 #include "libANGLE/angletypes.h"
-#include "libANGLE/renderer/gl/formatutilsgl.h"
 
 #include <map>
 
@@ -68,24 +67,6 @@ class BlitGL : angle::NonCopyable
     angle::Result blitColorBufferWithShader(const gl::Context *context,
                                             const gl::Framebuffer *source,
                                             const gl::Framebuffer *dest,
-                                            const gl::Rectangle &sourceArea,
-                                            const gl::Rectangle &destArea,
-                                            GLenum filter,
-                                            bool writeAlpha);
-
-    angle::Result blitColorBufferWithShader(const gl::Context *context,
-                                            const gl::Framebuffer *source,
-                                            const GLuint destFramebuffer,
-                                            const gl::Rectangle &sourceArea,
-                                            const gl::Rectangle &destArea,
-                                            GLenum filter,
-                                            bool writeAlpha);
-
-    angle::Result blitColorBufferWithShader(const gl::Context *context,
-                                            const gl::Framebuffer *source,
-                                            const GLuint destTexture,
-                                            const gl::TextureTarget destTarget,
-                                            const size_t destLevel,
                                             const gl::Rectangle &sourceArea,
                                             const gl::Rectangle &destArea,
                                             GLenum filter,
@@ -155,12 +136,6 @@ class BlitGL : angle::NonCopyable
                                                    gl::TextureTarget target,
                                                    size_t level);
 
-    angle::Result generateSRGBMipmap(const gl::Context *context,
-                                     TextureGL *source,
-                                     GLuint baseLevel,
-                                     GLuint levelCount,
-                                     const gl::Extents &sourceBaseLevelSize);
-
     angle::Result initializeResources(const gl::Context *context);
 
   private:
@@ -198,8 +173,6 @@ class BlitGL : angle::NonCopyable
 
     GLuint mVAO;
     GLuint mVertexBuffer;
-
-    nativegl::TexImageFormat mSRGBMipmapGenerationFormat;
 };
 }  // namespace rx
 

@@ -50,20 +50,6 @@ namespace gl
 {
 namespace
 {
-egl::ShareGroup *AllocateOrGetShareGroup(egl::Display *display, const gl::Context *shareContext)
-{
-    if (shareContext)
-    {
-        egl::ShareGroup *shareGroup = shareContext->getState().getShareGroup();
-        shareGroup->addRef();
-        return shareGroup;
-    }
-    else
-    {
-        return new egl::ShareGroup(display->getImplementation());
-    }
-}
-
 template <typename T>
 angle::Result GetQueryObjectParameter(const Context *context, Query *query, GLenum pname, T *params)
 {
@@ -256,8 +242,7 @@ enum SubjectIndexes : angle::SubjectIndex
     kSamplerMaxSubjectIndex  = kSampler0SubjectIndex + IMPLEMENTATION_MAX_ACTIVE_TEXTURES,
     kVertexArraySubjectIndex = kSamplerMaxSubjectIndex,
     kReadFramebufferSubjectIndex,
-    kDrawFramebufferSubjectIndex,
-    kProgramPipelineSubjectIndex
+    kDrawFramebufferSubjectIndex
 };
 }  // anonymous namespace
 
@@ -271,7 +256,6 @@ Context::Context(egl::Display *display,
                  const egl::DisplayExtensions &displayExtensions,
                  const egl::ClientExtensions &clientExtensions)
     : mState(shareContext ? &shareContext->mState : nullptr,
-             AllocateOrGetShareGroup(display, shareContext),
              shareTextures,
              &mOverlay,
              clientType,
@@ -301,7 +285,7 @@ Context::Context(egl::Display *display,
       mExplicitContextAvailable(clientExtensions.explicitContext),
       mCurrentDrawSurface(static_cast<egl::Surface *>(EGL_NO_SURFACE)),
       mCurrentReadSurface(static_cast<egl::Surface *>(EGL_NO_SURFACE)),
-      mDisplay(display),
+      mDisplay(static_cast<egl::Display *>(EGL_NO_DISPLAY)),
       mWebGLContext(GetWebGLContext(attribs)),
       mBufferAccessValidationEnabled(false),
       mExtensionsEnabled(GetExtensionsEnabled(attribs, mWebGLContext)),
@@ -309,7 +293,6 @@ Context::Context(egl::Display *display,
       mVertexArrayObserverBinding(this, kVertexArraySubjectIndex),
       mDrawFramebufferObserverBinding(this, kDrawFramebufferSubjectIndex),
       mReadFramebufferObserverBinding(this, kReadFramebufferSubjectIndex),
-      mProgramPipelineObserverBinding(this, kProgramPipelineSubjectIndex),
       mThreadPool(nullptr),
       mFrameCapture(new angle::FrameCapture),
       mOverlay(mImplementation.get())
@@ -331,9 +314,6 @@ Context::Context(egl::Display *display,
     {
         mImageObserverBindings.emplace_back(this, imageIndex);
     }
-
-    // Implementations now require the display to be set at context creation.
-    ASSERT(mDisplay);
 }
 
 void Context::initialize()
@@ -533,7 +513,7 @@ void Context::initialize()
 egl::Error Context::onDestroy(const egl::Display *display)
 {
     // Dump frame capture if enabled.
-    mFrameCapture->onDestroyContext(this);
+    mFrameCapture->onEndFrame(this);
 
     if (mGLES1Renderer)
     {
@@ -604,7 +584,6 @@ egl::Error Context::onDestroy(const egl::Display *display)
     mState.mFramebufferManager->release(this);
     mState.mMemoryObjectManager->release(this);
     mState.mSemaphoreManager->release(this);
-    mState.mShareGroup->release(this);
 
     mThreadPool.reset();
 
@@ -653,8 +632,6 @@ egl::Error Context::makeCurrent(egl::Display *display,
 
         mHasBeenCurrent = true;
     }
-
-    mFrameCapture->onMakeCurrent(drawSurface);
 
     // TODO(jmadill): Rework this when we support ContextImpl
     mState.setAllDirtyBits();
@@ -1155,7 +1132,6 @@ void Context::bindProgramPipeline(ProgramPipelineID pipelineHandle)
         mImplementation.get(), pipelineHandle);
     ANGLE_CONTEXT_TRY(mState.setProgramPipelineBinding(this, pipeline));
     mStateCache.onProgramExecutableChange(this);
-    mProgramPipelineObserverBinding.bind(pipeline);
 }
 
 void Context::beginQuery(QueryType target, QueryID query)
@@ -2719,7 +2695,6 @@ void Context::detachSampler(SamplerID sampler)
 void Context::detachProgramPipeline(ProgramPipelineID pipeline)
 {
     mState.detachProgramPipeline(this, pipeline);
-    mProgramPipelineObserverBinding.bind(nullptr);
 }
 
 void Context::vertexAttribDivisor(GLuint index, GLuint divisor)
@@ -3579,7 +3554,7 @@ void Context::updateCaps()
     mStateCache.initialize(this);
 }
 
-bool Context::noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount) const
+bool Context::noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount)
 {
     return (instanceCount == 0) || noopDraw(mode, count);
 }
@@ -3769,9 +3744,7 @@ void Context::readPixels(GLint x,
     ASSERT(readFBO);
 
     Rectangle area(x, y, width, height);
-    PixelPackState packState = mState.getPackState();
-    Buffer *packBuffer       = mState.getTargetBuffer(gl::BufferBinding::PixelPack);
-    ANGLE_CONTEXT_TRY(readFBO->readPixels(this, area, format, type, packState, packBuffer, pixels));
+    ANGLE_CONTEXT_TRY(readFBO->readPixels(this, area, format, type, pixels));
 }
 
 void Context::readPixelsRobust(GLint x,
@@ -4079,17 +4052,17 @@ void Context::invalidateFramebuffer(GLenum target,
                                     GLsizei numAttachments,
                                     const GLenum *attachments)
 {
+    // Only sync the FBO
+    ANGLE_CONTEXT_TRY(mState.syncDirtyObject(this, target));
+
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    // No-op incomplete FBOs.
     if (!framebuffer->isComplete(this))
     {
         return;
     }
 
-    // Only sync the FBO
-    ANGLE_CONTEXT_TRY(mState.syncDirtyObject(this, target));
     ANGLE_CONTEXT_TRY(framebuffer->invalidate(this, numAttachments, attachments));
 }
 
@@ -5635,7 +5608,37 @@ void Context::multiDrawArrays(PrimitiveMode mode,
                               GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(mImplementation->multiDrawArrays(this, mode, firsts, counts, drawcount));
+    Program *programObject = mState.getLinkedProgram(this);
+    const bool hasDrawID   = programObject && programObject->hasDrawIDUniform();
+    if (hasDrawID)
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDraw(mode, counts[drawID]))
+            {
+                continue;
+            }
+            programObject->setDrawIDUniform(drawID);
+            ANGLE_CONTEXT_TRY(
+                mImplementation->drawArrays(this, mode, firsts[drawID], counts[drawID]));
+            MarkTransformFeedbackBufferUsage(this, counts[drawID], 1);
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
+    else
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDraw(mode, counts[drawID]))
+            {
+                continue;
+            }
+            ANGLE_CONTEXT_TRY(
+                mImplementation->drawArrays(this, mode, firsts[drawID], counts[drawID]));
+            MarkTransformFeedbackBufferUsage(this, counts[drawID], 1);
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
 }
 
 void Context::multiDrawArraysInstanced(PrimitiveMode mode,
@@ -5645,8 +5648,37 @@ void Context::multiDrawArraysInstanced(PrimitiveMode mode,
                                        GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(mImplementation->multiDrawArraysInstanced(this, mode, firsts, counts,
-                                                                instanceCounts, drawcount));
+    Program *programObject = mState.getLinkedProgram(this);
+    const bool hasDrawID   = programObject && programObject->hasDrawIDUniform();
+    if (hasDrawID)
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))
+            {
+                continue;
+            }
+            programObject->setDrawIDUniform(drawID);
+            ANGLE_CONTEXT_TRY(mImplementation->drawArraysInstanced(
+                this, mode, firsts[drawID], counts[drawID], instanceCounts[drawID]));
+            MarkTransformFeedbackBufferUsage(this, counts[drawID], instanceCounts[drawID]);
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
+    else
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))
+            {
+                continue;
+            }
+            ANGLE_CONTEXT_TRY(mImplementation->drawArraysInstanced(
+                this, mode, firsts[drawID], counts[drawID], instanceCounts[drawID]));
+            MarkTransformFeedbackBufferUsage(this, counts[drawID], instanceCounts[drawID]);
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
 }
 
 void Context::multiDrawElements(PrimitiveMode mode,
@@ -5656,8 +5688,35 @@ void Context::multiDrawElements(PrimitiveMode mode,
                                 GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(
-        mImplementation->multiDrawElements(this, mode, counts, type, indices, drawcount));
+    Program *programObject = mState.getLinkedProgram(this);
+    const bool hasDrawID   = programObject && programObject->hasDrawIDUniform();
+    if (hasDrawID)
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDraw(mode, counts[drawID]))
+            {
+                continue;
+            }
+            programObject->setDrawIDUniform(drawID);
+            ANGLE_CONTEXT_TRY(
+                mImplementation->drawElements(this, mode, counts[drawID], type, indices[drawID]));
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
+    else
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDraw(mode, counts[drawID]))
+            {
+                continue;
+            }
+            ANGLE_CONTEXT_TRY(
+                mImplementation->drawElements(this, mode, counts[drawID], type, indices[drawID]));
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
 }
 
 void Context::multiDrawElementsInstanced(PrimitiveMode mode,
@@ -5668,9 +5727,76 @@ void Context::multiDrawElementsInstanced(PrimitiveMode mode,
                                          GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(mImplementation->multiDrawElementsInstanced(this, mode, counts, type, indices,
-                                                                  instanceCounts, drawcount));
+    Program *programObject = mState.getLinkedProgram(this);
+    const bool hasDrawID   = programObject && programObject->hasDrawIDUniform();
+    if (hasDrawID)
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))
+            {
+                continue;
+            }
+            programObject->setDrawIDUniform(drawID);
+            ANGLE_CONTEXT_TRY(mImplementation->drawElementsInstanced(
+                this, mode, counts[drawID], type, indices[drawID], instanceCounts[drawID]));
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
+    else
+    {
+        for (GLsizei drawID = 0; drawID < drawcount; ++drawID)
+        {
+            if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))
+            {
+                continue;
+            }
+            ANGLE_CONTEXT_TRY(mImplementation->drawElementsInstanced(
+                this, mode, counts[drawID], type, indices[drawID], instanceCounts[drawID]));
+            MarkShaderStorageBufferUsage(this);
+        }
+    }
 }
+
+namespace
+{
+
+// RAII object making sure reset uniforms is called no matter whether there's an error in draw calls
+class ResetBaseVertexBaseInstance : angle::NonCopyable
+{
+  public:
+    ResetBaseVertexBaseInstance(Program *programObject,
+                                bool resetBaseVertex,
+                                bool resetBaseInstance)
+        : mProgramObject(programObject),
+          mResetBaseVertex(resetBaseVertex),
+          mResetBaseInstance(resetBaseInstance)
+    {}
+
+    ~ResetBaseVertexBaseInstance()
+    {
+        if (mProgramObject)
+        {
+            // Reset emulated uniforms to zero to avoid affecting other draw calls
+            if (mResetBaseVertex)
+            {
+                mProgramObject->setBaseVertexUniform(0);
+            }
+
+            if (mResetBaseInstance)
+            {
+                mProgramObject->setBaseInstanceUniform(0);
+            }
+        }
+    }
+
+  private:
+    Program *mProgramObject;
+    bool mResetBaseVertex;
+    bool mResetBaseInstance;
+};
+
+}  // anonymous namespace
 
 void Context::drawArraysInstancedBaseInstance(PrimitiveMode mode,
                                               GLint first,
@@ -5692,7 +5818,7 @@ void Context::drawArraysInstancedBaseInstance(PrimitiveMode mode,
         programObject->setBaseInstanceUniform(baseInstance);
     }
 
-    rx::ResetBaseVertexBaseInstance resetUniforms(programObject, false, hasBaseInstance);
+    ResetBaseVertexBaseInstance resetUniforms(programObject, false, hasBaseInstance);
 
     // The input gl_InstanceID does not follow the baseinstance. gl_InstanceID always falls on
     // the half-open range [0, instancecount). No need to set other stuff. Except for Vulkan.
@@ -5730,11 +5856,57 @@ void Context::drawElementsInstancedBaseVertexBaseInstance(PrimitiveMode mode,
         programObject->setBaseInstanceUniform(baseInstance);
     }
 
-    rx::ResetBaseVertexBaseInstance resetUniforms(programObject, hasBaseVertex, hasBaseInstance);
+    ResetBaseVertexBaseInstance resetUniforms(programObject, hasBaseVertex, hasBaseInstance);
 
     ANGLE_CONTEXT_TRY(mImplementation->drawElementsInstancedBaseVertexBaseInstance(
         this, mode, count, type, indices, instanceCounts, baseVertex, baseInstance));
 }
+
+#define SET_DRAW_ID_UNIFORM_0(drawID) \
+    {}
+#define SET_DRAW_ID_UNIFORM_1(drawID) programObject->setDrawIDUniform(drawID);
+#define SET_DRAW_ID_UNIFORM(cond) SET_DRAW_ID_UNIFORM_##cond
+
+#define SET_BASE_VERTEX_UNIFORM_0(baseVertex) \
+    {}
+#define SET_BASE_VERTEX_UNIFORM_1(baseVertex) programObject->setBaseVertexUniform(baseVertex);
+#define SET_BASE_VERTEX_UNIFORM(cond) SET_BASE_VERTEX_UNIFORM_##cond
+
+#define SET_BASE_INSTANCE_UNIFORM_0(baseInstance) \
+    {}
+#define SET_BASE_INSTANCE_UNIFORM_1(baseInstance) \
+    programObject->setBaseInstanceUniform(baseInstance);
+#define SET_BASE_INSTANCE_UNIFORM(cond) SET_BASE_INSTANCE_UNIFORM_##cond
+
+#define MULTI_DRAW_ARRAYS_BLOCK(hasDrawID, hasBaseInstance)                             \
+    for (GLsizei drawID = 0; drawID < drawcount; ++drawID)                              \
+    {                                                                                   \
+        if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))            \
+        {                                                                               \
+            continue;                                                                   \
+        }                                                                               \
+        SET_DRAW_ID_UNIFORM(hasDrawID)(drawID);                                         \
+        SET_BASE_INSTANCE_UNIFORM(hasBaseInstance)(baseInstances[drawID]);              \
+        ANGLE_CONTEXT_TRY(mImplementation->drawArraysInstancedBaseInstance(             \
+            this, mode, firsts[drawID], counts[drawID], instanceCounts[drawID],         \
+            baseInstances[drawID]));                                                    \
+        MarkTransformFeedbackBufferUsage(this, counts[drawID], instanceCounts[drawID]); \
+    }
+
+#define MULTI_DRAW_ELEMENTS_BLOCK(hasDrawID, hasBaseVertex, hasBaseInstance)            \
+    for (GLsizei drawID = 0; drawID < drawcount; ++drawID)                              \
+    {                                                                                   \
+        if (noopDrawInstanced(mode, counts[drawID], instanceCounts[drawID]))            \
+        {                                                                               \
+            continue;                                                                   \
+        }                                                                               \
+        SET_DRAW_ID_UNIFORM(hasDrawID)(drawID);                                         \
+        SET_BASE_VERTEX_UNIFORM(hasBaseVertex)(baseVertices[drawID]);                   \
+        SET_BASE_INSTANCE_UNIFORM(hasBaseInstance)(baseInstances[drawID]);              \
+        ANGLE_CONTEXT_TRY(mImplementation->drawElementsInstancedBaseVertexBaseInstance( \
+            this, mode, counts[drawID], type, indices[drawID], instanceCounts[drawID],  \
+            baseVertices[drawID], baseInstances[drawID]));                              \
+    }
 
 void Context::multiDrawArraysInstancedBaseInstance(PrimitiveMode mode,
                                                    const GLint *firsts,
@@ -5744,8 +5916,28 @@ void Context::multiDrawArraysInstancedBaseInstance(PrimitiveMode mode,
                                                    GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(mImplementation->multiDrawArraysInstancedBaseInstance(
-        this, mode, firsts, counts, instanceCounts, baseInstances, drawcount));
+    Program *programObject     = mState.getLinkedProgram(this);
+    const bool hasBaseInstance = programObject && programObject->hasBaseInstanceUniform();
+    const bool hasDrawID       = programObject && programObject->hasDrawIDUniform();
+
+    ResetBaseVertexBaseInstance resetUniforms(programObject, false, hasBaseInstance);
+
+    if (hasDrawID && hasBaseInstance)
+    {
+        MULTI_DRAW_ARRAYS_BLOCK(1, 1)
+    }
+    else if (hasDrawID)
+    {
+        MULTI_DRAW_ARRAYS_BLOCK(1, 0)
+    }
+    else if (hasBaseInstance)
+    {
+        MULTI_DRAW_ARRAYS_BLOCK(0, 1)
+    }
+    else
+    {
+        MULTI_DRAW_ARRAYS_BLOCK(0, 0)
+    }
 }
 
 void Context::multiDrawElementsInstancedBaseVertexBaseInstance(PrimitiveMode mode,
@@ -5758,8 +5950,63 @@ void Context::multiDrawElementsInstancedBaseVertexBaseInstance(PrimitiveMode mod
                                                                GLsizei drawcount)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
-    ANGLE_CONTEXT_TRY(mImplementation->multiDrawElementsInstancedBaseVertexBaseInstance(
-        this, mode, counts, type, indices, instanceCounts, baseVertices, baseInstances, drawcount));
+    Program *programObject     = mState.getLinkedProgram(this);
+    const bool hasBaseVertex   = programObject && programObject->hasBaseVertexUniform();
+    const bool hasBaseInstance = programObject && programObject->hasBaseInstanceUniform();
+    const bool hasDrawID       = programObject && programObject->hasDrawIDUniform();
+
+    ResetBaseVertexBaseInstance resetUniforms(programObject, hasBaseVertex, hasBaseInstance);
+
+    if (hasDrawID)
+    {
+        if (hasBaseVertex)
+        {
+            if (hasBaseInstance)
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(1, 1, 1)
+            }
+            else
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(1, 1, 0)
+            }
+        }
+        else
+        {
+            if (hasBaseInstance)
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(1, 0, 1)
+            }
+            else
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(1, 0, 0)
+            }
+        }
+    }
+    else
+    {
+        if (hasBaseVertex)
+        {
+            if (hasBaseInstance)
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(0, 1, 1)
+            }
+            else
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(0, 1, 0)
+            }
+        }
+        else
+        {
+            if (hasBaseInstance)
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(0, 0, 1)
+            }
+            else
+            {
+                MULTI_DRAW_ELEMENTS_BLOCK(0, 0, 0)
+            }
+        }
+    }
 }
 
 void Context::provokingVertex(ProvokingVertexConvention provokeMode)
@@ -8009,11 +8256,6 @@ void Context::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMess
             mStateCache.onDrawFramebufferChange(this);
             break;
 
-        case kProgramPipelineSubjectIndex:
-            ASSERT(message == angle::SubjectMessage::DirtyBitsFlagged);
-            mState.setProgramPipelineDirty();
-            break;
-
         default:
             if (index < kTextureMaxSubjectIndex)
             {
@@ -8064,6 +8306,25 @@ angle::Result Context::onProgramLink(Program *programObject)
             ANGLE_TRY(mState.onProgramExecutableChange(this, programObject));
         }
         mStateCache.onProgramExecutableChange(this);
+    }
+
+    // TODO(http://anglebug.com/4559): Use the Subject/Observer pattern for
+    // Programs in PPOs so we can remove this.
+    // Need to mark any PPOs that this Program is bound to as dirty
+    bool foundPipeline = false;
+    for (ResourceMap<ProgramPipeline, ProgramPipelineID>::Iterator ppoIterator =
+             mState.mProgramPipelineManager->begin();
+         ppoIterator != mState.mProgramPipelineManager->end(); ++ppoIterator)
+    {
+        ProgramPipeline *pipeline = ppoIterator->second;
+        pipeline->setDirtyBit(ProgramPipeline::DirtyBitType::DIRTY_BIT_PROGRAM_STAGE);
+        foundPipeline = true;
+    }
+    // Also need to make sure the PPO dirty bits get handled by marking the PPO
+    // objects dirty.
+    if (foundPipeline)
+    {
+        mState.mDirtyObjects.set(State::DIRTY_OBJECT_PROGRAM_PIPELINE);
     }
 
     return angle::Result::Continue;
@@ -8153,7 +8414,7 @@ egl::Error Context::unsetDefaultFramebuffer()
     return egl::NoError();
 }
 
-void Context::onPreSwap() const
+void Context::onPostSwap() const
 {
     // Dump frame capture if enabled.
     mFrameCapture->onEndFrame(this);
@@ -8177,23 +8438,6 @@ void Context::getRenderbufferImage(GLenum target, GLenum format, GLenum type, vo
     Buffer *packBuffer         = mState.getTargetBuffer(BufferBinding::PixelPack);
     ANGLE_CONTEXT_TRY(renderbuffer->getRenderbufferImage(this, mState.getPackState(), packBuffer,
                                                          format, type, pixels));
-}
-
-egl::Error Context::releaseHighPowerGPU()
-{
-    return mImplementation->releaseHighPowerGPU(this);
-}
-
-egl::Error Context::reacquireHighPowerGPU()
-{
-    return mImplementation->reacquireHighPowerGPU(this);
-}
-
-void Context::onGPUSwitch()
-{
-    // Re-initialize the renderer string, which just changed, and
-    // which must be visible to applications.
-    initRendererString();
 }
 
 // ErrorSet implementation.
@@ -8412,7 +8656,6 @@ void StateCache::onVertexArrayStateChange(Context *context)
     updateActiveAttribsMask(context);
     updateVertexElementLimits(context);
     updateBasicDrawStatesError();
-    updateBasicDrawElementsError();
 }
 
 void StateCache::onVertexArrayBufferStateChange(Context *context)

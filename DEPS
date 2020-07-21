@@ -22,10 +22,10 @@ vars = {
   'chromium_revision': 'b0410bba028cf153be2d02e36b6e99b59fdcb000',
 
   # Current revision of VK-GL-CTS (a.k.a dEQP).
-  'vk_gl_cts_revision': '4b40207be32deac1c567dacc70cde031bea005aa',
+  'vk_gl_cts_revision': '60972ed7fa8fb66b64e21186e7fb13dc082bdac8',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': 'b99a6a7273181deeb08859c0fdb0c77c7e8a4500',
+  'glslang_revision': 'e00d27c6d65b7d3e72506a311d7f053da4051295',
 
   # Current revision of googletest.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -34,17 +34,6 @@ vars = {
   # Current revision of jsoncpp.
   # Note: this dep cannot be auto-rolled b/c of nesting.
   'jsoncpp_revision': '645250b6690785be60ab6780ce4b58698d884d11',
-
-  # Current revision of Chrome's third_party jsoncpp directory. This repository
-  # is mirrored as a separate repository, with separate git hashes that
-  # don't match the external JsonCpp repository or Chrome. Mirrored patches
-  # will have a different git hash associated with them.
-  # To roll, first get the new hash for chromium_jsoncpp_revision from the
-  # mirror of third_party/jsoncpp located here:
-  # https://chromium.googlesource.com/chromium/src/third_party/jsoncpp/
-  # Then get the new hash for jsoncpp_revision from the root Chrome DEPS file:
-  # https://source.chromium.org/chromium/chromium/src/+/master:DEPS
-  'chromium_jsoncpp_revision': 'ec647b85b61f525a1a74e4da7477b0c5371c50f4',
 
   # Current revision of patched-yasm.
   # Note: this dep cannot be auto-rolled b/c of nesting.
@@ -57,19 +46,19 @@ vars = {
   'spirv_headers_revision': 'ac638f1815425403e946d0ab78bac71d2bdbf3be',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': '8b5ed4448dfe92b41fa0e702242239c25a1bcd02',
+  'spirv_tools_revision': '8dfdbeff84f3e058ca33a08755ab47bc572a1c50',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '83825d55c7d522931124696ecb07ed48f2693e5c',
+  'vulkan_headers_revision': '9250d5ae8f50202005233dc0512a1d460c8b4833',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': 'bfe4f378aee6a2825b8112429cd46529d936babf',
+  'vulkan_loader_revision': '006586926adece57adea3e006140b5df19826371',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': '50e737c8234769be390c20b9adcb6408d32f6015',
+  'vulkan_tools_revision': '2bc4fcd9eba505d867cc83cdc4401e427399ed8f',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': '7cc0ead0517453890c9dff6d2bdd0c8e53c003a4',
+  'vulkan_validation_revision': '424cdd54fe806c0ce3b1f2789243b9fd9090453f',
 
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
@@ -101,7 +90,7 @@ deps = {
   },
 
   'third_party/vulkan_memory_allocator': {
-    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@431d6e57284aeb08118ff428dfbd51c94342faa1',
+    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@dac952eb0a27736571bf10ac42fbfcc59192f310',
     'condition': 'not build_with_chromium',
   },
 
@@ -147,7 +136,7 @@ deps = {
   },
 
   'third_party/jsoncpp': {
-    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@{chromium_jsoncpp_revision}',
+    'url': '{chromium_git}/chromium/src/third_party/jsoncpp@ec647b85b61f525a1a74e4da7477b0c5371c50f4',
     'condition': 'not build_with_chromium',
    },
 
@@ -203,7 +192,7 @@ deps = {
   },
 
   'third_party/SwiftShader': {
-    'url': '{swiftshader_git}/SwiftShader@97f9923235cf5a24d8ce49f93bd22429d2a68548',
+    'url': '{swiftshader_git}/SwiftShader@9e718f962f87c30d08e91053f0e9ce3467cbd488',
     'condition': 'not build_with_chromium',
   },
 
@@ -256,12 +245,12 @@ deps = {
 
   'third_party/catapult': {
     'url': '{chromium_git}/catapult.git@{catapult_revision}',
-    'condition': 'checkout_android and not build_with_chromium',
+    'condition': 'not build_with_chromium',
   },
 
   'third_party/android_ndk': {
     'url': '{chromium_git}/android_ndk.git@27c0a8d090c666a50e40fceb4ee5b40b1a2d3f87',
-    'condition': 'checkout_android and not build_with_chromium',
+    'condition': 'not build_with_chromium',
   },
 }
 
@@ -433,8 +422,11 @@ hooks = [
     'name': 'restricted_traces',
     'pattern': '\\.sha1',
     'condition': 'checkout_angle_internal',
-    'action': [ 'python',
-                'src/tests/perf_tests/restricted_traces/download_restricted_traces.py',
+    'action': [ 'download_from_google_storage',
+                '--directory',
+                '--recursive',
+                '--extract',
+                '--bucket', 'chrome-angle-capture-binaries',
                 'src/tests/perf_tests/restricted_traces',
     ]
   }

@@ -86,10 +86,11 @@ angle::Result FramebufferNULL::readPixels(const gl::Context *context,
                                           const gl::Rectangle &origArea,
                                           GLenum format,
                                           GLenum type,
-                                          const gl::PixelPackState &pack,
-                                          gl::Buffer *packBuffer,
                                           void *ptrOrOffset)
 {
+    const gl::PixelPackState &packState = context->getState().getPackState();
+    gl::Buffer *packBuffer = context->getState().getTargetBuffer(gl::BufferBinding::PixelPack);
+
     // Get the pointer to write to from the argument or the pack buffer
     GLubyte *pixels = nullptr;
     if (packBuffer != nullptr)
@@ -119,12 +120,13 @@ angle::Result FramebufferNULL::readPixels(const gl::Context *context,
     ContextNULL *contextNull = GetImplAs<ContextNULL>(context);
 
     GLuint rowBytes = 0;
-    ANGLE_CHECK_GL_MATH(contextNull, glFormat.computeRowPitch(type, origArea.width, pack.alignment,
-                                                              pack.rowLength, &rowBytes));
+    ANGLE_CHECK_GL_MATH(contextNull,
+                        glFormat.computeRowPitch(type, origArea.width, packState.alignment,
+                                                 packState.rowLength, &rowBytes));
 
     GLuint skipBytes = 0;
     ANGLE_CHECK_GL_MATH(contextNull,
-                        glFormat.computeSkipBytes(type, rowBytes, 0, pack, false, &skipBytes));
+                        glFormat.computeSkipBytes(type, rowBytes, 0, packState, false, &skipBytes));
     pixels += skipBytes;
 
     // Skip OOB region up to first in bounds pixel

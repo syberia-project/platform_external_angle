@@ -28,26 +28,24 @@ class ContextMtl;
 
 namespace mtl
 {
-struct alignas(1) StencilDesc
+struct StencilDesc
 {
     bool operator==(const StencilDesc &rhs) const;
 
     // Set default values
     void reset();
 
-    // Use uint8_t instead of MTLStencilOperation to compact space
-    uint8_t stencilFailureOperation : 3;
-    uint8_t depthFailureOperation : 3;
-    uint8_t depthStencilPassOperation : 3;
+    MTLStencilOperation stencilFailureOperation;
+    MTLStencilOperation depthFailureOperation;
+    MTLStencilOperation depthStencilPassOperation;
 
-    // Use uint8_t instead of MTLCompareFunction to compact space
-    uint8_t stencilCompareFunction : 3;
+    MTLCompareFunction stencilCompareFunction;
 
-    uint8_t readMask : 8;
-    uint8_t writeMask : 8;
+    uint32_t readMask;
+    uint32_t writeMask;
 };
 
-struct alignas(4) DepthStencilDesc
+struct DepthStencilDesc
 {
     DepthStencilDesc();
     DepthStencilDesc(const DepthStencilDesc &src);
@@ -77,12 +75,11 @@ struct alignas(4) DepthStencilDesc
     StencilDesc backFaceStencil;
     StencilDesc frontFaceStencil;
 
-    // Use uint8_t instead of MTLCompareFunction to compact space
-    uint8_t depthCompareFunction : 3;
-    bool depthWriteEnabled : 1;
+    MTLCompareFunction depthCompareFunction;
+    bool depthWriteEnabled;
 };
 
-struct alignas(4) SamplerDesc
+struct SamplerDesc
 {
     SamplerDesc();
     SamplerDesc(const SamplerDesc &src);
@@ -99,17 +96,15 @@ struct alignas(4) SamplerDesc
 
     size_t hash() const;
 
-    // Use uint8_t instead of MTLSamplerAddressMode to compact space
-    uint8_t rAddressMode : 3;
-    uint8_t sAddressMode : 3;
-    uint8_t tAddressMode : 3;
+    MTLSamplerAddressMode rAddressMode;
+    MTLSamplerAddressMode sAddressMode;
+    MTLSamplerAddressMode tAddressMode;
 
-    // Use uint8_t instead of MTLSamplerMinMagFilter to compact space
-    uint8_t minFilter : 1;
-    uint8_t magFilter : 1;
-    uint8_t mipFilter : 2;
+    MTLSamplerMinMagFilter minFilter;
+    MTLSamplerMinMagFilter magFilter;
+    MTLSamplerMipFilter mipFilter;
 
-    uint8_t maxAnisotropy : 5;
+    uint32_t maxAnisotropy;
 };
 
 struct VertexAttributeDesc
@@ -119,12 +114,9 @@ struct VertexAttributeDesc
         return format == rhs.format && offset == rhs.offset && bufferIndex == rhs.bufferIndex;
     }
     inline bool operator!=(const VertexAttributeDesc &rhs) const { return !(*this == rhs); }
-
-    // Use uint8_t instead of MTLVertexFormat to compact space
-    uint8_t format : 6;
-    // Offset is only used for default attributes buffer. So 8 bits are enough.
-    uint8_t offset : 8;
-    uint8_t bufferIndex : 5;
+    MTLVertexFormat format;
+    NSUInteger offset;
+    NSUInteger bufferIndex;
 };
 
 struct VertexBufferLayoutDesc
@@ -135,11 +127,9 @@ struct VertexBufferLayoutDesc
     }
     inline bool operator!=(const VertexBufferLayoutDesc &rhs) const { return !(*this == rhs); }
 
-    uint32_t stepRate;
-    uint32_t stride;
-
-    // Use uint8_t instead of MTLVertexStepFunction to compact space
-    uint8_t stepFunction;
+    MTLVertexStepFunction stepFunction;
+    NSUInteger stepRate;
+    NSUInteger stride;
 };
 
 struct VertexDesc
@@ -165,24 +155,20 @@ struct BlendDesc
     void updateBlendOps(const gl::BlendState &blendState);
     void updateBlendEnabled(const gl::BlendState &blendState);
 
-    // Use uint8_t instead of MTLColorWriteMask to compact space
-    uint8_t writeMask : 4;
+    MTLColorWriteMask writeMask;
 
-    // Use uint8_t instead of MTLBlendOperation to compact space
-    uint8_t alphaBlendOperation : 3;
-    uint8_t rgbBlendOperation : 3;
+    MTLBlendOperation alphaBlendOperation;
+    MTLBlendOperation rgbBlendOperation;
 
-    // Use uint8_t instead of MTLBlendFactor to compact space
-    // NOTE(hqle): enum MTLBlendFactorSource1Color and above are unused.
-    uint8_t destinationAlphaBlendFactor : 4;
-    uint8_t destinationRGBBlendFactor : 4;
-    uint8_t sourceAlphaBlendFactor : 4;
-    uint8_t sourceRGBBlendFactor : 4;
+    MTLBlendFactor destinationAlphaBlendFactor;
+    MTLBlendFactor destinationRGBBlendFactor;
+    MTLBlendFactor sourceAlphaBlendFactor;
+    MTLBlendFactor sourceRGBBlendFactor;
 
-    bool blendingEnabled : 1;
+    bool blendingEnabled;
 };
 
-struct alignas(2) RenderPipelineColorAttachmentDesc : public BlendDesc
+struct RenderPipelineColorAttachmentDesc : public BlendDesc
 {
     bool operator==(const RenderPipelineColorAttachmentDesc &rhs) const;
     inline bool operator!=(const RenderPipelineColorAttachmentDesc &rhs) const
@@ -198,8 +184,7 @@ struct alignas(2) RenderPipelineColorAttachmentDesc : public BlendDesc
 
     void update(const BlendDesc &blendState);
 
-    // Use uint16_t instead of MTLPixelFormat to compact space
-    uint16_t pixelFormat : 16;
+    MTLPixelFormat pixelFormat;
 };
 
 struct RenderPipelineOutputDesc
@@ -207,14 +192,10 @@ struct RenderPipelineOutputDesc
     bool operator==(const RenderPipelineOutputDesc &rhs) const;
 
     RenderPipelineColorAttachmentDesc colorAttachments[kMaxRenderTargets];
+    MTLPixelFormat depthAttachmentPixelFormat;
+    MTLPixelFormat stencilAttachmentPixelFormat;
 
-    // Use uint16_t instead of MTLPixelFormat to compact space
-    uint16_t depthAttachmentPixelFormat : 16;
-    uint16_t stencilAttachmentPixelFormat : 16;
-
-    static_assert(kMaxRenderTargets <= 4, "kMaxRenderTargets must be <= 4");
-    uint8_t numColorAttachments : 3;
-    uint8_t sampleCount : 5;
+    uint8_t numColorAttachments;
 };
 
 // Some SDK levels don't declare MTLPrimitiveTopologyClass. Needs to do compile time check here:
@@ -231,7 +212,7 @@ constexpr PrimitiveTopologyClass kPrimitiveTopologyClassTriangle =
 constexpr PrimitiveTopologyClass kPrimitiveTopologyClassPoint = MTLPrimitiveTopologyClassPoint;
 #endif
 
-struct alignas(4) RenderPipelineDesc
+struct RenderPipelineDesc
 {
     RenderPipelineDesc();
     RenderPipelineDesc(const RenderPipelineDesc &src);
@@ -247,16 +228,9 @@ struct alignas(4) RenderPipelineDesc
 
     RenderPipelineOutputDesc outputDescriptor;
 
-    // Use uint8_t instead of PrimitiveTopologyClass to compact space.
-    uint8_t inputPrimitiveTopology : 2;
+    PrimitiveTopologyClass inputPrimitiveTopology;
 
-    bool rasterizationEnabled : 1;
-    bool alphaToCoverageEnabled : 1;
-
-    // These flags are for emulation and do not correspond to any flags in
-    // MTLRenderPipelineDescriptor descriptor. These flags should be used by
-    // RenderPipelineCacheSpecializeShaderFactory.
-    bool emulateCoverageMask : 1;
+    bool rasterizationEnabled;
 };
 
 struct RenderPassAttachmentDesc
@@ -268,15 +242,9 @@ struct RenderPassAttachmentDesc
     bool equalIgnoreLoadStoreOptions(const RenderPassAttachmentDesc &other) const;
     bool operator==(const RenderPassAttachmentDesc &other) const;
 
-    ANGLE_INLINE bool hasImplicitMSTexture() const { return implicitMSTexture.get(); }
-
     TextureRef texture;
-    // Implicit multisample texture that will be rendered into and discarded at the end of
-    // a render pass. Its result will be resolved into normal texture above.
-    TextureRef implicitMSTexture;
     uint32_t level;
-    uint32_t sliceOrDepth;
-
+    uint32_t slice;
     MTLLoadAction loadAction;
     MTLStoreAction storeAction;
     MTLStoreActionOptions storeActionOptions;
@@ -328,8 +296,6 @@ struct RenderPassDesc
     RenderPassDepthAttachmentDesc depthAttachment;
     RenderPassStencilAttachmentDesc stencilAttachment;
 
-    void convertToMetalDesc(MTLRenderPassDescriptor *objCDesc) const;
-
     // This will populate the RenderPipelineOutputDesc with default blend state and
     // MTLColorWriteMaskAll
     void populateRenderPipelineOutputDesc(RenderPipelineOutputDesc *outDesc) const;
@@ -346,9 +312,10 @@ struct RenderPassDesc
     inline bool operator!=(const RenderPassDesc &other) const { return !(*this == other); }
 
     uint32_t numColorAttachments = 0;
-    uint32_t sampleCount         = 1;
 };
 
+// convert to Metal object
+AutoObjCObj<MTLRenderPassDescriptor> ToMetalObj(const RenderPassDesc &desc);
 }  // namespace mtl
 }  // namespace rx
 
@@ -379,43 +346,18 @@ namespace rx
 {
 namespace mtl
 {
-
-// Abstract factory to create specialized vertex & fragment shaders based on RenderPipelineDesc.
-class RenderPipelineCacheSpecializeShaderFactory
-{
-  public:
-    virtual ~RenderPipelineCacheSpecializeShaderFactory() = default;
-
-    // Get specialized shader for the render pipeline cache.
-    virtual angle::Result getSpecializedShader(Context *context,
-                                               gl::ShaderType shaderType,
-                                               const RenderPipelineDesc &renderPipelineDesc,
-                                               id<MTLFunction> *shaderOut) = 0;
-    // Check whether specialized shaders is required for the specified RenderPipelineDesc.
-    // If not, the render pipeline cache will use the supplied non-specialized shaders.
-    virtual bool hasSpecializedShader(gl::ShaderType shaderType,
-                                      const RenderPipelineDesc &renderPipelineDesc) = 0;
-};
-
-// Render pipeline state cache per shader program.
+// render pipeline state cache per shader program
 class RenderPipelineCache final : angle::NonCopyable
 {
   public:
     RenderPipelineCache();
-    RenderPipelineCache(RenderPipelineCacheSpecializeShaderFactory *specializedShaderFactory);
     ~RenderPipelineCache();
 
-    // Set non-specialized vertex/fragment shader to be used by render pipeline cache to create
-    // render pipeline state. If the internal
-    // RenderPipelineCacheSpecializeShaderFactory.hasSpecializedShader() returns false for a
-    // particular RenderPipelineDesc, the render pipeline cache will use the non-specialized
-    // shaders.
     void setVertexShader(Context *context, id<MTLFunction> shader);
     void setFragmentShader(Context *context, id<MTLFunction> shader);
 
-    // Get non-specialized shaders supplied via set*Shader().
-    id<MTLFunction> getVertexShader() { return mVertexShader; }
-    id<MTLFunction> getFragmentShader() { return mFragmentShader; }
+    id<MTLFunction> getVertexShader() { return mVertexShader.get(); }
+    id<MTLFunction> getFragmentShader() { return mFragmentShader.get(); }
 
     AutoObjCPtr<id<MTLRenderPipelineState>> getRenderPipelineState(ContextMtl *context,
                                                                    const RenderPipelineDesc &desc);
@@ -423,10 +365,8 @@ class RenderPipelineCache final : angle::NonCopyable
     void clear();
 
   protected:
-    // Non-specialized vertex shader
-    AutoObjCPtr<id<MTLFunction>> mVertexShader;
-    // Non-specialized fragment shader
-    AutoObjCPtr<id<MTLFunction>> mFragmentShader;
+    AutoObjCPtr<id<MTLFunction>> mVertexShader   = nil;
+    AutoObjCPtr<id<MTLFunction>> mFragmentShader = nil;
 
   private:
     void clearPipelineStates();
@@ -445,8 +385,6 @@ class RenderPipelineCache final : angle::NonCopyable
     // One table with default attrib and one table without.
     std::unordered_map<RenderPipelineDesc, AutoObjCPtr<id<MTLRenderPipelineState>>>
         mRenderPipelineStates[2];
-
-    RenderPipelineCacheSpecializeShaderFactory *mSpecializedShaderFactory;
 };
 
 class StateCache final : angle::NonCopyable

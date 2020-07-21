@@ -70,10 +70,6 @@ class BufferVk : public BufferImpl
                            GLbitfield access,
                            void **mapPtr) override;
     angle::Result unmap(const gl::Context *context, GLboolean *result) override;
-    angle::Result getSubData(const gl::Context *context,
-                             GLintptr offset,
-                             GLsizeiptr size,
-                             void *outData) override;
 
     angle::Result getIndexRange(const gl::Context *context,
                                 gl::DrawElementsType type,
@@ -88,17 +84,15 @@ class BufferVk : public BufferImpl
 
     const vk::BufferHelper &getBuffer() const
     {
-        ASSERT(isBufferValid());
+        ASSERT(mBuffer && mBuffer->valid());
         return *mBuffer;
     }
 
     vk::BufferHelper &getBuffer()
     {
-        ASSERT(isBufferValid());
+        ASSERT(mBuffer && mBuffer->valid());
         return *mBuffer;
     }
-
-    bool isBufferValid() const { return mBuffer && mBuffer->valid(); }
 
     angle::Result mapImpl(ContextVk *contextVk, void **mapPtr);
     angle::Result mapRangeImpl(ContextVk *contextVk,

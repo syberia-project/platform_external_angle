@@ -12,7 +12,6 @@
 #include "libANGLE/renderer/gl/glx/DisplayGLX.h"
 #include "libANGLE/renderer/gl/glx/SurfaceGLX.h"
 #include "libANGLE/renderer/gl/glx/platform_glx.h"
-#include "libANGLE/renderer/gl/renderergl_utils.h"
 
 namespace rx
 {

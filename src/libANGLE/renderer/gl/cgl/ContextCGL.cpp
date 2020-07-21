@@ -16,50 +16,26 @@
 namespace rx
 {
 
-ContextCGL::ContextCGL(DisplayCGL *display,
-                       const gl::State &state,
+ContextCGL::ContextCGL(const gl::State &state,
                        gl::ErrorSet *errorSet,
                        const std::shared_ptr<RendererGL> &renderer,
                        bool usesDiscreteGPU)
-    : ContextGL(state, errorSet, renderer),
-      mUsesDiscreteGpu(usesDiscreteGPU),
-      mReleasedDiscreteGpu(false)
-{
-    if (mUsesDiscreteGpu)
-    {
-        (void)display->referenceDiscreteGPU();
-    }
-}
-
-egl::Error ContextCGL::releaseHighPowerGPU(gl::Context *context)
-{
-    if (mUsesDiscreteGpu && !mReleasedDiscreteGpu)
-    {
-        mReleasedDiscreteGpu = true;
-        return GetImplAs<DisplayCGL>(context->getDisplay())->unreferenceDiscreteGPU();
-    }
-
-    return egl::NoError();
-}
-
-egl::Error ContextCGL::reacquireHighPowerGPU(gl::Context *context)
-{
-    if (mUsesDiscreteGpu && mReleasedDiscreteGpu)
-    {
-        mReleasedDiscreteGpu = false;
-        return GetImplAs<DisplayCGL>(context->getDisplay())->referenceDiscreteGPU();
-    }
-
-    return egl::NoError();
-}
+    : ContextGL(state, errorSet, renderer), mUsesDiscreteGpu(usesDiscreteGPU)
+{}
 
 void ContextCGL::onDestroy(const gl::Context *context)
 {
-    if (mUsesDiscreteGpu && !mReleasedDiscreteGpu)
+    if (mUsesDiscreteGpu)
     {
-        (void)GetImplAs<DisplayCGL>(context->getDisplay())->unreferenceDiscreteGPU();
+        egl::Display *display = context->getDisplay();
+        // TODO(kbr): if the context is created and destroyed without ever
+        // making it current, it is possible to leak retentions of the
+        // discrete GPU.
+        if (display)
+        {
+            GetImplAs<DisplayCGL>(display)->unreferenceDiscreteGPU();
+        }
     }
-    ContextGL::onDestroy(context);
 }
 
 }  // namespace rx

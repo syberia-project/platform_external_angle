@@ -9,7 +9,6 @@
 #ifndef LIBGLESV2_GLOBALSTATE_H_
 #define LIBGLESV2_GLOBALSTATE_H_
 
-#include "common/tls.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/Debug.h"
 #include "libANGLE/Thread.h"
@@ -42,14 +41,6 @@ extern Context *gSingleThreadedContext;
 
 ANGLE_INLINE Context *GetGlobalContext()
 {
-#if defined(ANGLE_PLATFORM_ANDROID)
-    // TODO: Replace this branch with a compile time flag (http://anglebug.com/4764)
-    if (gUseAndroidOpenGLTlsSlot)
-    {
-        return static_cast<gl::Context *>(ANGLE_ANDROID_GET_GL_TLS()[kAndroidOpenGLTlsSlot]);
-    }
-#endif
-
     if (gSingleThreadedContext)
     {
         return gSingleThreadedContext;
@@ -61,19 +52,6 @@ ANGLE_INLINE Context *GetGlobalContext()
 
 ANGLE_INLINE Context *GetValidGlobalContext()
 {
-#if defined(ANGLE_PLATFORM_ANDROID)
-    // TODO: Replace this branch with a compile time flag (http://anglebug.com/4764)
-    if (gUseAndroidOpenGLTlsSlot)
-    {
-        Context *context =
-            static_cast<gl::Context *>(ANGLE_ANDROID_GET_GL_TLS()[kAndroidOpenGLTlsSlot]);
-        if (context && !context->isContextLost())
-        {
-            return context;
-        }
-    }
-#endif
-
     if (gSingleThreadedContext && !gSingleThreadedContext->isContextLost())
     {
         return gSingleThreadedContext;

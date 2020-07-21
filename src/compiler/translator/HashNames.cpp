@@ -36,22 +36,6 @@ ImmutableString HashName(const ImmutableString &name, ShHashFunction64 hashFunct
     return hashedName;
 }
 
-void AddToNameMapIfNotMapped(const ImmutableString &name,
-                             const ImmutableString &hashedName,
-                             NameMap *nameMap)
-{
-    if (nameMap)
-    {
-        NameMap::const_iterator it = nameMap->find(name.data());
-        if (it != nameMap->end())
-        {
-            // (How bout returning?)
-            return;
-        }
-        (*nameMap)[name.data()] = hashedName.data();
-    }
-}
-
 }  // anonymous namespace
 
 ImmutableString HashName(const ImmutableString &name,
@@ -100,14 +84,22 @@ ImmutableString HashName(const ImmutableString &name,
         }
         ImmutableStringBuilder prefixedName(kUnhashedNamePrefix.length() + name.length());
         prefixedName << kUnhashedNamePrefix << name;
-        ImmutableString res = prefixedName;
-        AddToNameMapIfNotMapped(name, res, nameMap);
-        return res;
+        return prefixedName;
     }
-
-    // Has a hash function
+    if (nameMap)
+    {
+        NameMap::const_iterator it = nameMap->find(name.data());
+        if (it != nameMap->end())
+        {
+            // TODO(oetuaho): Would be nice if we didn't need to allocate a string here.
+            return ImmutableString(it->second);
+        }
+    }
     ImmutableString hashedName = HashName(name, hashFunction);
-    AddToNameMapIfNotMapped(name, hashedName, nameMap);
+    if (nameMap)
+    {
+        (*nameMap)[name.data()] = hashedName.data();
+    }
     return hashedName;
 }
 

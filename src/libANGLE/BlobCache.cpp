@@ -13,7 +13,7 @@
 #include "libANGLE/Context.h"
 #include "libANGLE/Display.h"
 #include "libANGLE/histogram_macros.h"
-#include "platform/PlatformMethods.h"
+#include "platform/Platform.h"
 
 namespace egl
 {
@@ -69,8 +69,7 @@ void BlobCache::populate(const BlobCache::Key &key, angle::MemoryBuffer &&value,
 
 bool BlobCache::get(angle::ScratchBuffer *scratchBuffer,
                     const BlobCache::Key &key,
-                    BlobCache::Value *valueOut,
-                    size_t *bufferSizeOut)
+                    BlobCache::Value *valueOut)
 {
     // Look into the application's cache, if there is such a cache
     if (areBlobCacheFuncsSet())
@@ -103,8 +102,7 @@ bool BlobCache::get(angle::ScratchBuffer *scratchBuffer,
             return false;
         }
 
-        *valueOut      = BlobCache::Value(scratchMemory->data(), scratchMemory->size());
-        *bufferSizeOut = valueSize;
+        *valueOut = BlobCache::Value(scratchMemory->data(), scratchMemory->size());
         return true;
     }
 
@@ -125,8 +123,7 @@ bool BlobCache::get(angle::ScratchBuffer *scratchBuffer,
                                         kCacheResultMax);
         }
 
-        *valueOut      = BlobCache::Value(entry->first.data(), entry->first.size());
-        *bufferSizeOut = entry->first.size();
+        *valueOut = BlobCache::Value(entry->first.data(), entry->first.size());
     }
     else
     {

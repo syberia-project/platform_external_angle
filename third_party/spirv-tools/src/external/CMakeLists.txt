@@ -47,7 +47,7 @@ if (NOT ${SPIRV_SKIP_TESTS})
   if (TARGET gmock)
     message(STATUS "Google Mock already configured")
   else()
-    set(GMOCK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/googletest)
+    set(GMOCK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/googletest/googlemock)
     if(EXISTS ${GMOCK_DIR})
       if(MSVC)
         # Our tests use ::testing::Combine.  Work around a compiler

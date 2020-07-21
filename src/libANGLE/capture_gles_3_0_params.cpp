@@ -20,7 +20,7 @@ void CaptureClearBufferfv_value(const State &glState,
                                 const GLfloat *value,
                                 ParamCapture *paramCapture)
 {
-    CaptureClearBufferValue<GLfloat>(buffer, value, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureClearBufferiv_value(const State &glState,
@@ -30,7 +30,7 @@ void CaptureClearBufferiv_value(const State &glState,
                                 const GLint *value,
                                 ParamCapture *paramCapture)
 {
-    CaptureClearBufferValue<GLint>(buffer, value, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureClearBufferuiv_value(const State &glState,
@@ -40,7 +40,7 @@ void CaptureClearBufferuiv_value(const State &glState,
                                  const GLuint *value,
                                  ParamCapture *paramCapture)
 {
-    CaptureClearBufferValue<GLuint>(buffer, value, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureCompressedTexImage3D_data(const State &glState,
@@ -291,7 +291,7 @@ void CaptureGetInteger64i_v_data(const State &glState,
                                  GLint64 *data,
                                  ParamCapture *paramCapture)
 {
-    CaptureGetParameter(glState, target, sizeof(GLint64), paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureGetInteger64v_data(const State &glState,
@@ -300,7 +300,7 @@ void CaptureGetInteger64v_data(const State &glState,
                                GLint64 *data,
                                ParamCapture *paramCapture)
 {
-    CaptureGetParameter(glState, pname, sizeof(GLint64), paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureGetIntegeri_v_data(const State &glState,
@@ -310,7 +310,7 @@ void CaptureGetIntegeri_v_data(const State &glState,
                                GLint *data,
                                ParamCapture *paramCapture)
 {
-    CaptureGetParameter(glState, target, sizeof(GLint), paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureGetInternalformativ_params(const State &glState,
@@ -433,8 +433,7 @@ void CaptureGetSamplerParameterfv_params(const State &glState,
                                          GLfloat *params,
                                          ParamCapture *paramCapture)
 {
-    // page 458 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    paramCapture->readBufferSizeBytes = 4 * sizeof(GLfloat);
+    UNIMPLEMENTED();
 }
 
 void CaptureGetSamplerParameteriv_params(const State &glState,
@@ -444,8 +443,7 @@ void CaptureGetSamplerParameteriv_params(const State &glState,
                                          GLint *params,
                                          ParamCapture *paramCapture)
 {
-    // page 458 https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
-    paramCapture->readBufferSizeBytes = 4 * sizeof(GLint);
+    UNIMPLEMENTED();
 }
 
 void CaptureGetSynciv_length(const State &glState,
@@ -644,7 +642,7 @@ void CaptureSamplerParameterfv_param(const State &glState,
                                      const GLfloat *param,
                                      ParamCapture *paramCapture)
 {
-    CaptureTextureAndSamplerParameter_params<GLfloat>(pname, param, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureSamplerParameteriv_param(const State &glState,
@@ -654,7 +652,7 @@ void CaptureSamplerParameteriv_param(const State &glState,
                                      const GLint *param,
                                      ParamCapture *paramCapture)
 {
-    CaptureTextureAndSamplerParameter_params<GLint>(pname, param, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureTexImage3D_pixels(const State &glState,
@@ -734,7 +732,7 @@ void CaptureUniform1uiv_value(const State &glState,
                               const GLuint *value,
                               ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLuint), paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniform2uiv_value(const State &glState,
@@ -744,7 +742,7 @@ void CaptureUniform2uiv_value(const State &glState,
                               const GLuint *value,
                               ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLuint) * 2, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniform3uiv_value(const State &glState,
@@ -754,7 +752,7 @@ void CaptureUniform3uiv_value(const State &glState,
                               const GLuint *value,
                               ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLuint) * 3, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniform4uiv_value(const State &glState,
@@ -764,7 +762,7 @@ void CaptureUniform4uiv_value(const State &glState,
                               const GLuint *value,
                               ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLuint) * 4, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix2x3fv_value(const State &glState,
@@ -775,7 +773,7 @@ void CaptureUniformMatrix2x3fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 6, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix2x4fv_value(const State &glState,
@@ -786,7 +784,7 @@ void CaptureUniformMatrix2x4fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 8, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix3x2fv_value(const State &glState,
@@ -797,7 +795,7 @@ void CaptureUniformMatrix3x2fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 6, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix3x4fv_value(const State &glState,
@@ -808,7 +806,7 @@ void CaptureUniformMatrix3x4fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 12, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix4x2fv_value(const State &glState,
@@ -819,7 +817,7 @@ void CaptureUniformMatrix4x2fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 8, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureUniformMatrix4x3fv_value(const State &glState,
@@ -830,7 +828,7 @@ void CaptureUniformMatrix4x3fv_value(const State &glState,
                                      const GLfloat *value,
                                      ParamCapture *paramCapture)
 {
-    CaptureMemory(value, count * sizeof(GLfloat) * 12, paramCapture);
+    UNIMPLEMENTED();
 }
 
 void CaptureVertexAttribI4iv_v(const State &glState,

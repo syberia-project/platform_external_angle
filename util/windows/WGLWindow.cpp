@@ -77,7 +77,6 @@ bool WGLWindow::initializeGL(OSWindow *osWindow,
 {
     if (driverType != angle::GLESDriverType::SystemWGL)
     {
-        std::cerr << "WGLWindow requires angle::GLESDriverType::SystemWGL.\n";
         return false;
     }
 

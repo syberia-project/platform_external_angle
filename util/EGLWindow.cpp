@@ -13,7 +13,7 @@
 #include <string.h>
 
 #include "common/system_utils.h"
-#include "platform/PlatformMethods.h"
+#include "platform/Platform.h"
 #include "util/OSWindow.h"
 
 // ConfigParameters implementation.
@@ -189,11 +189,6 @@ bool EGLWindow::initializeDisplay(OSWindow *osWindow,
     else if (params.allocateNonZeroMemoryFeature == EGL_FALSE)
     {
         disabledFeatureOverrides.push_back("allocate_non_zero_memory");
-    }
-
-    if (params.emulateCopyTexImage2DFromRenderbuffers == EGL_TRUE)
-    {
-        enabledFeatureOverrides.push_back("emulate_copyteximage2d_from_renderbuffers");
     }
 
     if (!disabledFeatureOverrides.empty())

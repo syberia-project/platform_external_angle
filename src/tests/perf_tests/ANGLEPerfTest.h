@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "platform/PlatformMethods.h"
+#include "platform/Platform.h"
 #include "test_utils/angle_test_configs.h"
 #include "test_utils/angle_test_instantiate.h"
 #include "test_utils/angle_test_platform.h"
@@ -88,9 +88,6 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     // Overriden in trace perf tests.
     virtual void saveScreenshot(const std::string &screenshotName) {}
 
-    double printResults();
-    void calibrateStepsToRun();
-
     std::string mName;
     std::string mBackend;
     std::string mStory;
@@ -98,16 +95,14 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     uint64_t mGPUTimeNs;
     bool mSkipTest;
     std::unique_ptr<perf_test::PerfResultReporter> mReporter;
-    int mStepsToRun;
-    int mNumStepsPerformed;
-    int mIterationsPerStep;
-    bool mRunning;
-};
 
-enum class SurfaceType
-{
-    Window,
-    Offscreen,
+  private:
+    double printResults();
+
+    unsigned int mStepsToRun;
+    unsigned int mNumStepsPerformed;
+    unsigned int mIterationsPerStep;
+    bool mRunning;
 };
 
 struct RenderTestParams : public angle::PlatformParameters
@@ -122,7 +117,6 @@ struct RenderTestParams : public angle::PlatformParameters
     EGLint windowHeight            = 64;
     unsigned int iterationsPerStep = 0;
     bool trackGpuTime              = false;
-    SurfaceType surfaceType        = SurfaceType::Window;
 };
 
 class ANGLERenderTest : public ANGLEPerfTest
@@ -197,8 +191,8 @@ namespace params
 template <typename ParamsT>
 ParamsT Offscreen(const ParamsT &input)
 {
-    ParamsT output     = input;
-    output.surfaceType = SurfaceType::Offscreen;
+    ParamsT output   = input;
+    output.offscreen = true;
     return output;
 }
 

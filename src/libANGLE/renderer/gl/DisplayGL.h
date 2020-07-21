@@ -19,8 +19,6 @@ class Surface;
 
 namespace rx
 {
-class ShareGroupGL : public ShareGroupImpl
-{};
 
 class RendererGL;
 
@@ -40,8 +38,6 @@ class DisplayGL : public DisplayImpl
 
     StreamProducerImpl *createStreamProducerD3DTexture(egl::Stream::ConsumerType consumerType,
                                                        const egl::AttributeMap &attribs) override;
-
-    ShareGroupImpl *createShareGroup() override;
 
     egl::Error makeCurrent(egl::Surface *drawSurface,
                            egl::Surface *readSurface,

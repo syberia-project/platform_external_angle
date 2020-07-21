@@ -34,7 +34,6 @@ class Replayer {
     kFailedToCreateSpirvToolsInterface,
     kInitialBinaryInvalid,
     kReplayValidationFailure,
-    kTooManyTransformationsRequested,
   };
 
   // Constructs a replayer from the given target environment.
@@ -53,17 +52,16 @@ class Replayer {
   // invoked once for each message communicated from the library.
   void SetMessageConsumer(MessageConsumer consumer);
 
-  // Transforms |binary_in| to |binary_out| by attempting to apply the first
-  // |num_transformations_to_apply| transformations from
-  // |transformation_sequence_in|.  Initial facts about the input binary and the
-  // context in which it will execute are provided via |initial_facts|.  The
-  // transformations that were successfully applied are returned via
-  // |transformation_sequence_out|.
+  // Transforms |binary_in| to |binary_out| by attempting to apply the
+  // transformations from |transformation_sequence_in|.  Initial facts about the
+  // input binary and the context in which it will execute are provided via
+  // |initial_facts|.  The transformations that were successfully applied are
+  // returned via |transformation_sequence_out|.
   ReplayerResultStatus Run(
       const std::vector<uint32_t>& binary_in,
       const protobufs::FactSequence& initial_facts,
       const protobufs::TransformationSequence& transformation_sequence_in,
-      uint32_t num_transformations_to_apply, std::vector<uint32_t>* binary_out,
+      std::vector<uint32_t>* binary_out,
       protobufs::TransformationSequence* transformation_sequence_out) const;
 
  private:

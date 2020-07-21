@@ -30,11 +30,6 @@
 #include "libANGLE/VertexArray.h"
 #include "libANGLE/angletypes.h"
 
-namespace egl
-{
-class ShareGroup;
-}  // namespace egl
-
 namespace gl
 {
 class BufferManager;
@@ -90,7 +85,6 @@ class State : angle::NonCopyable
 {
   public:
     State(const State *shareContextState,
-          egl::ShareGroup *shareGroup,
           TextureManager *shareTextures,
           const OverlayType *overlay,
           const EGLenum clientType,
@@ -117,7 +111,6 @@ class State : angle::NonCopyable
     const TextureCapsMap &getTextureCaps() const { return mTextureCaps; }
     const Extensions &getExtensions() const { return mExtensions; }
     const Limitations &getLimitations() const { return mLimitations; }
-    egl::ShareGroup *getShareGroup() const { return mShareGroup; }
 
     bool isWebGL() const { return mExtensions.webglCompatibility; }
 
@@ -132,8 +125,8 @@ class State : angle::NonCopyable
     bool allActiveDrawBufferChannelsMasked() const;
     bool anyActiveDrawBufferChannelMasked() const;
     const RasterizerState &getRasterizerState() const;
-    const BlendState &getBlendState() const { return mBlendStateArray[0]; }
-    const BlendStateArray &getBlendStateArray() const { return mBlendStateArray; }
+    const BlendState &getBlendState() const { return mBlendState; }
+    const BlendStateExt &getBlendStateExt() const { return mBlendStateExt; }
     const DepthStencilState &getDepthStencilState() const;
 
     // Clear behavior setters & state parameter block generation function
@@ -173,11 +166,11 @@ class State : angle::NonCopyable
     float getFarPlane() const { return mFarZ; }
 
     // Blend state manipulation
-    bool isBlendEnabled() const { return mBlendStateArray[0].blend; }
+    bool isBlendEnabled() const { return mBlendStateExt.mEnabledMask.test(0); }
     bool isBlendEnabledIndexed(GLuint index) const
     {
-        ASSERT(index < mBlendStateArray.size());
-        return mBlendStateArray[index].blend;
+        ASSERT(static_cast<size_t>(index) < mBlendStateExt.mMaxDrawBuffers);
+        return mBlendStateExt.mEnabledMask.test(index);
     }
     DrawBufferMask getBlendEnabledDrawBufferMask() const { return mBlendStateExt.mEnabledMask; }
     void setBlend(bool enabled);
@@ -262,7 +255,6 @@ class State : angle::NonCopyable
 
     // Hint setters
     void setGenerateMipmapHint(GLenum hint);
-    GLenum getGenerateMipmapHint() const;
     void setTextureFilteringHint(GLenum hint);
     GLenum getTextureFilteringHint() const;
     void setFragmentShaderDerivativeHint(GLenum hint);
@@ -685,11 +677,6 @@ class State : angle::NonCopyable
         mDirtyObjects.set(DIRTY_OBJECT_DRAW_ATTACHMENTS);
     }
 
-    ANGLE_INLINE void setProgramPipelineDirty()
-    {
-        mDirtyObjects.set(DIRTY_OBJECT_PROGRAM_PIPELINE);
-    }
-
     // This actually clears the current value dirty bits.
     // TODO(jmadill): Pass mutable dirty bits into Impl.
     AttributesMask getAndResetDirtyCurrentValues() const;
@@ -796,8 +783,6 @@ class State : angle::NonCopyable
 
     bool isEarlyFragmentTestsOptimizationAllowed() const { return isSampleCoverageEnabled(); }
 
-    const BlendStateExt &getBlendStateExt() const { return mBlendStateExt; }
-
   private:
     friend class Context;
 
@@ -868,8 +853,6 @@ class State : angle::NonCopyable
     Extensions mExtensions;
     Limitations mLimitations;
 
-    egl::ShareGroup *mShareGroup;
-
     // Resource managers.
     BufferManager *mBufferManager;
     ShaderProgramManager *mShaderProgramManager;
@@ -894,7 +877,7 @@ class State : angle::NonCopyable
     bool mScissorTest;
     Rectangle mScissor;
 
-    BlendStateArray mBlendStateArray;
+    BlendState mBlendState;  // Buffer zero blend state legacy struct
     BlendStateExt mBlendStateExt;
     ColorF mBlendColor;
     bool mSampleAlphaToCoverage;

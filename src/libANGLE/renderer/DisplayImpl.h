@@ -13,7 +13,6 @@
 #include "libANGLE/Caps.h"
 #include "libANGLE/Config.h"
 #include "libANGLE/Error.h"
-#include "libANGLE/Observer.h"
 #include "libANGLE/Stream.h"
 #include "libANGLE/Version.h"
 #include "libANGLE/renderer/EGLImplFactory.h"
@@ -52,14 +51,7 @@ struct ConfigDesc;
 class DeviceImpl;
 class StreamProducerImpl;
 
-class ShareGroupImpl : angle::NonCopyable
-{
-  public:
-    ShareGroupImpl() {}
-    virtual ~ShareGroupImpl() {}
-};
-
-class DisplayImpl : public EGLImplFactory, public angle::Subject
+class DisplayImpl : public EGLImplFactory
 {
   public:
     DisplayImpl(const egl::DisplayState &state);
@@ -86,9 +78,6 @@ class DisplayImpl : public EGLImplFactory, public angle::Subject
                                                  EGLenum target,
                                                  EGLClientBuffer clientBuffer,
                                                  const egl::AttributeMap &attribs) const;
-    virtual egl::Error validatePixmap(egl::Config *config,
-                                      EGLNativePixmapType pixmap,
-                                      const egl::AttributeMap &attributes) const;
 
     virtual std::string getVendorString() const = 0;
 
@@ -112,8 +101,6 @@ class DisplayImpl : public EGLImplFactory, public angle::Subject
     virtual void populateFeatureList(angle::FeatureList *features) = 0;
 
     const egl::DisplayState &getState() const { return mState; }
-
-    virtual egl::Error handleGPUSwitch();
 
   protected:
     const egl::DisplayState &mState;

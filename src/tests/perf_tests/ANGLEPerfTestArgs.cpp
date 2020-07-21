@@ -18,7 +18,6 @@ int gStepsToRunOverride    = -1;
 bool gEnableTrace          = false;
 const char *gTraceFile     = "ANGLETrace.json";
 const char *gScreenShotDir = nullptr;
-bool gVerboseLogging       = false;
 }  // namespace angle
 
 using namespace angle;
@@ -61,10 +60,6 @@ void ANGLEProcessPerfTestArgs(int *argc, char **argv)
         {
             gScreenShotDir = argv[argIndex + 1];
             argIndex++;
-        }
-        else if (strcmp("--verbose-logging", argv[argIndex]) == 0)
-        {
-            gVerboseLogging = true;
         }
         else
         {

@@ -14,8 +14,6 @@
 
 namespace rx
 {
-class ShareGroupNULL : public ShareGroupImpl
-{};
 
 class AllocationTrackerNULL;
 
@@ -74,8 +72,6 @@ class DisplayNULL : public DisplayImpl
 
     StreamProducerImpl *createStreamProducerD3DTexture(egl::Stream::ConsumerType consumerType,
                                                        const egl::AttributeMap &attribs) override;
-
-    ShareGroupImpl *createShareGroup() override;
 
     void populateFeatureList(angle::FeatureList *features) override {}
 
