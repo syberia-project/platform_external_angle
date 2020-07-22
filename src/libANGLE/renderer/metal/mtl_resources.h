@@ -49,36 +49,35 @@ class Resource : angle::NonCopyable
   public:
     virtual ~Resource() {}
 
-    // Check whether the resource still being used by GPU
     bool isBeingUsedByGPU(Context *context) const;
-    // Checks whether the last command buffer that uses the given resource has been committed or not
-    bool hasPendingWorks(Context *context) const;
 
     void setUsedByCommandBufferWithQueueSerial(uint64_t serial, bool writing);
 
-    uint64_t getCommandBufferQueueSerial() const { return mUsageRef->cmdBufferQueueSerial; }
+    const std::atomic<uint64_t> &getCommandBufferQueueSerial() const
+    {
+        return mUsageRef->cmdBufferQueueSerial;
+    }
 
-    // Flag indicate whether we should synchronize the content to CPU after GPU changed this
+    // Flag indicate whether we should synchornize the content to CPU after GPU changed this
     // resource's content.
-    bool isCPUReadMemNeedSync() const { return mUsageRef->cpuReadMemNeedSync; }
-    void resetCPUReadMemNeedSync() { mUsageRef->cpuReadMemNeedSync = false; }
+    bool isCPUReadMemDirty() const { return mUsageRef->cpuReadMemDirty; }
+    void resetCPUReadMemDirty() { mUsageRef->cpuReadMemDirty = false; }
 
   protected:
     Resource();
     // Share the GPU usage ref with other resource
     Resource(Resource *other);
 
-    void reset();
-
   private:
     struct UsageRef
     {
         // The id of the last command buffer that is using this resource.
-        uint64_t cmdBufferQueueSerial = 0;
+        std::atomic<uint64_t> cmdBufferQueueSerial{0};
 
+        // NOTE(hqle): resource dirty handle is not threadsafe.
         // This flag means the resource was issued to be modified by GPU, if CPU wants to read
-        // its content, explicit synchronization call must be invoked.
-        bool cpuReadMemNeedSync = false;
+        // its content, explicit synchornization call must be invoked.
+        bool cpuReadMemDirty = false;
     };
 
     // One resource object might just be a view of another resource. For example, a texture 2d
@@ -107,15 +106,6 @@ class Texture final : public Resource,
                                          const Format &format,
                                          uint32_t size,
                                          uint32_t mips /** use zero to create full mipmaps chain */,
-                                         bool renderTargetOnly,
-                                         bool allowTextureView,
-                                         TextureRef *refOut);
-
-    static angle::Result Make2DMSTexture(ContextMtl *context,
-                                         const Format &format,
-                                         uint32_t width,
-                                         uint32_t height,
-                                         uint32_t samples,
                                          bool renderTargetOnly,
                                          bool allowTextureView,
                                          TextureRef *refOut);
@@ -156,8 +146,6 @@ class Texture final : public Resource,
 
     gl::Extents size(uint32_t level = 0) const;
     gl::Extents size(const gl::ImageIndex &index) const;
-
-    uint32_t samples() const;
 
     // For render target
     MTLColorWriteMask getColorWritableMask() const { return *mColorWritableMask; }

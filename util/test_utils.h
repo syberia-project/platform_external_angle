@@ -120,7 +120,6 @@ Process *LaunchProcess(const std::vector<const char *> &args,
 
 int NumberOfProcessors();
 
-const char *GetNativeEGLLibraryNameWithExtension();
 }  // namespace angle
 
 #endif  // UTIL_TEST_UTILS_H_

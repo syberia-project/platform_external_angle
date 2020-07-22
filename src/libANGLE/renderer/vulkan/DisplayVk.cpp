@@ -153,16 +153,11 @@ ImageImpl *DisplayVk::createImage(const egl::ImageState &state,
     return new ImageVk(state, context);
 }
 
-ShareGroupImpl *DisplayVk::createShareGroup()
-{
-    return new ShareGroupVk();
-}
-
-ContextImpl *DisplayVk::createContext(const gl::State &state,
-                                      gl::ErrorSet *errorSet,
-                                      const egl::Config *configuration,
-                                      const gl::Context *shareContext,
-                                      const egl::AttributeMap &attribs)
+rx::ContextImpl *DisplayVk::createContext(const gl::State &state,
+                                          gl::ErrorSet *errorSet,
+                                          const egl::Config *configuration,
+                                          const gl::Context *shareContext,
+                                          const egl::AttributeMap &attribs)
 {
     return new ContextVk(state, errorSet, mRenderer);
 }
@@ -233,7 +228,7 @@ void DisplayVk::generateExtensions(egl::DisplayExtensions *outExtensions) const
 
 #if defined(ANGLE_PLATFORM_GGP)
     outExtensions->ggpStreamDescriptor = true;
-    outExtensions->swapWithFrameToken  = getRenderer()->getFeatures().supportsGGPFrameToken.enabled;
+    outExtensions->swapWithFrameToken  = true;
 #endif  // defined(ANGLE_PLATFORM_GGP)
 }
 

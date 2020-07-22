@@ -80,9 +80,14 @@ void FuzzerPassAddDeadContinues::Apply() {
           block.id(), condition_value, std::move(phi_ids));
       // Probabilistically decide whether to apply the transformation in the
       // case that it is applicable.
-      if (GetFuzzerContext()->ChoosePercentage(
+      if (candidate_transformation.IsApplicable(GetIRContext(),
+                                                *GetTransformationContext()) &&
+          GetFuzzerContext()->ChoosePercentage(
               GetFuzzerContext()->GetChanceOfAddingDeadContinue())) {
-        MaybeApplyTransformation(candidate_transformation);
+        candidate_transformation.Apply(GetIRContext(),
+                                       GetTransformationContext());
+        *GetTransformations()->add_transformation() =
+            candidate_transformation.ToMessage();
       }
     }
   }

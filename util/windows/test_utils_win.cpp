@@ -444,9 +444,4 @@ bool DeleteFile(const char *path)
 
     return !!::DeleteFileA(path) ? true : ReturnSuccessOnNotFound();
 }
-
-const char *GetNativeEGLLibraryNameWithExtension()
-{
-    return "libEGL.dll";
-}
 }  // namespace angle

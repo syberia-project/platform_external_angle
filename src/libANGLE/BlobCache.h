@@ -102,8 +102,7 @@ class BlobCache final : angle::NonCopyable
     // set, those will be used.  Otherwise they key is looked up in this object's cache.
     ANGLE_NO_DISCARD bool get(angle::ScratchBuffer *scratchBuffer,
                               const BlobCache::Key &key,
-                              BlobCache::Value *valueOut,
-                              size_t *bufferSizeOut);
+                              BlobCache::Value *valueOut);
 
     // For querying the contents of the cache.
     ANGLE_NO_DISCARD bool getAt(size_t index,

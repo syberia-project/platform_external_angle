@@ -550,18 +550,6 @@ void Format::initialize(RendererVk *renderer, const angle::Format &angleFormat)
             vertexLoadRequiresConversion = false;
             break;
 
-        case angle::FormatID::B10G10R10A2_UNORM:
-            internalFormat               = GL_BGR10_A2_ANGLEX;
-            actualImageFormatID          = angle::FormatID::B10G10R10A2_UNORM;
-            vkImageFormat                = VK_FORMAT_A2R10G10B10_UNORM_PACK32;
-            imageInitializerFunction     = nullptr;
-            actualBufferFormatID         = angle::FormatID::B10G10R10A2_UNORM;
-            vkBufferFormat               = VK_FORMAT_A2R10G10B10_UNORM_PACK32;
-            vkBufferFormatIsPacked       = true;
-            vertexLoadFunction           = CopyNativeVertexData<GLuint, 1, 1, 0>;
-            vertexLoadRequiresConversion = false;
-            break;
-
         case angle::FormatID::B4G4R4A4_UNORM:
             internalFormat               = GL_BGRA4_ANGLEX;
             actualImageFormatID          = angle::FormatID::B4G4R4A4_UNORM;
@@ -1157,15 +1145,7 @@ void Format::initialize(RendererVk *renderer, const angle::Format &angleFormat)
             break;
 
         case angle::FormatID::NONE:
-            internalFormat               = GL_NONE;
-            actualImageFormatID          = angle::FormatID::NONE;
-            vkImageFormat                = VK_FORMAT_UNDEFINED;
-            imageInitializerFunction     = nullptr;
-            actualBufferFormatID         = angle::FormatID::NONE;
-            vkBufferFormat               = VK_FORMAT_UNDEFINED;
-            vkBufferFormatIsPacked       = false;
-            vertexLoadFunction           = nullptr;
-            vertexLoadRequiresConversion = false;
+            // This format is not implemented in Vulkan.
             break;
 
         case angle::FormatID::PVRTC1_RGBA_2BPP_UNORM_BLOCK:

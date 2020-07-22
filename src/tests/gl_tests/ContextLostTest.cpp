@@ -13,17 +13,7 @@ namespace angle
 class ContextLostTest : public ANGLETest
 {
   protected:
-    ContextLostTest()
-    {
-        if (IsEGLClientExtensionEnabled("EGL_EXT_create_context_robustness"))
-        {
-            setContextResetStrategy(EGL_LOSE_CONTEXT_ON_RESET_EXT);
-        }
-        else
-        {
-            setContextResetStrategy(EGL_NO_RESET_NOTIFICATION_EXT);
-        }
-    }
+    ContextLostTest() { setContextResetStrategy(EGL_LOSE_CONTEXT_ON_RESET_EXT); }
 };
 
 // GL_CHROMIUM_lose_context is implemented in the frontend
@@ -36,8 +26,7 @@ TEST_P(ContextLostTest, ExtensionStringExposed)
 TEST_P(ContextLostTest, BasicUsage)
 {
     ANGLE_SKIP_TEST_IF(!EnsureGLExtensionEnabled("GL_CHROMIUM_lose_context"));
-    ANGLE_SKIP_TEST_IF(!EnsureGLExtensionEnabled("GL_EXT_robustness") ||
-                       !IsEGLClientExtensionEnabled("EGL_EXT_create_context_robustness"));
+    ANGLE_SKIP_TEST_IF(!EnsureGLExtensionEnabled("GL_EXT_robustness"));
 
     glLoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET, GL_INNOCENT_CONTEXT_RESET);
     EXPECT_GL_NO_ERROR();
@@ -119,15 +108,8 @@ class ContextLostSkipValidationTest : public ANGLETest
   protected:
     ContextLostSkipValidationTest()
     {
-        if (IsEGLClientExtensionEnabled("EGL_EXT_create_context_robustness"))
-        {
-            setContextResetStrategy(EGL_LOSE_CONTEXT_ON_RESET_EXT);
-            setNoErrorEnabled(true);
-        }
-        else
-        {
-            setContextResetStrategy(EGL_NO_RESET_NOTIFICATION_EXT);
-        }
+        setContextResetStrategy(EGL_LOSE_CONTEXT_ON_RESET_EXT);
+        setNoErrorEnabled(true);
     }
 };
 

@@ -24,7 +24,8 @@
 #include "libANGLE/renderer/gl/wgl/RendererWGL.h"
 #include "libANGLE/renderer/gl/wgl/WindowSurfaceWGL.h"
 #include "libANGLE/renderer/gl/wgl/wgl_utils.h"
-#include "platform/PlatformMethods.h"
+
+#include "platform/Platform.h"
 
 #include <EGL/eglext.h>
 #include <sstream>
@@ -556,6 +557,11 @@ egl::ConfigSet DisplayWGL::generateConfigs()
 
 bool DisplayWGL::testDeviceLost()
 {
+    if (mHasRobustness)
+    {
+        return mRenderer->getResetStatus() != gl::GraphicsResetStatus::NoError;
+    }
+
     return false;
 }
 

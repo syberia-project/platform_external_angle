@@ -11,6 +11,7 @@
 
 #include <map>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "libANGLE/renderer/gl/egl/DisplayEGL.h"
@@ -68,6 +69,13 @@ class DisplayAndroid : public DisplayEGL
     bool mSupportsSurfaceless;
 
     EGLSurface mDummyPbuffer;
+
+    struct CurrentNativeContext
+    {
+        EGLSurface surface = EGL_NO_SURFACE;
+        EGLContext context = EGL_NO_CONTEXT;
+    };
+    std::unordered_map<std::thread::id, CurrentNativeContext> mCurrentNativeContext;
 };
 
 }  // namespace rx

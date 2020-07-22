@@ -28,7 +28,7 @@ RenderTargetVk::~RenderTargetVk() {}
 RenderTargetVk::RenderTargetVk(RenderTargetVk &&other)
     : mImage(other.mImage),
       mImageViews(other.mImageViews),
-      mLevelIndexGL(other.mLevelIndexGL),
+      mLevelIndex(other.mLevelIndex),
       mLayerIndex(other.mLayerIndex),
       mContentDefined(other.mContentDefined)
 {
@@ -37,15 +37,15 @@ RenderTargetVk::RenderTargetVk(RenderTargetVk &&other)
 
 void RenderTargetVk::init(vk::ImageHelper *image,
                           vk::ImageViewHelper *imageViews,
-                          uint32_t levelIndexGL,
+                          uint32_t levelIndex,
                           uint32_t layerIndex)
 {
-    mImage        = image;
-    mImageViews   = imageViews;
-    mLevelIndexGL = levelIndexGL;
-    mLayerIndex   = layerIndex;
-
-    // Conservatively assume the content is defined.
+    mImage      = image;
+    mImageViews = imageViews;
+    mLevelIndex = levelIndex;
+    mLayerIndex = layerIndex;
+    // We are being conservative here since our targeted optimization is to skip surfaceVK's depth
+    // buffer load after swap call.
     mContentDefined = true;
 }
 
@@ -53,21 +53,23 @@ void RenderTargetVk::reset()
 {
     mImage          = nullptr;
     mImageViews     = nullptr;
-    mLevelIndexGL   = 0;
+    mLevelIndex     = 0;
     mLayerIndex     = 0;
     mContentDefined = false;
 }
 
-ImageViewSerial RenderTargetVk::getAssignImageViewSerial(ContextVk *contextVk) const
+vk::AttachmentSerial RenderTargetVk::getAssignSerial(ContextVk *contextVk)
 {
-    ASSERT(mImageViews);
+    ASSERT(mImage && mImage->valid());
+    vk::AttachmentSerial attachmentSerial;
     ASSERT(mLayerIndex < std::numeric_limits<uint16_t>::max());
-    ASSERT(mLevelIndexGL < std::numeric_limits<uint16_t>::max());
-
-    ImageViewSerial imageViewSerial =
-        mImageViews->getAssignSerial(contextVk, mLevelIndexGL, mLayerIndex);
-    ASSERT(imageViewSerial.getValue() < std::numeric_limits<uint32_t>::max());
-    return imageViewSerial;
+    ASSERT(mLevelIndex < std::numeric_limits<uint16_t>::max());
+    Serial imageSerial = mImage->getAssignSerial(contextVk);
+    ASSERT(imageSerial.getValue() < std::numeric_limits<uint32_t>::max());
+    SetBitField(attachmentSerial.layer, mLayerIndex);
+    SetBitField(attachmentSerial.level, mLevelIndex);
+    SetBitField(attachmentSerial.imageSerial, imageSerial.getValue());
+    return attachmentSerial;
 }
 
 angle::Result RenderTargetVk::onColorDraw(ContextVk *contextVk)
@@ -96,13 +98,13 @@ angle::Result RenderTargetVk::onDepthStencilDraw(ContextVk *contextVk)
     return angle::Result::Continue;
 }
 
-vk::ImageHelper &RenderTargetVk::getImageForRenderPass()
+vk::ImageHelper &RenderTargetVk::getImage()
 {
     ASSERT(mImage && mImage->valid());
     return *mImage;
 }
 
-const vk::ImageHelper &RenderTargetVk::getImageForRenderPass() const
+const vk::ImageHelper &RenderTargetVk::getImage() const
 {
     ASSERT(mImage && mImage->valid());
     return *mImage;
@@ -112,30 +114,8 @@ angle::Result RenderTargetVk::getImageView(ContextVk *contextVk,
                                            const vk::ImageView **imageViewOut) const
 {
     ASSERT(mImage && mImage->valid() && mImageViews);
-    int32_t levelVK = mLevelIndexGL - mImage->getBaseLevel();
-    return mImageViews->getLevelLayerDrawImageView(contextVk, *mImage, levelVK, mLayerIndex,
+    return mImageViews->getLevelLayerDrawImageView(contextVk, *mImage, mLevelIndex, mLayerIndex,
                                                    imageViewOut);
-}
-
-angle::Result RenderTargetVk::getAndRetainCopyImageView(ContextVk *contextVk,
-                                                        const vk::ImageView **imageViewOut) const
-{
-    retainImageViews(contextVk);
-
-    const vk::ImageViewHelper *imageViews = mImageViews;
-    const vk::ImageView &copyView         = imageViews->getCopyImageView();
-
-    // If the source of render target is a texture or renderbuffer, this will always be valid.  This
-    // is also where 3D or 2DArray images could be the source of the render target.
-    if (copyView.valid())
-    {
-        *imageViewOut = &copyView;
-        return angle::Result::Continue;
-    }
-
-    // Otherwise, this must come from the surface, in which case the image is 2D, so the image view
-    // used to draw is just as good for fetching.
-    return getImageView(contextVk, imageViewOut);
 }
 
 const vk::Format &RenderTargetVk::getImageFormat() const
@@ -147,8 +127,7 @@ const vk::Format &RenderTargetVk::getImageFormat() const
 gl::Extents RenderTargetVk::getExtents() const
 {
     ASSERT(mImage && mImage->valid());
-    uint32_t levelVK = mLevelIndexGL - mImage->getBaseLevel();
-    return mImage->getLevelExtents2D(levelVK);
+    return mImage->getLevelExtents2D(static_cast<uint32_t>(mLevelIndex));
 }
 
 void RenderTargetVk::updateSwapchainImage(vk::ImageHelper *image, vk::ImageViewHelper *imageViews)
@@ -158,16 +137,11 @@ void RenderTargetVk::updateSwapchainImage(vk::ImageHelper *image, vk::ImageViewH
     mImageViews = imageViews;
 }
 
-vk::ImageHelper &RenderTargetVk::getImageForCopy() const
+vk::ImageHelper *RenderTargetVk::getImageForWrite(ContextVk *contextVk) const
 {
     ASSERT(mImage && mImage->valid());
-    return *mImage;
-}
-
-vk::ImageHelper &RenderTargetVk::getImageForWrite() const
-{
-    ASSERT(mImage && mImage->valid());
-    return *mImage;
+    retainImageViews(contextVk);
+    return mImage;
 }
 
 angle::Result RenderTargetVk::flushStagedUpdates(ContextVk *contextVk,
@@ -182,13 +156,13 @@ angle::Result RenderTargetVk::flushStagedUpdates(ContextVk *contextVk,
     }
 
     ASSERT(mImage->valid());
-    if (!mImage->isUpdateStaged(mLevelIndexGL, layerIndex))
+    if (!mImage->isUpdateStaged(mLevelIndex, layerIndex))
         return angle::Result::Continue;
 
     vk::CommandBuffer *commandBuffer;
     ANGLE_TRY(contextVk->endRenderPassAndGetCommandBuffer(&commandBuffer));
     return mImage->flushSingleSubresourceStagedUpdates(
-        contextVk, mLevelIndexGL, layerIndex, commandBuffer, deferredClears, deferredClearIndex);
+        contextVk, mLevelIndex, layerIndex, commandBuffer, deferredClears, deferredClearIndex);
 }
 
 void RenderTargetVk::retainImageViews(ContextVk *contextVk) const
@@ -201,16 +175,16 @@ gl::ImageIndex RenderTargetVk::getImageIndex() const
     // Determine the GL type from the Vk Image properties.
     if (mImage->getType() == VK_IMAGE_TYPE_3D)
     {
-        return gl::ImageIndex::Make3D(mLevelIndexGL, mLayerIndex);
+        return gl::ImageIndex::Make3D(mLevelIndex, mLayerIndex);
     }
 
     // We don't need to distinguish 2D array and cube.
     if (mImage->getLayerCount() > 1)
     {
-        return gl::ImageIndex::Make2DArray(mLevelIndexGL, mLayerIndex);
+        return gl::ImageIndex::Make2DArray(mLevelIndex, mLayerIndex);
     }
 
     ASSERT(mLayerIndex == 0);
-    return gl::ImageIndex::Make2D(mLevelIndexGL);
+    return gl::ImageIndex::Make2D(mLevelIndex);
 }
 }  // namespace rx

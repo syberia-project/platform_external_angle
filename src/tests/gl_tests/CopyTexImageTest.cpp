@@ -485,6 +485,9 @@ TEST_P(CopyTexImageTest, CopyTexSubImageToNonCubeCompleteDestination)
 // Deleting textures after copying to them. http://anglebug.com/4267
 TEST_P(CopyTexImageTest, DeleteAfterCopyingToTextures)
 {
+    // Asserts on Vulkan backend. http://anglebug.com/4274
+    ANGLE_SKIP_TEST_IF(IsVulkan());
+
     GLTexture texture;
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -623,13 +626,7 @@ TEST_P(CopyTexImageTestES3, 2DArraySubImage)
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, tex, 0, 0);
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, tex, 0, 1);
-    for (int x = 0; x < kTexSize; x++)
-    {
-        for (int y = 0; y < kTexSize; y++)
-        {
-            EXPECT_PIXEL_COLOR_EQ(x, y, GLColor::green);
-        }
-    }
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
     ASSERT_GL_NO_ERROR();
 }
 
@@ -898,12 +895,7 @@ ANGLE_INSTANTIATE_TEST(CopyTexImageTest,
                        ES2_OPENGL(),
                        ES2_OPENGLES(),
                        ES2_VULKAN(),
-                       ES3_VULKAN(),
-                       WithEmulateCopyTexImage2DFromRenderbuffers(ES2_OPENGL()),
-                       WithEmulateCopyTexImage2DFromRenderbuffers(ES2_OPENGLES()));
+                       ES3_VULKAN());
 
-ANGLE_INSTANTIATE_TEST(CopyTexImageTestES3,
-                       ANGLE_ALL_TEST_PLATFORMS_ES3,
-                       WithEmulateCopyTexImage2DFromRenderbuffers(ES3_OPENGL()),
-                       WithEmulateCopyTexImage2DFromRenderbuffers(ES3_OPENGLES()));
+ANGLE_INSTANTIATE_TEST_ES3(CopyTexImageTestES3);
 }  // namespace angle

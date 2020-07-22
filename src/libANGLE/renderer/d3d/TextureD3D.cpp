@@ -681,8 +681,7 @@ angle::Result TextureD3D::setBaseLevel(const gl::Context *context, GLuint baseLe
 }
 
 angle::Result TextureD3D::syncState(const gl::Context *context,
-                                    const gl::Texture::DirtyBits &dirtyBits,
-                                    gl::TextureCommand source)
+                                    const gl::Texture::DirtyBits &dirtyBits)
 {
     // This could be improved using dirty bits.
     return angle::Result::Continue;

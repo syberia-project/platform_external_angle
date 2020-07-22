@@ -59,7 +59,11 @@ void FuzzerPassAddDeadBlocks::Apply() {
   }
   // Apply all those transformations that are in fact applicable.
   for (auto& transformation : candidate_transformations) {
-    MaybeApplyTransformation(transformation);
+    if (transformation.IsApplicable(GetIRContext(),
+                                    *GetTransformationContext())) {
+      transformation.Apply(GetIRContext(), GetTransformationContext());
+      *GetTransformations()->add_transformation() = transformation.ToMessage();
+    }
   }
 }
 

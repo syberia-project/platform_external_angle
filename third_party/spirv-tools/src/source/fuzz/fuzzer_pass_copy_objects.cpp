@@ -15,8 +15,7 @@
 #include "source/fuzz/fuzzer_pass_copy_objects.h"
 
 #include "source/fuzz/fuzzer_util.h"
-#include "source/fuzz/protobufs/spirvfuzz_protobufs.h"
-#include "source/fuzz/transformation_add_synonym.h"
+#include "source/fuzz/transformation_copy_object.h"
 
 namespace spvtools {
 namespace fuzz {
@@ -66,12 +65,11 @@ void FuzzerPassCopyObjects::Apply() {
 
         // Choose a copyable instruction at random, and create and apply an
         // object copying transformation based on it.
-        ApplyTransformation(TransformationAddSynonym(
+        ApplyTransformation(TransformationCopyObject(
             relevant_instructions[GetFuzzerContext()->RandomIndex(
                                       relevant_instructions)]
                 ->result_id(),
-            protobufs::TransformationAddSynonym::COPY_OBJECT,
-            GetFuzzerContext()->GetFreshId(), instruction_descriptor));
+            instruction_descriptor, GetFuzzerContext()->GetFreshId()));
       });
 }
 

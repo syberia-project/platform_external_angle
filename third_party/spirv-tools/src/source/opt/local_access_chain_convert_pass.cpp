@@ -281,7 +281,7 @@ void LocalAccessChainConvertPass::Initialize() {
   // Initialize collections
   supported_ref_ptrs_.clear();
 
-  // Initialize extension allowlist
+  // Initialize extension whitelist
   InitExtensions();
 }
 
@@ -292,11 +292,11 @@ bool LocalAccessChainConvertPass::AllExtensionsSupported() const {
   if (context()->get_feature_mgr()->HasCapability(
           SpvCapabilityVariablePointers))
     return false;
-  // If any extension not in allowlist, return false
+  // If any extension not in whitelist, return false
   for (auto& ei : get_module()->extensions()) {
     const char* extName =
         reinterpret_cast<const char*>(&ei.GetInOperand(0).words[0]);
-    if (extensions_allowlist_.find(extName) == extensions_allowlist_.end())
+    if (extensions_whitelist_.find(extName) == extensions_whitelist_.end())
       return false;
   }
   return true;
@@ -336,8 +336,8 @@ Pass::Status LocalAccessChainConvertPass::Process() {
 }
 
 void LocalAccessChainConvertPass::InitExtensions() {
-  extensions_allowlist_.clear();
-  extensions_allowlist_.insert({
+  extensions_whitelist_.clear();
+  extensions_whitelist_.insert({
       "SPV_AMD_shader_explicit_vertex_parameter",
       "SPV_AMD_shader_trinary_minmax",
       "SPV_AMD_gcn_shader",

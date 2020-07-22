@@ -35,8 +35,7 @@ class MemoryProgramCache final : angle::NonCopyable
     // Check if the cache contains a binary matching the specified program.
     bool get(const Context *context,
              const egl::BlobCache::Key &programHash,
-             egl::BlobCache::Value *programOut,
-             size_t *programSizeOut);
+             egl::BlobCache::Value *programOut);
 
     // For querying the contents of the cache.
     bool getAt(size_t index,

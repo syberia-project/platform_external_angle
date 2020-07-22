@@ -26,7 +26,7 @@
 
 // Version number for shader translation API.
 // It is incremented every time the API changes.
-#define ANGLE_SH_VERSION 231
+#define ANGLE_SH_VERSION 229
 
 enum ShShaderSpec
 {
@@ -790,12 +790,6 @@ extern const char kAtomicCountersBlockName[];
 extern const char kLineRasterEmulationPosition[];
 
 }  // namespace vk
-
-namespace mtl
-{
-// Specialization constant to enable GL_SAMPLE_COVERAGE_VALUE emulation.
-extern const char kCoverageMaskEnabledConstName[];
-}  // namespace mtl
 }  // namespace sh
 
 #endif  // GLSLANG_SHADERLANG_H_

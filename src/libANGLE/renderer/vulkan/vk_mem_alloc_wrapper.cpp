@@ -16,7 +16,6 @@ namespace vma
 VkResult InitAllocator(VkPhysicalDevice physicalDevice,
                        VkDevice device,
                        VkInstance instance,
-                       uint32_t apiVersion,
                        VmaAllocator *pAllocator)
 {
     VmaVulkanFunctions funcs                  = {};
@@ -54,7 +53,6 @@ VkResult InitAllocator(VkPhysicalDevice physicalDevice,
     allocatorInfo.device                 = device;
     allocatorInfo.instance               = instance;
     allocatorInfo.pVulkanFunctions       = &funcs;
-    allocatorInfo.vulkanApiVersion       = apiVersion;
 
     return vmaCreateAllocator(&allocatorInfo, pAllocator);
 }
@@ -90,22 +88,6 @@ VkResult CreateBuffer(VmaAllocator allocator,
     *pMemoryTypeIndexOut = allocationInfo.memoryType;
 
     return result;
-}
-
-VkResult FindMemoryTypeIndexForBufferInfo(VmaAllocator allocator,
-                                          const VkBufferCreateInfo *pBufferCreateInfo,
-                                          VkMemoryPropertyFlags requiredFlags,
-                                          VkMemoryPropertyFlags preferredFlags,
-                                          bool persistentlyMappedBuffers,
-                                          uint32_t *pMemoryTypeIndexOut)
-{
-    VmaAllocationCreateInfo allocationCreateInfo = {};
-    allocationCreateInfo.requiredFlags           = requiredFlags;
-    allocationCreateInfo.preferredFlags          = preferredFlags;
-    allocationCreateInfo.flags = (persistentlyMappedBuffers) ? VMA_ALLOCATION_CREATE_MAPPED_BIT : 0;
-
-    return vmaFindMemoryTypeIndexForBufferInfo(allocator, pBufferCreateInfo, &allocationCreateInfo,
-                                               pMemoryTypeIndexOut);
 }
 
 void GetMemoryTypeProperties(VmaAllocator allocator,

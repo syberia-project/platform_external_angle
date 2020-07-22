@@ -10,13 +10,11 @@
 
 #include "common/debug.h"
 #include "common/platform.h"
-#include "common/string_utils.h"
 #include "common/system_utils.h"
 #include "util/Timer.h"
 
 #include <time.h>
 #include <fstream>
-#include <unordered_map>
 
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
@@ -34,10 +32,9 @@ namespace angle
 {
 namespace
 {
-constexpr char kTestTimeoutArg[]       = "--test-timeout=";
-constexpr char kFilterFileArg[]        = "--filter-file=";
-constexpr char kResultFileArg[]        = "--results-file=";
-constexpr char kHistogramJsonFileArg[] = "--histogram-json-file=";
+constexpr char kTestTimeoutArg[] = "--test-timeout=";
+constexpr char kFilterFileArg[]  = "--filter-file=";
+constexpr char kResultFileArg[]  = "--results-file=";
 #if defined(NDEBUG)
 constexpr int kDefaultTestTimeout = 20;
 #else
@@ -169,30 +166,9 @@ js::Value ResultTypeToJSString(TestResultType type, js::Document::AllocatorType 
     return jsName;
 }
 
-bool WriteJsonFile(const std::string &outputFile, js::Document *doc)
-{
-    FILE *fp = fopen(outputFile.c_str(), "w");
-    if (!fp)
-    {
-        return false;
-    }
-
-    constexpr size_t kBufferSize = 0xFFFF;
-    std::vector<char> writeBuffer(kBufferSize);
-    js::FileWriteStream os(fp, writeBuffer.data(), kBufferSize);
-    js::PrettyWriter<js::FileWriteStream> writer(os);
-    if (!doc->Accept(writer))
-    {
-        fclose(fp);
-        return false;
-    }
-    fclose(fp);
-    return true;
-}
-
 // Writes out a TestResults to the Chromium JSON Test Results format.
 // https://chromium.googlesource.com/chromium/src.git/+/master/docs/testing/json_test_results_format.md
-void WriteResultsFile(bool interrupted,
+void WriteTestResults(bool interrupted,
                       const TestResults &testResults,
                       const std::string &outputFile,
                       const char *testSuiteName)
@@ -268,44 +244,15 @@ void WriteResultsFile(bool interrupted,
 
     printf("Writing test results to %s\n", outputFile.c_str());
 
-    if (!WriteJsonFile(outputFile, &doc))
-    {
-        printf("Error writing test results file.\n");
-    }
-}
+    FILE *fp = fopen(outputFile.c_str(), "w");
 
-void WriteHistogramJson(const TestResults &testResults,
-                        const std::string &outputFile,
-                        const char *testSuiteName)
-{
-    js::Document doc;
-    doc.SetArray();
+    constexpr size_t kBufferSize = 0xFFFF;
+    std::vector<char> writeBuffer(kBufferSize);
+    js::FileWriteStream os(fp, writeBuffer.data(), kBufferSize);
+    js::PrettyWriter<js::FileWriteStream> writer(os);
+    doc.Accept(writer);
 
-    // TODO: http://anglebug.com/4769 - Implement histogram output.
-
-    printf("Writing histogram json to %s\n", outputFile.c_str());
-
-    if (!WriteJsonFile(outputFile, &doc))
-    {
-        printf("Error writing histogram json file.\n");
-    }
-}
-
-void WriteOutputFiles(bool interrupted,
-                      const TestResults &testResults,
-                      const std::string &resultsFile,
-                      const std::string &histogramJsonOutputFile,
-                      const char *testSuiteName)
-{
-    if (!resultsFile.empty())
-    {
-        WriteResultsFile(interrupted, testResults, resultsFile, testSuiteName);
-    }
-
-    if (!histogramJsonOutputFile.empty())
-    {
-        WriteHistogramJson(testResults, histogramJsonOutputFile, testSuiteName);
-    }
+    fclose(fp);
 }
 
 void UpdateCurrentTestResult(const testing::TestResult &resultIn, TestResults *resultsOut)
@@ -338,14 +285,10 @@ class TestEventListener : public testing::EmptyTestEventListener
 {
   public:
     // Note: TestResults is owned by the TestSuite. It should outlive TestEventListener.
-    TestEventListener(const std::string &resultsFile,
-                      const std::string &histogramJsonFile,
+    TestEventListener(const std::string &outputFile,
                       const char *testSuiteName,
                       TestResults *testResults)
-        : mResultsFile(resultsFile),
-          mHistogramJsonFile(histogramJsonFile),
-          mTestSuiteName(testSuiteName),
-          mTestResults(testResults)
+        : mResultsFile(outputFile), mTestSuiteName(testSuiteName), mTestResults(testResults)
     {}
 
     void OnTestStart(const testing::TestInfo &testInfo) override
@@ -368,12 +311,11 @@ class TestEventListener : public testing::EmptyTestEventListener
     {
         std::lock_guard<std::mutex> guard(mTestResults->currentTestMutex);
         mTestResults->allDone = true;
-        WriteOutputFiles(false, *mTestResults, mResultsFile, mHistogramJsonFile, mTestSuiteName);
+        WriteTestResults(false, *mTestResults, mResultsFile, mTestSuiteName);
     }
 
   private:
     std::string mResultsFile;
-    std::string mHistogramJsonFile;
     const char *mTestSuiteName;
     TestResults *mTestResults;
 };
@@ -424,12 +366,12 @@ std::vector<TestIdentifier> GetFilteredTests(std::map<TestIdentifier, FileLine> 
     return FilterTests(fileLinesOut, gtestIDFilter, alsoRunDisabledTests);
 }
 
-std::vector<TestIdentifier> GetShardTests(const std::vector<TestIdentifier> &allTests,
-                                          int shardIndex,
+std::vector<TestIdentifier> GetShardTests(int shardIndex,
                                           int shardCount,
                                           std::map<TestIdentifier, FileLine> *fileLinesOut,
                                           bool alsoRunDisabledTests)
 {
+    std::vector<TestIdentifier> allTests = GetFilteredTests(fileLinesOut, alsoRunDisabledTests);
     std::vector<TestIdentifier> shardTests;
 
     for (int testIndex = shardIndex; testIndex < static_cast<int>(allTests.size());
@@ -479,12 +421,9 @@ std::string ParseTestSuiteName(const char *executable)
         return baseNameStart;
     }
 
-    if (!EndsWith(baseNameStart, suffix))
-    {
-        return baseNameStart;
-    }
-
-    return std::string(baseNameStart, baseNameStart + strlen(baseNameStart) - suffixLen);
+    const char *baseNameSuffix = strstr(baseNameStart, suffix);
+    ASSERT(baseNameSuffix == (baseNameStart + strlen(baseNameStart) - suffixLen));
+    return std::string(baseNameStart, baseNameSuffix);
 }
 
 bool GetTestResultsFromJSON(const js::Document &document, TestResults *resultsOut)
@@ -650,60 +589,6 @@ void PrintTestOutputSnippet(const TestIdentifier &id,
     }
     std::cout << "\n";
 }
-
-std::string GetConfigNameFromTestIdentifier(const TestIdentifier &id)
-{
-    size_t slashPos = id.testName.find('/');
-    if (slashPos == std::string::npos)
-    {
-        return "default";
-    }
-
-    size_t doubleUnderscorePos = id.testName.find("__");
-    if (doubleUnderscorePos == std::string::npos)
-    {
-        return id.testName.substr(slashPos + 1);
-    }
-    else
-    {
-        return id.testName.substr(slashPos + 1, doubleUnderscorePos - slashPos - 1);
-    }
-}
-
-TestQueue BatchTests(const std::vector<TestIdentifier> &tests, int batchSize)
-{
-    // First sort tests by configuration.
-    std::unordered_map<std::string, std::vector<TestIdentifier>> testsSortedByConfig;
-    for (const TestIdentifier &id : tests)
-    {
-        std::string config = GetConfigNameFromTestIdentifier(id);
-        testsSortedByConfig[config].push_back(id);
-    }
-
-    // Then group into batches by 'batchSize'.
-    TestQueue testQueue;
-    for (const auto &configAndIds : testsSortedByConfig)
-    {
-        const std::vector<TestIdentifier> &configTests = configAndIds.second;
-        std::vector<TestIdentifier> batchTests;
-        for (const TestIdentifier &id : configTests)
-        {
-            if (batchTests.size() >= static_cast<size_t>(batchSize))
-            {
-                testQueue.emplace(std::move(batchTests));
-                ASSERT(batchTests.empty());
-            }
-            batchTests.push_back(id);
-        }
-
-        if (!batchTests.empty())
-        {
-            testQueue.emplace(std::move(batchTests));
-        }
-    }
-
-    return testQueue;
-}
 }  // namespace
 
 TestIdentifier::TestIdentifier() = default;
@@ -764,7 +649,6 @@ TestSuite::TestSuite(int *argc, char **argv)
     : mShardCount(-1),
       mShardIndex(-1),
       mBotMode(false),
-      mDebugTestGroups(false),
       mBatchSize(kDefaultBatchSize),
       mCurrentResultCount(0),
       mTotalResultCount(0),
@@ -772,7 +656,7 @@ TestSuite::TestSuite(int *argc, char **argv)
       mTestTimeout(kDefaultTestTimeout),
       mBatchTimeout(kDefaultBatchTimeout)
 {
-    Optional<int> filterArgIndex;
+    bool hasFilter            = false;
     bool alsoRunDisabledTests = false;
 
 #if defined(ANGLE_PLATFORM_WINDOWS)
@@ -802,7 +686,7 @@ TestSuite::TestSuite(int *argc, char **argv)
 
         if (ParseFlagValue("--gtest_filter=", argv[argIndex]))
         {
-            filterArgIndex = argIndex;
+            hasFilter = true;
         }
         else
         {
@@ -825,7 +709,7 @@ TestSuite::TestSuite(int *argc, char **argv)
 
     if (!mFilterFile.empty())
     {
-        if (filterArgIndex.valid())
+        if (hasFilter)
         {
             printf("Cannot use gtest_filter in conjunction with a filter file.\n");
             exit(1);
@@ -857,63 +741,34 @@ TestSuite::TestSuite(int *argc, char **argv)
         AddArg(argc, argv, mFilterString.c_str());
     }
 
-    // Call into gtest internals to force parameterized test name registration.
-    testing::internal::UnitTestImpl *impl = testing::internal::GetUnitTestImpl();
-    impl->RegisterParameterizedTests();
-
-    // Initialize internal GoogleTest filter arguments so we can call "FilterMatchesTest".
-    testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
-
-    std::vector<TestIdentifier> testSet = GetFilteredTests(&mTestFileLines, alsoRunDisabledTests);
-
     if (mShardCount > 0)
     {
-        testSet =
-            GetShardTests(testSet, mShardIndex, mShardCount, &mTestFileLines, alsoRunDisabledTests);
+        // Call into gtest internals to force parameterized test name registration.
+        testing::internal::UnitTestImpl *impl = testing::internal::GetUnitTestImpl();
+        impl->RegisterParameterizedTests();
 
-        if (!mBotMode)
-        {
-            mFilterString = GetTestFilter(testSet);
+        // Initialize internal GoogleTest filter arguments so we can call "FilterMatchesTest".
+        testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
 
-            if (filterArgIndex.valid())
-            {
-                argv[filterArgIndex.value()] = const_cast<char *>(mFilterString.c_str());
-            }
-            else
-            {
-                // Note that we only add a filter string if we previously deleted a shard
-                // index/count argument. So we will have space for the new filter string in argv.
-                AddArg(argc, argv, mFilterString.c_str());
-            }
+        mTestQueue = GetShardTests(mShardIndex, mShardCount, &mTestFileLines, alsoRunDisabledTests);
+        mFilterString = GetTestFilter(mTestQueue);
 
-            // Force-re-initialize GoogleTest flags to load the shard filter.
-            testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
-        }
-    }
+        // Note that we only add a filter string if we previously deleted a shader index/count
+        // argument. So we will have space for the new filter string in argv.
+        AddArg(argc, argv, mFilterString.c_str());
 
-    if (mBotMode)
-    {
-        // Split up test batches.
-        mTestQueue = BatchTests(testSet, mBatchSize);
-
-        if (mDebugTestGroups)
-        {
-            std::cout << "Test Groups:\n";
-
-            while (!mTestQueue.empty())
-            {
-                const std::vector<TestIdentifier> &tests = mTestQueue.front();
-                std::cout << tests[0] << " (" << static_cast<int>(tests.size()) << ")\n";
-                mTestQueue.pop();
-            }
-
-            exit(0);
-        }
+        // Force-re-initialize GoogleTest flags to load the shard filter.
+        testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
     }
 
     testing::InitGoogleTest(argc, argv);
 
-    mTotalResultCount = testSet.size();
+    if (mShardCount <= 0)
+    {
+        mTestQueue = GetFilteredTests(&mTestFileLines, alsoRunDisabledTests);
+    }
+
+    mTotalResultCount = mTestQueue.size();
 
     if ((mBotMode || !mResultsDirectory.empty()) && mResultsFile.empty())
     {
@@ -928,11 +783,11 @@ TestSuite::TestSuite(int *argc, char **argv)
         mResultsFile = resultFileName.str();
     }
 
-    if (!mResultsFile.empty() || !mHistogramJsonFile.empty())
+    if (!mResultsFile.empty())
     {
         testing::TestEventListeners &listeners = testing::UnitTest::GetInstance()->listeners();
-        listeners.Append(new TestEventListener(mResultsFile, mHistogramJsonFile,
-                                               mTestSuiteName.c_str(), &mTestResults));
+        listeners.Append(
+            new TestEventListener(mResultsFile, mTestSuiteName.c_str(), &mTestResults));
 
         std::vector<TestIdentifier> testList = GetFilteredTests(nullptr, alsoRunDisabledTests);
 
@@ -954,7 +809,6 @@ TestSuite::~TestSuite()
 
 bool TestSuite::parseSingleArg(const char *argument)
 {
-    // Note: Flags should be documented in README.md.
     return (ParseIntArg("--shard-count=", argument, &mShardCount) ||
             ParseIntArg("--shard-index=", argument, &mShardIndex) ||
             ParseIntArg("--batch-size=", argument, &mBatchSize) ||
@@ -963,12 +817,8 @@ bool TestSuite::parseSingleArg(const char *argument)
             ParseIntArg("--batch-timeout=", argument, &mBatchTimeout) ||
             ParseStringArg("--results-directory=", argument, &mResultsDirectory) ||
             ParseStringArg(kResultFileArg, argument, &mResultsFile) ||
-            ParseStringArg("--isolated-script-test-output", argument, &mResultsFile) ||
             ParseStringArg(kFilterFileArg, argument, &mFilterFile) ||
-            ParseStringArg(kHistogramJsonFileArg, argument, &mHistogramJsonFile) ||
-            ParseStringArg("--isolated-script-perf-test-output", argument, &mHistogramJsonFile) ||
-            ParseFlag("--bot-mode", argument, &mBotMode) ||
-            ParseFlag("--debug-test-groups", argument, &mDebugTestGroups));
+            ParseFlag("--bot-mode", argument, &mBotMode));
 }
 
 void TestSuite::onCrashOrTimeout(TestResultType crashOrTimeout)
@@ -986,7 +836,7 @@ void TestSuite::onCrashOrTimeout(TestResultType crashOrTimeout)
         return;
     }
 
-    WriteOutputFiles(true, mTestResults, mResultsFile, mHistogramJsonFile, mTestSuiteName.c_str());
+    WriteTestResults(true, mTestResults, mResultsFile, mTestSuiteName.c_str());
 }
 
 bool TestSuite::launchChildTestProcess(const std::vector<TestIdentifier> &testsInBatch)
@@ -1119,8 +969,6 @@ bool TestSuite::finishProcess(ProcessInfo *processInfo)
     // On unexpected exit, re-queue any unfinished tests.
     if (processInfo->process->getExitCode() != 0)
     {
-        std::vector<TestIdentifier> unfinishedTests;
-
         for (const auto &resultIter : batchResults.results)
         {
             const TestIdentifier &id = resultIter.first;
@@ -1128,11 +976,9 @@ bool TestSuite::finishProcess(ProcessInfo *processInfo)
 
             if (result.type == TestResultType::Skip)
             {
-                unfinishedTests.push_back(id);
+                mTestQueue.emplace_back(id);
             }
         }
-
-        mTestQueue.emplace(std::move(unfinishedTests));
     }
 
     // Clean up any dirty temporary files.
@@ -1171,8 +1017,11 @@ int TestSuite::run()
         // Spawn a process if needed and possible.
         while (static_cast<int>(mCurrentProcesses.size()) < mMaxProcesses && !mTestQueue.empty())
         {
-            std::vector<TestIdentifier> testsInBatch = mTestQueue.front();
-            mTestQueue.pop();
+            int numTests = std::min<int>(mTestQueue.size(), mBatchSize);
+
+            std::vector<TestIdentifier> testsInBatch;
+            testsInBatch.assign(mTestQueue.begin(), mTestQueue.begin() + numTests);
+            mTestQueue.erase(mTestQueue.begin(), mTestQueue.begin() + numTests);
 
             if (!launchChildTestProcess(testsInBatch))
             {
@@ -1239,7 +1088,7 @@ int TestSuite::run()
     }
 
     // Dump combined results.
-    WriteOutputFiles(true, mTestResults, mResultsFile, mHistogramJsonFile, mTestSuiteName.c_str());
+    WriteTestResults(true, mTestResults, mResultsFile, mTestSuiteName.c_str());
 
     return printFailuresAndReturnCount() == 0;
 }

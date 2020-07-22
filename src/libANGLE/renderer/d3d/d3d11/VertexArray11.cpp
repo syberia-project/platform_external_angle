@@ -127,9 +127,7 @@ angle::Result VertexArray11::syncStateForDraw(const gl::Context *context,
                                               gl::DrawElementsType indexTypeOrInvalid,
                                               const void *indices,
                                               GLsizei instances,
-                                              GLint baseVertex,
-                                              GLuint baseInstance,
-                                              bool promoteDynamic)
+                                              GLint baseVertex)
 {
     Renderer11 *renderer         = GetImplAs<Context11>(context)->getRenderer();
     StateManager11 *stateManager = renderer->getStateManager();
@@ -161,8 +159,7 @@ angle::Result VertexArray11::syncStateForDraw(const gl::Context *context,
         {
             ANGLE_TRY(updateDynamicAttribs(context, stateManager->getVertexDataManager(),
                                            firstVertex, vertexOrIndexCount, indexTypeOrInvalid,
-                                           indices, instances, baseVertex, baseInstance,
-                                           promoteDynamic, activeDynamicAttribs));
+                                           indices, instances, baseVertex, activeDynamicAttribs));
             stateManager->invalidateInputLayout();
         }
     }
@@ -295,8 +292,6 @@ angle::Result VertexArray11::updateDynamicAttribs(const gl::Context *context,
                                                   const void *indices,
                                                   GLsizei instances,
                                                   GLint baseVertex,
-                                                  GLuint baseInstance,
-                                                  bool promoteDynamic,
                                                   const gl::AttributesMask &activeDynamicAttribs)
 {
     const auto &glState  = context->getState();
@@ -320,15 +315,11 @@ angle::Result VertexArray11::updateDynamicAttribs(const gl::Context *context,
         dynamicAttrib->divisor = dynamicAttrib->binding->getDivisor() * mAppliedNumViewsToDivisor;
     }
 
-    ANGLE_TRY(vertexDataManager->storeDynamicAttribs(context, &mTranslatedAttribs,
-                                                     activeDynamicAttribs, startVertex, vertexCount,
-                                                     instances, baseInstance));
+    ANGLE_TRY(vertexDataManager->storeDynamicAttribs(
+        context, &mTranslatedAttribs, activeDynamicAttribs, startVertex, vertexCount, instances));
 
-    if (promoteDynamic)
-    {
-        VertexDataManager::PromoteDynamicAttribs(context, mTranslatedAttribs, activeDynamicAttribs,
-                                                 vertexCount);
-    }
+    VertexDataManager::PromoteDynamicAttribs(context, mTranslatedAttribs, activeDynamicAttribs,
+                                             vertexCount);
 
     return angle::Result::Continue;
 }

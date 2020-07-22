@@ -189,13 +189,6 @@ size_t Format::getImageCopyBufferAlignment() const
     return alignment;
 }
 
-size_t Format::getValidImageCopyBufferAlignment() const
-{
-    constexpr size_t kMinimumAlignment = 16;
-    return (intendedFormatID == angle::FormatID::NONE) ? kMinimumAlignment
-                                                       : getImageCopyBufferAlignment();
-}
-
 bool Format::hasEmulatedImageChannels() const
 {
     const angle::Format &angleFmt   = intendedFormat();
@@ -341,22 +334,22 @@ GLenum GetSwizzleStateComponent(const gl::SwizzleState &swizzleState, GLenum com
     }
 }
 
-gl::SwizzleState ApplySwizzle(const gl::SwizzleState &formatSwizzle,
-                              const gl::SwizzleState &toApply)
+// Places the swizzle obtained by applying second after first into out.
+void ComposeSwizzleState(const gl::SwizzleState &first,
+                         const gl::SwizzleState &second,
+                         gl::SwizzleState *out)
 {
-    gl::SwizzleState result;
-
-    result.swizzleRed   = GetSwizzleStateComponent(formatSwizzle, toApply.swizzleRed);
-    result.swizzleGreen = GetSwizzleStateComponent(formatSwizzle, toApply.swizzleGreen);
-    result.swizzleBlue  = GetSwizzleStateComponent(formatSwizzle, toApply.swizzleBlue);
-    result.swizzleAlpha = GetSwizzleStateComponent(formatSwizzle, toApply.swizzleAlpha);
-
-    return result;
+    out->swizzleRed   = GetSwizzleStateComponent(first, second.swizzleRed);
+    out->swizzleGreen = GetSwizzleStateComponent(first, second.swizzleGreen);
+    out->swizzleBlue  = GetSwizzleStateComponent(first, second.swizzleBlue);
+    out->swizzleAlpha = GetSwizzleStateComponent(first, second.swizzleAlpha);
 }
 
-gl::SwizzleState GetFormatSwizzle(const ContextVk *contextVk,
-                                  const vk::Format &format,
-                                  const bool sized)
+void MapSwizzleState(const ContextVk *contextVk,
+                     const vk::Format &format,
+                     const bool sized,
+                     const gl::SwizzleState &swizzleState,
+                     gl::SwizzleState *swizzleStateOut)
 {
     const angle::Format &angleFormat = format.intendedFormat();
 
@@ -408,7 +401,6 @@ gl::SwizzleState GetFormatSwizzle(const ContextVk *contextVk,
             }
         }
     }
-
-    return internalSwizzle;
+    ComposeSwizzleState(internalSwizzle, swizzleState, swizzleStateOut);
 }
 }  // namespace rx

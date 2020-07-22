@@ -67,7 +67,12 @@ void FuzzerPassPermuteBlocks::Apply() {
       // down indefinitely.
       while (true) {
         TransformationMoveBlockDown transformation(*id);
-        if (!MaybeApplyTransformation(transformation)) {
+        if (transformation.IsApplicable(GetIRContext(),
+                                        *GetTransformationContext())) {
+          transformation.Apply(GetIRContext(), GetTransformationContext());
+          *GetTransformations()->add_transformation() =
+              transformation.ToMessage();
+        } else {
           break;
         }
       }

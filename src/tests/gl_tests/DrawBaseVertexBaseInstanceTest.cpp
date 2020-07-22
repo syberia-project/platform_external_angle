@@ -63,14 +63,8 @@ enum class BaseInstanceOption
     UseBaseInstance
 };
 
-enum class BufferDataUsageOption
-{
-    StaticDraw,
-    DynamicDraw
-};
-
-using DrawBaseVertexBaseInstanceTestParams = std::
-    tuple<angle::PlatformParameters, BaseVertexOption, BaseInstanceOption, BufferDataUsageOption>;
+using DrawBaseVertexBaseInstanceTestParams =
+    std::tuple<angle::PlatformParameters, BaseVertexOption, BaseInstanceOption>;
 
 struct PrintToStringParamName
 {
@@ -78,12 +72,10 @@ struct PrintToStringParamName
         const ::testing::TestParamInfo<DrawBaseVertexBaseInstanceTestParams> &info) const
     {
         ::std::stringstream ss;
-        ss << std::get<0>(info.param) << "_"
-           << (std::get<3>(info.param) == BufferDataUsageOption::StaticDraw ? "_StaticDraw"
-                                                                            : "_DynamicDraw")
-           << (std::get<2>(info.param) == BaseInstanceOption::UseBaseInstance ? "_UseBaseInstance"
+        ss << (std::get<2>(info.param) == BaseInstanceOption::UseBaseInstance ? "UseBaseInstance_"
                                                                               : "")
-           << (std::get<1>(info.param) == BaseVertexOption::UseBaseVertex ? "_UseBaseVertex" : "");
+           << (std::get<1>(info.param) == BaseVertexOption::UseBaseVertex ? "UseBaseVertex_" : "")
+           << std::get<0>(info.param);
         return ss.str();
     }
 };
@@ -159,12 +151,6 @@ class DrawBaseVertexBaseInstanceTest
         return std::get<2>(GetParam()) == BaseInstanceOption::UseBaseInstance;
     }
 
-    GLenum getBufferDataUsage() const
-    {
-        return std::get<3>(GetParam()) == BufferDataUsageOption::StaticDraw ? GL_STATIC_DRAW
-                                                                            : GL_DYNAMIC_DRAW;
-    }
-
     std::string vertexShaderSource300(bool isDrawArrays, bool isMultiDraw, bool divisorTest)
     {
         // Each color channel is to test the value of
@@ -193,8 +179,8 @@ void main()
                << "float x_color = "
                << (divisorTest ? "xStep * (vInstanceColorID + 1.0f);" : " 1.0 - xStep * x_id;")
                << R"(
-    float y_id = float(gl_VertexID / )"
-               << (isDrawArrays ? "6" : "4") << R"();
+    float y_id = floor(float(gl_VertexID) / )"
+               << (isDrawArrays ? "6.0" : "4.0") << R"( + 0.01);
 
     color = vec4(
         x_color,
@@ -247,7 +233,7 @@ void main()
     {
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer.get());
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mNonIndexedVertices.size(),
-                     mNonIndexedVertices.data(), getBufferDataUsage());
+                     mNonIndexedVertices.data(), GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -256,11 +242,11 @@ void main()
     {
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mVertices.size(), mVertices.data(),
-                     getBufferDataUsage());
+                     GL_STATIC_DRAW);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * mIndices.size(), mIndices.data(),
-                     getBufferDataUsage());
+                     GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -269,7 +255,7 @@ void main()
     {
         glBindBuffer(GL_ARRAY_BUFFER, instanceIDBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mInstancedArrayId.size(),
-                     mInstancedArrayId.data(), getBufferDataUsage());
+                     mInstancedArrayId.data(), GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -278,7 +264,7 @@ void main()
     {
         glBindBuffer(GL_ARRAY_BUFFER, instanceIDBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mInstancedArrayColorId.size(),
-                     mInstancedArrayColorId.data(), getBufferDataUsage());
+                     mInstancedArrayColorId.data(), GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -287,7 +273,7 @@ void main()
     {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * mRegularIndices.size(),
-                     mRegularIndices.data(), getBufferDataUsage());
+                     mRegularIndices.data(), GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -359,14 +345,14 @@ void main()
     void doDrawArraysBaseInstanceReset()
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * kCountY, 1);
+        glDrawArrays(GL_TRIANGLES, 0, 6 * kCountY);
     }
 
     void doDrawElementsBaseVertexBaseInstanceReset()
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawElementsInstanced(GL_TRIANGLES, 6 * kCountY, GL_UNSIGNED_SHORT,
-                                reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(0)), 1);
+        glDrawElements(GL_TRIANGLES, 6 * kCountY, GL_UNSIGNED_SHORT,
+                       reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(0)));
     }
 
     void doMultiDrawElementsInstancedBaseVertexBaseInstance()
@@ -582,7 +568,6 @@ TEST_P(DrawBaseVertexBaseInstanceTest, DrawArraysInstancedBaseInstance)
     checkDrawResult(false);
 
     doDrawArraysBaseInstanceReset();
-    EXPECT_GL_NO_ERROR();
     checkDrawResult(false, true);
 }
 
@@ -619,7 +604,6 @@ TEST_P(DrawBaseVertexBaseInstanceTest, MultiDrawArraysInstancedBaseInstance)
     checkDrawResult(false);
 
     doDrawArraysBaseInstanceReset();
-    EXPECT_GL_NO_ERROR();
     checkDrawResult(false, true);
 }
 
@@ -696,8 +680,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         testing::ValuesIn(::angle::FilterTestParams(platforms, ArraySize(platforms))),
         testing::Values(BaseVertexOption::NoBaseVertex, BaseVertexOption::UseBaseVertex),
-        testing::Values(BaseInstanceOption::NoBaseInstance, BaseInstanceOption::UseBaseInstance),
-        testing::Values(BufferDataUsageOption::StaticDraw, BufferDataUsageOption::DynamicDraw)),
+        testing::Values(BaseInstanceOption::NoBaseInstance, BaseInstanceOption::UseBaseInstance)),
     PrintToStringParamName());
 
 }  // namespace

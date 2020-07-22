@@ -19,7 +19,6 @@
 #include "util/egl_loader_autogen.h"
 
 class EGLWindow;
-class GLWindowBase;
 
 namespace angle
 {
@@ -67,10 +66,8 @@ class SampleApplication
     bool mRunning;
 
     Timer mTimer;
-    GLWindowBase *mGLWindow;
     EGLWindow *mEGLWindow;
     OSWindow *mOSWindow;
-    angle::GLESDriverType mDriverType;
 
     EGLPlatformParameters mPlatformParams;
 

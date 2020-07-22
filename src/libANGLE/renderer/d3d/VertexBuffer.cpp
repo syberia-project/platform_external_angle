@@ -96,12 +96,11 @@ angle::Result VertexBufferInterface::getSpaceRequired(const gl::Context *context
                                                       const gl::VertexBinding &binding,
                                                       size_t count,
                                                       GLsizei instances,
-                                                      GLuint baseInstance,
                                                       unsigned int *spaceInBytesOut) const
 {
     unsigned int spaceRequired = 0;
     ANGLE_TRY(mFactory->getVertexSpaceRequired(context, attrib, binding, count, instances,
-                                               baseInstance, &spaceRequired));
+                                               &spaceRequired));
 
     // Align to 16-byte boundary
     unsigned int alignedSpaceRequired = roundUpPow2(spaceRequired, 16u);
@@ -172,13 +171,11 @@ angle::Result StreamingVertexBufferInterface::storeDynamicAttribute(
     GLint start,
     size_t count,
     GLsizei instances,
-    GLuint baseInstance,
     unsigned int *outStreamOffset,
     const uint8_t *sourceData)
 {
     unsigned int spaceRequired = 0;
-    ANGLE_TRY(
-        getSpaceRequired(context, attrib, binding, count, instances, baseInstance, &spaceRequired));
+    ANGLE_TRY(getSpaceRequired(context, attrib, binding, count, instances, &spaceRequired));
 
     // Protect against integer overflow
     angle::CheckedNumeric<unsigned int> checkedPosition(mWritePosition);
@@ -187,19 +184,8 @@ angle::Result StreamingVertexBufferInterface::storeDynamicAttribute(
 
     mReservedSpace = 0;
 
-    size_t adjustedCount = count;
-    GLuint divisor       = binding.getDivisor();
-
-    if (instances != 0 && divisor != 0)
-    {
-        // The attribute is an instanced attribute and it's an draw instance call
-        // Extra number of elements are copied at the beginning to make sure
-        // the driver is referencing the correct data with non-zero baseInstance
-        adjustedCount += UnsignedCeilDivide(baseInstance, divisor);
-    }
-
     ANGLE_TRY(mVertexBuffer->storeVertexAttributes(context, attrib, binding, currentValueType,
-                                                   start, adjustedCount, instances, mWritePosition,
+                                                   start, count, instances, mWritePosition,
                                                    sourceData));
 
     if (outStreamOffset)
@@ -216,12 +202,11 @@ angle::Result StreamingVertexBufferInterface::reserveVertexSpace(const gl::Conte
                                                                  const gl::VertexAttribute &attrib,
                                                                  const gl::VertexBinding &binding,
                                                                  size_t count,
-                                                                 GLsizei instances,
-                                                                 GLuint baseInstance)
+                                                                 GLsizei instances)
 {
     unsigned int requiredSpace = 0;
     ANGLE_TRY(mFactory->getVertexSpaceRequired(context, attrib, binding, count, instances,
-                                               baseInstance, &requiredSpace));
+                                               &requiredSpace));
 
     // Align to 16-byte boundary
     auto alignedRequiredSpace = rx::CheckedRoundUp(requiredSpace, 16u);
@@ -292,7 +277,7 @@ angle::Result StaticVertexBufferInterface::storeStaticAttribute(const gl::Contex
                                                                 const uint8_t *sourceData)
 {
     unsigned int spaceRequired = 0;
-    ANGLE_TRY(getSpaceRequired(context, attrib, binding, count, instances, 0, &spaceRequired));
+    ANGLE_TRY(getSpaceRequired(context, attrib, binding, count, instances, &spaceRequired));
     ANGLE_TRY(setBufferSize(context, spaceRequired));
 
     ASSERT(attrib.enabled);

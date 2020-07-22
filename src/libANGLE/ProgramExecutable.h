@@ -98,17 +98,19 @@ struct TransformFeedbackVarying : public sh::ShaderVariable
 class ProgramState;
 class ProgramPipelineState;
 
-class ProgramExecutable final : public angle::Subject
+class ProgramExecutable
 {
   public:
     ProgramExecutable();
     ProgramExecutable(const ProgramExecutable &other);
-    ~ProgramExecutable() override;
+    virtual ~ProgramExecutable();
 
     void reset();
 
     void save(gl::BinaryOutputStream *stream) const;
     void load(gl::BinaryInputStream *stream);
+
+    const ProgramState *getProgramState(ShaderType shaderType) const;
 
     int getInfoLogLength() const;
     InfoLog &getInfoLog() { return mInfoLog; }
@@ -149,12 +151,7 @@ class ProgramExecutable final : public angle::Subject
         return isCompute() ? mLinkedComputeShaderStages.count()
                            : mLinkedGraphicsShaderStages.count();
     }
-
-    // A PPO can have both graphics and compute programs attached, so
-    // we don't know if the PPO is a 'graphics' or 'compute' PPO until the
-    // actual draw/dispatch call.
-    bool isCompute() const { return mIsCompute; }
-    void setIsCompute(bool isCompute) { mIsCompute = isCompute; }
+    bool isCompute() const;
 
     const AttributesMask &getActiveAttribLocationsMask() const
     {
@@ -167,7 +164,6 @@ class ProgramExecutable final : public angle::Subject
     AttributesMask getAttributesMask() const;
 
     const ActiveTextureMask &getActiveSamplersMask() const { return mActiveSamplersMask; }
-    void setActiveTextureMask(ActiveTextureMask mask) { mActiveSamplersMask = mask; }
     SamplerFormat getSamplerFormatForTextureUnitIndex(size_t textureUnitIndex) const
     {
         return mActiveSamplerFormats[textureUnitIndex];
@@ -177,7 +173,6 @@ class ProgramExecutable final : public angle::Subject
         return mActiveSamplerShaderBits[textureUnitIndex];
     }
     const ActiveTextureMask &getActiveImagesMask() const { return mActiveImagesMask; }
-    void setActiveImagesMask(ActiveTextureMask mask) { mActiveImagesMask = mask; }
     const ActiveTextureArray<ShaderBitSet> &getActiveImageShaderBits() const
     {
         return mActiveImageShaderBits;
@@ -188,24 +183,32 @@ class ProgramExecutable final : public angle::Subject
         return mActiveSamplerTypes;
     }
 
-    void updateActiveSamplers(const ProgramState &programState);
-
     bool hasDefaultUniforms() const;
     bool hasTextures() const;
     bool hasUniformBuffers() const;
     bool hasStorageBuffers() const;
     bool hasAtomicCounterBuffers() const;
     bool hasImages() const;
-    bool hasTransformFeedbackOutput() const
-    {
-        return !getLinkedTransformFeedbackVaryings().empty();
-    }
+    bool hasTransformFeedbackOutput() const;
 
     // Count the number of uniform and storage buffer declarations, counting arrays as one.
-    size_t getTransformFeedbackBufferCount() const { return mTransformFeedbackStrides.size(); }
+    size_t getTransformFeedbackBufferCount(const gl::State &glState) const;
 
-    bool linkValidateGlobalNames(InfoLog &infoLog,
-                                 const ShaderMap<const ProgramState *> &programStates) const;
+    bool linkValidateGlobalNames(InfoLog &infoLog) const;
+
+    // TODO: http://anglebug.com/4520: Remove mProgramState/mProgramPipelineState
+    void setProgramState(ProgramState *state)
+    {
+        ASSERT(!mProgramState && !mProgramPipelineState);
+        mProgramState = state;
+    }
+    void setProgramPipelineState(ProgramPipelineState *state)
+    {
+        ASSERT(!mProgramState && !mProgramPipelineState);
+        mProgramPipelineState = state;
+    }
+
+    void setIsCompute(bool isComputeIn);
 
     void updateCanDrawWith();
     bool hasVertexAndFragmentShader() const { return mCanDrawWith; }
@@ -215,9 +218,6 @@ class ProgramExecutable final : public angle::Subject
     const std::vector<VariableLocation> &getOutputLocations() const { return mOutputLocations; }
     const std::vector<LinkedUniform> &getUniforms() const { return mUniforms; }
     const std::vector<InterfaceBlock> &getUniformBlocks() const { return mUniformBlocks; }
-    const std::vector<SamplerBinding> &getSamplerBindings() const { return mSamplerBindings; }
-    const std::vector<ImageBinding> &getImageBindings() const { return mImageBindings; }
-    const RangeUI &getDefaultUniformRange() const { return mDefaultUniformRange; }
     const RangeUI &getSamplerUniformRange() const { return mSamplerUniformRange; }
     const RangeUI &getImageUniformRange() const { return mImageUniformRange; }
     const std::vector<TransformFeedbackVarying> &getLinkedTransformFeedbackVaryings() const
@@ -268,15 +268,13 @@ class ProgramExecutable final : public angle::Subject
         return static_cast<GLuint>(mShaderStorageBlocks.size());
     }
 
-    GLuint getUniformIndexFromImageIndex(GLuint imageIndex) const;
-
     gl::ProgramLinkedResources &getResources() const
     {
         ASSERT(mResources);
         return *mResources;
     }
 
-    void saveLinkedStateInfo(const ProgramState &state);
+    void saveLinkedStateInfo();
     std::vector<sh::ShaderVariable> getLinkedOutputVaryings(ShaderType shaderType)
     {
         return mLinkedOutputVaryings[shaderType];
@@ -294,11 +292,16 @@ class ProgramExecutable final : public angle::Subject
     friend class ProgramPipeline;
     friend class ProgramState;
 
-    void updateActiveImages(const ProgramExecutable &executable);
+    void updateActiveSamplers(const ProgramState &programState);
+    void updateActiveImages(std::vector<ImageBinding> &imageBindings);
 
     // Scans the sampler bindings for type conflicts with sampler 'textureUnitIndex'.
     void setSamplerUniformTextureTypeAndFormat(size_t textureUnitIndex,
                                                std::vector<SamplerBinding> &samplerBindings);
+
+    // TODO: http://anglebug.com/4520: Remove mProgramState/mProgramPipelineState
+    ProgramState *mProgramState;
+    ProgramPipelineState *mProgramPipelineState;
 
     InfoLog mInfoLog;
 
@@ -346,35 +349,11 @@ class ProgramExecutable final : public angle::Subject
     // inner array of an array of arrays. Names and mapped names of uniforms that are arrays include
     // [0] in the end. This makes implementation of queries simpler.
     std::vector<LinkedUniform> mUniforms;
-    RangeUI mDefaultUniformRange;
     RangeUI mSamplerUniformRange;
     std::vector<InterfaceBlock> mUniformBlocks;
     std::vector<AtomicCounterBuffer> mAtomicCounterBuffers;
     RangeUI mImageUniformRange;
     std::vector<InterfaceBlock> mShaderStorageBlocks;
-
-    // An array of the samplers that are used by the program
-    std::vector<SamplerBinding> mSamplerBindings;
-
-    // An array of the images that are used by the program
-    std::vector<ImageBinding> mImageBindings;
-
-    // TODO: http://anglebug.com/3570: Remove mPipelineHas*UniformBuffers once PPO's have valid data
-    // in mUniformBlocks
-    bool mPipelineHasGraphicsUniformBuffers;
-    bool mPipelineHasComputeUniformBuffers;
-    bool mPipelineHasGraphicsStorageBuffers;
-    bool mPipelineHasComputeStorageBuffers;
-    bool mPipelineHasGraphicsAtomicCounterBuffers;
-    bool mPipelineHasComputeAtomicCounterBuffers;
-    bool mPipelineHasGraphicsDefaultUniforms;
-    bool mPipelineHasComputeDefaultUniforms;
-    bool mPipelineHasGraphicsTextures;
-    bool mPipelineHasComputeTextures;
-    bool mPipelineHasGraphicsImages;
-    bool mPipelineHasComputeImages;
-
-    bool mIsCompute;
 
     ShaderMap<std::vector<sh::ShaderVariable>> mLinkedOutputVaryings;
     ShaderMap<std::vector<sh::ShaderVariable>> mLinkedInputVaryings;

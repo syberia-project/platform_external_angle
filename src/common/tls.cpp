@@ -34,8 +34,6 @@ static vector<DWORD> freeTlsIndices;
 
 #endif
 
-bool gUseAndroidOpenGLTlsSlot = false;
-
 TLSIndex CreateTLSIndex()
 {
     TLSIndex index;
@@ -155,12 +153,5 @@ void *GetTLSValue(TLSIndex index)
 #    endif
 #elif defined(ANGLE_PLATFORM_POSIX)
     return pthread_getspecific(index);
-#endif
-}
-
-void SetUseAndroidOpenGLTlsSlot(bool platformTypeVulkan)
-{
-#if defined(ANGLE_PLATFORM_ANDROID)
-    gUseAndroidOpenGLTlsSlot = platformTypeVulkan;
 #endif
 }

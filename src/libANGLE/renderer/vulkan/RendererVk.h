@@ -17,12 +17,11 @@
 #include <queue>
 #include <thread>
 
-#include "common/vulkan/vk_ext_provoking_vertex.h"
+#include "vk_ext_provoking_vertex.h"
 
 #include "common/PackedEnums.h"
 #include "common/PoolAlloc.h"
 #include "common/angleutils.h"
-#include "common/vulkan/vk_headers.h"
 #include "common/vulkan/vulkan_icd.h"
 #include "libANGLE/BlobCache.h"
 #include "libANGLE/Caps.h"
@@ -31,6 +30,7 @@
 #include "libANGLE/renderer/vulkan/ResourceVk.h"
 #include "libANGLE/renderer/vulkan/UtilsVk.h"
 #include "libANGLE/renderer/vulkan/vk_format_utils.h"
+#include "libANGLE/renderer/vulkan/vk_headers.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 #include "libANGLE/renderer/vulkan/vk_internal_shaders_autogen.h"
 #include "libANGLE/renderer/vulkan/vk_mem_alloc_wrapper.h"
@@ -98,7 +98,7 @@ class RendererVk : angle::NonCopyable
     }
     const VkPhysicalDeviceSubgroupProperties &getPhysicalDeviceSubgroupProperties() const
     {
-        return mSubgroupProperties;
+        return mPhysicalDeviceSubgroupProperties;
     }
     const VkPhysicalDeviceFeatures &getPhysicalDeviceFeatures() const
     {
@@ -106,7 +106,7 @@ class RendererVk : angle::NonCopyable
     }
     VkDevice getDevice() const { return mDevice; }
 
-    const vk::Allocator &getAllocator() const { return mAllocator; }
+    const VmaAllocator &getAllocator() const { return mAllocator; }
 
     angle::Result selectPresentQueueForSurface(DisplayVk *displayVk,
                                                VkSurfaceKHR surface,
@@ -244,10 +244,14 @@ class RendererVk : angle::NonCopyable
 
     void onCompletedSerial(Serial serial);
 
+    bool shouldCleanupGarbage()
+    {
+        return (mSharedGarbage.size() > mGarbageCollectionFlushThreshold);
+    }
+
     bool enableDebugUtils() const { return mEnableDebugUtils; }
 
     SamplerCache &getSamplerCache() { return mSamplerCache; }
-    SamplerYcbcrConversionCache &getYuvConversionCache() { return mYuvConversionCache; }
     vk::ActiveHandleCounter &getActiveHandleCounts() { return mActiveHandleCounts; }
 
     // Queue commands to worker thread for processing
@@ -256,8 +260,6 @@ class RendererVk : angle::NonCopyable
         mCommandProcessor.queueCommands(commands);
     }
     void waitForWorkerThreadIdle() { mCommandProcessor.waitForWorkComplete(); }
-
-    bool getEnableValidationLayers() const { return mEnableValidationLayers; }
 
   private:
     angle::Result initializeDevice(DisplayVk *displayVk, uint32_t queueFamilyIndex);
@@ -298,17 +300,16 @@ class RendererVk : angle::NonCopyable
     VkPhysicalDevice mPhysicalDevice;
     VkPhysicalDeviceProperties mPhysicalDeviceProperties;
     VkPhysicalDeviceFeatures mPhysicalDeviceFeatures;
+    VkExternalFenceProperties mExternalFenceProperties;
+    VkExternalSemaphoreProperties mExternalSemaphoreProperties;
     VkPhysicalDeviceLineRasterizationFeaturesEXT mLineRasterizationFeatures;
     VkPhysicalDeviceProvokingVertexFeaturesEXT mProvokingVertexFeatures;
     VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT mVertexAttributeDivisorFeatures;
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT mVertexAttributeDivisorProperties;
     VkPhysicalDeviceTransformFeedbackFeaturesEXT mTransformFeedbackFeatures;
     VkPhysicalDeviceIndexTypeUint8FeaturesEXT mIndexTypeUint8Features;
-    VkPhysicalDeviceSubgroupProperties mSubgroupProperties;
-    VkPhysicalDeviceExternalMemoryHostPropertiesEXT mExternalMemoryHostProperties;
-    VkExternalFenceProperties mExternalFenceProperties;
-    VkExternalSemaphoreProperties mExternalSemaphoreProperties;
-    VkPhysicalDeviceSamplerYcbcrConversionFeatures mSamplerYcbcrConversionFeatures;
+    VkPhysicalDeviceSubgroupProperties mPhysicalDeviceSubgroupProperties;
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT mPhysicalDeviceExternalMemoryHostProperties;
     std::vector<VkQueueFamilyProperties> mQueueFamilyProperties;
     std::mutex mQueueMutex;
     angle::PackedEnumMap<egl::ContextPriority, VkQueue> mQueues;
@@ -380,9 +381,8 @@ class RendererVk : angle::NonCopyable
     // track whether we initialized (or released) glslang
     bool mGlslangInitialized;
 
-    vk::Allocator mAllocator;
+    VmaAllocator mAllocator;
     SamplerCache mSamplerCache;
-    SamplerYcbcrConversionCache mYuvConversionCache;
     vk::ActiveHandleCounter mActiveHandleCounts;
 };
 

@@ -9,8 +9,6 @@
 #ifndef LIBANGLE_RENDERER_GL_CGL_DISPLAYCGL_H_
 #define LIBANGLE_RENDERER_GL_CGL_DISPLAYCGL_H_
 
-#include <thread>
-
 #include "libANGLE/renderer/gl/DisplayGL.h"
 
 struct _CGLContextObject;
@@ -32,10 +30,6 @@ class DisplayCGL : public DisplayGL
 
     egl::Error initialize(egl::Display *display) override;
     void terminate() override;
-
-    egl::Error makeCurrent(egl::Surface *drawSurface,
-                           egl::Surface *readSurface,
-                           gl::Context *context) override;
 
     SurfaceImpl *createWindowSurface(const egl::SurfaceState &state,
                                      EGLNativeWindowType window,
@@ -85,11 +79,10 @@ class DisplayCGL : public DisplayGL
 
     void populateFeatureList(angle::FeatureList *features) override;
 
-    // Support for dual-GPU MacBook Pros. Used only by ContextCGL. The use of
-    // these entry points is gated by the presence of dual GPUs.
-    egl::Error referenceDiscreteGPU();
-    egl::Error unreferenceDiscreteGPU();
-    egl::Error handleGPUSwitch() override;
+    // Support for dual-GPU MacBook Pros. If the context was created
+    // preferring the high-power GPU, unreference that GPU during
+    // context destruction.
+    void unreferenceDiscreteGPU();
 
   private:
     egl::Error makeCurrentSurfaceless(gl::Context *context) override;
@@ -97,22 +90,14 @@ class DisplayCGL : public DisplayGL
     void generateExtensions(egl::DisplayExtensions *outExtensions) const override;
     void generateCaps(egl::Caps *outCaps) const override;
 
-    void checkDiscreteGPUStatus();
-
     std::shared_ptr<RendererGL> mRenderer;
 
     egl::Display *mEGLDisplay;
     CGLContextObj mContext;
-    std::unordered_map<std::thread::id, CGLContextObj> mCurrentContexts;
     CGLPixelFormatObj mPixelFormat;
     bool mSupportsGPUSwitching;
-    uint64_t mCurrentGPUID;
     CGLPixelFormatObj mDiscreteGPUPixelFormat;
     int mDiscreteGPURefs;
-    // This comes from the ANGLE platform's DefaultMonotonicallyIncreasingTime. If the discrete GPU
-    // is unref'd for the last time, this is set to the time of that last unref. If it isn't
-    // activated again in 10 seconds, the discrete GPU pixel format is deleted.
-    double mLastDiscreteGPUUnrefTime;
 };
 
 }  // namespace rx

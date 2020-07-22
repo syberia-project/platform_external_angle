@@ -202,7 +202,6 @@ class StateCache final : angle::NonCopyable
     // 1. onActiveTransformFeedbackChange.
     // 2. onVertexArrayBufferStateChange.
     // 3. onBufferBindingChange.
-    // 4. onVertexArrayStateChange.
     intptr_t getBasicDrawElementsError(const Context *context) const
     {
         if (mCachedBasicDrawElementsError != kInvalidPointer)
@@ -605,20 +604,15 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
         return mTransformFeedbackMap;
     }
 
-    void onPreSwap() const;
+    void onPostSwap() const;
 
     Program *getActiveLinkedProgram() const;
 
-    // EGL_ANGLE_power_preference implementation.
-    egl::Error releaseHighPowerGPU();
-    egl::Error reacquireHighPowerGPU();
-    void onGPUSwitch();
-
-    bool noopDraw(PrimitiveMode mode, GLsizei count) const;
-    bool noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount) const;
-
   private:
     void initialize();
+
+    bool noopDraw(PrimitiveMode mode, GLsizei count);
+    bool noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount);
 
     angle::Result prepareForDraw(PrimitiveMode mode);
     angle::Result prepareForClear(GLbitfield mask);
@@ -754,7 +748,6 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     angle::ObserverBinding mVertexArrayObserverBinding;
     angle::ObserverBinding mDrawFramebufferObserverBinding;
     angle::ObserverBinding mReadFramebufferObserverBinding;
-    angle::ObserverBinding mProgramPipelineObserverBinding;
     std::vector<angle::ObserverBinding> mUniformBufferObserverBindings;
     std::vector<angle::ObserverBinding> mSamplerObserverBindings;
     std::vector<angle::ObserverBinding> mImageObserverBindings;

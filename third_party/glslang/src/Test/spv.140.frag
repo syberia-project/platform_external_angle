@@ -1,5 +1,4 @@
 #version 140
-#extension GL_ARB_enhanced_layouts : require
 
 in vec4 k;
 out vec4 o;

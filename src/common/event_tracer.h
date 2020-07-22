@@ -6,7 +6,7 @@
 #define COMMON_EVENT_TRACER_H_
 
 #include "common/platform.h"
-#include "platform/PlatformMethods.h"
+#include "platform/Platform.h"
 
 namespace angle
 {

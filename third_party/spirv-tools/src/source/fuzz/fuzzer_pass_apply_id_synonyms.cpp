@@ -73,9 +73,10 @@ void FuzzerPassApplyIdSynonyms::Apply() {
         continue;
       }
       // |use_index| is the absolute index of the operand.  We require
-      // the index of the operand restricted to input operands only.
+      // the index of the operand restricted to input operands only, so
+      // we subtract the number of non-input operands from |use_index|.
       uint32_t use_in_operand_index =
-          fuzzerutil::InOperandIndexFromOperandIndex(*use_inst, use_index);
+          use_index - use_inst->NumOperands() + use_inst->NumInOperands();
       if (!TransformationReplaceIdWithSynonym::UseCanBeReplacedWithSynonym(
               GetIRContext(), use_inst, use_in_operand_index)) {
         continue;

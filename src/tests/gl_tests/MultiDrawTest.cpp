@@ -62,25 +62,16 @@ enum class InstancingOption
     UseInstancing,
 };
 
-enum class BufferDataUsageOption
-{
-    StaticDraw,
-    DynamicDraw
-};
-
-using MultiDrawTestParams =
-    std::tuple<angle::PlatformParameters, DrawIDOption, InstancingOption, BufferDataUsageOption>;
+using MultiDrawTestParams = std::tuple<angle::PlatformParameters, DrawIDOption, InstancingOption>;
 
 struct PrintToStringParamName
 {
     std::string operator()(const ::testing::TestParamInfo<MultiDrawTestParams> &info) const
     {
         ::std::stringstream ss;
-        ss << std::get<0>(info.param)
-           << (std::get<3>(info.param) == BufferDataUsageOption::StaticDraw ? "__StaticDraw"
-                                                                            : "__DynamicDraw")
-           << (std::get<2>(info.param) == InstancingOption::UseInstancing ? "__Instanced" : "")
-           << (std::get<1>(info.param) == DrawIDOption::UseDrawID ? "__DrawID" : "");
+        ss << (std::get<2>(info.param) == InstancingOption::UseInstancing ? "Instanced_" : "")
+           << (std::get<1>(info.param) == DrawIDOption::UseDrawID ? "DrawID_" : "")
+           << std::get<0>(info.param);
         return ss.str();
     }
 };
@@ -118,12 +109,6 @@ class MultiDrawTest : public ANGLETestBase, public ::testing::TestWithParam<Mult
     bool IsInstancedTest() const
     {
         return std::get<2>(GetParam()) == InstancingOption::UseInstancing;
-    }
-
-    GLenum getBufferDataUsage() const
-    {
-        return std::get<3>(GetParam()) == BufferDataUsageOption::StaticDraw ? GL_STATIC_DRAW
-                                                                            : GL_DYNAMIC_DRAW;
     }
 
     std::string VertexShaderSource()
@@ -231,22 +216,22 @@ void main()
         glGenBuffers(1, &mNonIndexedVertexBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, mNonIndexedVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mNonIndexedVertices.size(),
-                     mNonIndexedVertices.data(), getBufferDataUsage());
+                     mNonIndexedVertices.data(), GL_STATIC_DRAW);
 
         glGenBuffers(1, &mVertexBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, mVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mVertices.size(), mVertices.data(),
-                     getBufferDataUsage());
+                     GL_STATIC_DRAW);
 
         glGenBuffers(1, &mIndexBuffer);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * mIndices.size(), mIndices.data(),
-                     getBufferDataUsage());
+                     GL_STATIC_DRAW);
 
         glGenBuffers(1, &mInstanceBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, mInstanceBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * instances.size(), instances.data(),
-                     getBufferDataUsage());
+                     GL_STATIC_DRAW);
 
         ASSERT_GL_NO_ERROR();
     }
@@ -530,21 +515,19 @@ const angle::PlatformParameters es2_platforms[] = {
 INSTANTIATE_TEST_SUITE_P(
     ,
     MultiDrawTest,
-    testing::Combine(
-        testing::ValuesIn(::angle::FilterTestParams(platforms, ArraySize(platforms))),
-        testing::Values(DrawIDOption::NoDrawID, DrawIDOption::UseDrawID),
-        testing::Values(InstancingOption::NoInstancing, InstancingOption::UseInstancing),
-        testing::Values(BufferDataUsageOption::StaticDraw, BufferDataUsageOption::DynamicDraw)),
+    testing::Combine(testing::ValuesIn(::angle::FilterTestParams(platforms, ArraySize(platforms))),
+                     testing::Values(DrawIDOption::NoDrawID, DrawIDOption::UseDrawID),
+                     testing::Values(InstancingOption::NoInstancing,
+                                     InstancingOption::UseInstancing)),
     PrintToStringParamName());
 
 INSTANTIATE_TEST_SUITE_P(
     ,
     MultiDrawNoInstancingSupportTest,
-    testing::Combine(
-        testing::ValuesIn(::angle::FilterTestParams(es2_platforms, ArraySize(es2_platforms))),
-        testing::Values(DrawIDOption::NoDrawID, DrawIDOption::UseDrawID),
-        testing::Values(InstancingOption::UseInstancing),
-        testing::Values(BufferDataUsageOption::StaticDraw, BufferDataUsageOption::DynamicDraw)),
+    testing::Combine(testing::ValuesIn(::angle::FilterTestParams(es2_platforms,
+                                                                 ArraySize(es2_platforms))),
+                     testing::Values(DrawIDOption::NoDrawID, DrawIDOption::UseDrawID),
+                     testing::Values(InstancingOption::UseInstancing)),
     PrintToStringParamName());
 
 }  // namespace

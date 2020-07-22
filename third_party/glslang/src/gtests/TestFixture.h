@@ -253,13 +253,10 @@ public:
         glslang::TProgram program;
         program.addShader(&shader);
         success &= program.link(controls);
-#ifndef GLSLANG_WEB
-        if (success)
-            program.mapIO();
-#endif
+
+        spv::SpvBuildLogger logger;
 
         if (success && (controls & EShMsgSpvRules)) {
-            spv::SpvBuildLogger logger;
             std::vector<uint32_t> spirv_binary;
             options().disableOptimizer = !enableOptimizer;
             options().generateDebugInfo = enableDebug;
@@ -316,8 +313,7 @@ public:
         
         success &= program.link(controls);
 #ifndef GLSLANG_WEB
-        if (success)
-            program.mapIO();
+        success &= program.mapIO();
 #endif
 
         spv::SpvBuildLogger logger;
@@ -360,13 +356,10 @@ public:
         glslang::TProgram program;
         program.addShader(&shader);
         success &= program.link(controls);
-#ifndef GLSLANG_WEB
-        if (success)
-            program.mapIO();
-#endif
+
+        spv::SpvBuildLogger logger;
 
         if (success && (controls & EShMsgSpvRules)) {
-        spv::SpvBuildLogger logger;
             std::vector<uint32_t> spirv_binary;
             glslang::GlslangToSpv(*program.getIntermediate(stage),
                                   spirv_binary, &logger, &options());

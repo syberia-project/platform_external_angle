@@ -29,6 +29,13 @@ class PostSubBufferSample : public SampleApplication
 
     bool initialize() override
     {
+        mPostSubBufferNV = (PFNEGLPOSTSUBBUFFERNVPROC)eglGetProcAddress("eglPostSubBufferNV");
+        if (!mPostSubBufferNV)
+        {
+            std::cerr << "Could not load eglPostSubBufferNV.";
+            return false;
+        }
+
         constexpr char kVS[] = R"(uniform mat4 u_mvpMatrix;
 attribute vec4 a_position;
 attribute vec2 a_texcoord;
@@ -129,7 +136,7 @@ void main()
         EGLint windowHeight = static_cast<EGLint>(getWindow()->getHeight());
         EGLDisplay display  = getDisplay();
         EGLSurface surface  = getSurface();
-        eglPostSubBufferNV(display, surface, 60, 60, windowWidth - 120, windowHeight - 120);
+        mPostSubBufferNV(display, surface, 60, 60, windowWidth - 120, windowHeight - 120);
     }
 
   private:
@@ -148,6 +155,9 @@ void main()
 
     // Geometry data
     CubeGeometry mCube;
+
+    // eglPostSubBufferNV entry point
+    PFNEGLPOSTSUBBUFFERNVPROC mPostSubBufferNV;
 };
 
 int main(int argc, char **argv)

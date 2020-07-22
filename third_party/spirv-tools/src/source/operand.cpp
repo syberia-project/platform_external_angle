@@ -455,7 +455,7 @@ bool spvIsInIdType(spv_operand_type_t type) {
     return false;
   }
   switch (type) {
-    // Deny non-input IDs.
+    // Blacklist non-input IDs.
     case SPV_OPERAND_TYPE_TYPE_ID:
     case SPV_OPERAND_TYPE_RESULT_ID:
       return false;

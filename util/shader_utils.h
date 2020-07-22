@@ -103,8 +103,6 @@ namespace essl3_shaders
 {
 
 ANGLE_UTIL_EXPORT const char *PositionAttrib();
-ANGLE_UTIL_EXPORT const char *Texture2DUniform();
-ANGLE_UTIL_EXPORT const char *LodUniform();
 
 namespace vs
 {
@@ -119,10 +117,6 @@ ANGLE_UTIL_EXPORT const char *Simple();
 // v_position.
 ANGLE_UTIL_EXPORT const char *Passthrough();
 
-// A shader that simply passes through attribute a_position, setting it to gl_Position and varying
-// texcoord.
-ANGLE_UTIL_EXPORT const char *Texture2DLod();
-
 }  // namespace vs
 
 namespace fs
@@ -136,9 +130,6 @@ ANGLE_UTIL_EXPORT const char *Green();
 
 // A shader that fills with 100% opaque blue.
 ANGLE_UTIL_EXPORT const char *Blue();
-
-// A shader that samples the texture at a given lod.
-ANGLE_UTIL_EXPORT const char *Texture2DLod();
 
 }  // namespace fs
 }  // namespace essl3_shaders

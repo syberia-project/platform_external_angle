@@ -35,7 +35,6 @@ class EGLSyncImpl;
 class ImageImpl;
 class ExternalImageSiblingImpl;
 class SurfaceImpl;
-class ShareGroupImpl;
 
 class EGLImplFactory : angle::NonCopyable
 {
@@ -77,8 +76,6 @@ class EGLImplFactory : angle::NonCopyable
                                                                  const egl::AttributeMap &attribs);
 
     virtual EGLSyncImpl *createSync(const egl::AttributeMap &attribs);
-
-    virtual ShareGroupImpl *createShareGroup() = 0;
 };
 
 inline ExternalImageSiblingImpl *EGLImplFactory::createExternalImageSibling(

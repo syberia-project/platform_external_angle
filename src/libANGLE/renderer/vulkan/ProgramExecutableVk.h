@@ -36,6 +36,7 @@ class ShaderInfo final : angle::NonCopyable
     ANGLE_INLINE bool valid() const { return mIsInitialized; }
 
     const gl::ShaderMap<SpirvBlob> &getSpirvBlobs() const { return mSpirvBlobs; }
+    gl::ShaderMap<SpirvBlob> &getSpirvBlobs() { return mSpirvBlobs; }
 
     // Save and load implementation for GLES Program Binary support.
     void load(gl::BinaryInputStream *stream);
@@ -64,8 +65,8 @@ class ProgramInfo final : angle::NonCopyable
     angle::Result initProgram(ContextVk *contextVk,
                               const gl::ShaderType shaderType,
                               const ShaderInfo &shaderInfo,
-                              ProgramTransformOptionBits optionBits,
-                              ProgramExecutableVk *executableVk);
+                              const ShaderMapInterfaceVariableInfoMap &variableInfoMap,
+                              ProgramTransformOptionBits optionBits);
     void release(ContextVk *contextVk);
 
     ANGLE_INLINE bool valid(const gl::ShaderType shaderType) const
@@ -85,6 +86,8 @@ struct DefaultUniformBlock final : private angle::NonCopyable
 {
     DefaultUniformBlock();
     ~DefaultUniformBlock();
+
+    vk::DynamicBuffer storage;
 
     // Shadow copies of the shader uniform data.
     angle::MemoryBuffer uniformData;
@@ -135,8 +138,6 @@ class ProgramExecutableVk
 
     const vk::PipelineLayout &getPipelineLayout() const { return mPipelineLayout.get(); }
     angle::Result createPipelineLayout(const gl::Context *glContext);
-    angle::Result updatePipelineLayout(const gl::Context *glContext,
-                                       gl::ActiveTextureArray<vk::TextureUnit> *activeTextures);
 
     angle::Result updateTexturesDescriptorSet(ContextVk *contextVk);
     angle::Result updateShaderResourcesDescriptorSet(ContextVk *contextVk,
@@ -145,9 +146,7 @@ class ProgramExecutableVk
     angle::Result updateTransformFeedbackDescriptorSet(
         const gl::ProgramState &programState,
         gl::ShaderMap<DefaultUniformBlock> &defaultUniformBlocks,
-        vk::BufferHelper *defaultUniformBuffer,
-        ContextVk *contextVk,
-        const vk::UniformsAndXfbDesc &xfbBufferDesc);
+        ContextVk *contextVk);
 
     angle::Result updateDescriptorSets(ContextVk *contextVk, vk::CommandBuffer *commandBuffer);
 
@@ -168,10 +167,6 @@ class ProgramExecutableVk
     friend class ProgramVk;
     friend class ProgramPipelineVk;
 
-    angle::Result allocUniformAndXfbDescriptorSet(ContextVk *contextVk,
-                                                  const vk::UniformsAndXfbDesc &xfbBufferDesc,
-                                                  bool *newDescriptorSetAllocated);
-
     angle::Result allocateDescriptorSet(ContextVk *contextVk, uint32_t descriptorSetIndex);
     angle::Result allocateDescriptorSetAndGetInfo(ContextVk *contextVk,
                                                   uint32_t descriptorSetIndex,
@@ -184,17 +179,16 @@ class ProgramExecutableVk
         const std::vector<gl::AtomicCounterBuffer> &atomicCounterBuffers,
         const gl::ShaderType shaderType,
         vk::DescriptorSetLayoutDesc *descOut);
-    void addImageDescriptorSetDesc(const gl::ProgramExecutable &executable,
+    void addImageDescriptorSetDesc(const gl::ProgramState &programState,
                                    vk::DescriptorSetLayoutDesc *descOut);
     void addTextureDescriptorSetDesc(const gl::ProgramState &programState,
                                      bool useOldRewriteStructSamplers,
-                                     const gl::ActiveTextureArray<vk::TextureUnit> *activeTextures,
                                      vk::DescriptorSetLayoutDesc *descOut);
 
-    void updateDefaultUniformsDescriptorSet(const gl::ShaderType shaderType,
-                                            const DefaultUniformBlock &defaultUniformBlock,
-                                            vk::BufferHelper *defaultUniformBuffer,
-                                            ContextVk *contextVk);
+    void updateDefaultUniformsDescriptorSet(
+        const gl::ShaderType shaderType,
+        gl::ShaderMap<DefaultUniformBlock> &defaultUniformBlocks,
+        ContextVk *contextVk);
     void updateTransformFeedbackDescriptorSetImpl(const gl::ProgramState &programState,
                                                   ContextVk *contextVk);
     void updateBuffersDescriptorSet(ContextVk *contextVk,
@@ -208,9 +202,16 @@ class ProgramExecutableVk
                                                  ContextVk *contextVk,
                                                  vk::ResourceUseList *resourceUseList,
                                                  vk::CommandBufferHelper *commandBufferHelper);
-    angle::Result updateImagesDescriptorSet(const gl::ProgramExecutable &executable,
+    angle::Result updateImagesDescriptorSet(const gl::ProgramState &programState,
                                             const gl::ShaderType shaderType,
                                             ContextVk *contextVk);
+
+    // This is a special "empty" placeholder buffer for when a shader has no uniforms or doesn't
+    // use all slots in the atomic counter buffer array.
+    //
+    // It is necessary because we want to keep a compatible pipeline layout in all cases,
+    // and Vulkan does not tolerate having null handles in a descriptor set.
+    vk::BufferHelper mEmptyBuffer;
 
     // Descriptor sets for uniform blocks and textures for this program.
     std::vector<VkDescriptorSet> mDescriptorSets;
@@ -218,7 +219,6 @@ class ProgramExecutableVk
     std::vector<vk::BufferHelper *> mDescriptorBuffersCache;
     size_t mNumDefaultUniformDescriptors;
 
-    std::unordered_map<vk::UniformsAndXfbDesc, VkDescriptorSet> mUniformsAndXfbDescriptorSetCache;
     std::unordered_map<vk::TextureDescriptorDesc, VkDescriptorSet> mTextureDescriptorsCache;
 
     // We keep a reference to the pipeline and descriptor set layouts. This ensures they don't get

@@ -28,12 +28,8 @@ def main():
     with open('.gclient') as gclient_file:
         content = gclient_file.read()
 
-    content = content.replace('change2dot', '.')
-    if sys.platform.startswith('linux') or sys.platform == 'darwin':
-        content += 'target_os = [ \'android\' ]\n'
-
     with open('.gclient', 'w') as gclient_file:
-        gclient_file.write(content)
+        gclient_file.write(content.replace('change2dot', '.'))
 
     print 'created .gclient'
 

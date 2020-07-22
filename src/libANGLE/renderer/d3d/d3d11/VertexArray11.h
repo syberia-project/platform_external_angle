@@ -39,9 +39,7 @@ class VertexArray11 : public VertexArrayImpl
                                    gl::DrawElementsType indexTypeOrInvalid,
                                    const void *indices,
                                    GLsizei instances,
-                                   GLint baseVertex,
-                                   GLuint baseInstance,
-                                   bool promoteDynamic);
+                                   GLint baseVertex);
 
     // This will check the dynamic attribs mask.
     bool hasActiveDynamicAttrib(const gl::Context *context);
@@ -74,8 +72,6 @@ class VertexArray11 : public VertexArrayImpl
                                        const void *indices,
                                        GLsizei instances,
                                        GLint baseVertex,
-                                       GLuint baseInstance,
-                                       bool promoteDynamic,
                                        const gl::AttributesMask &activeDynamicAttribs);
 
     angle::Result updateElementArrayStorage(const gl::Context *context,

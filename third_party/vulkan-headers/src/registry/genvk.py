@@ -2,7 +2,17 @@
 #
 # Copyright (c) 2013-2020 The Khronos Group Inc.
 #
-# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import pdb
@@ -82,9 +92,6 @@ def makeGenOpts(args):
     # Output target directory
     directory = args.directory
 
-    # Path to generated files, particularly api.py
-    genpath = args.genpath
-
     # Descriptive names for various regexp patterns used to select
     # versions and extensions
     allFeatures = allExtensions = r'.*'
@@ -96,12 +103,21 @@ def makeGenOpts(args):
     featuresPat          = makeREstring(features, allFeatures)
 
     # Copyright text prefixing all headers (list of strings).
-    # The SPDX formatting below works around constraints of the 'reuse' tool
     prefixStrings = [
         '/*',
         '** Copyright (c) 2015-2020 The Khronos Group Inc.',
         '**',
-        '** SPDX' + '-License-Identifier: Apache-2.0',
+        '** Licensed under the Apache License, Version 2.0 (the "License");',
+        '** you may not use this file except in compliance with the License.',
+        '** You may obtain a copy of the License at',
+        '**',
+        '**     http://www.apache.org/licenses/LICENSE-2.0',
+        '**',
+        '** Unless required by applicable law or agreed to in writing, software',
+        '** distributed under the License is distributed on an "AS IS" BASIS,',
+        '** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.',
+        '** See the License for the specific language governing permissions and',
+        '** limitations under the License.',
         '*/',
         ''
     ]
@@ -134,7 +150,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'timeMarker',
             directory         = directory,
-            genpath           = genpath,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -151,15 +166,13 @@ def makeGenOpts(args):
             expandEnumerants  = False)
         ]
 
-    # Python representation of API information, used by scripts that
-    # don't need to load the full XML.
-    genOpts['api.py'] = [
+    # API names to validate man/api spec includes & links
+    genOpts['vkapi.py'] = [
           PyOutputGenerator,
           DocGeneratorOptions(
             conventions       = conventions,
-            filename          = 'api.py',
+            filename          = 'vkapi.py',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -167,8 +180,7 @@ def makeGenOpts(args):
             defaultExtensions = None,
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
-            emitExtensions    = emitExtensionsPat,
-            reparentEnums     = False)
+            emitExtensions    = emitExtensionsPat)
         ]
 
     # API validity files for spec
@@ -178,7 +190,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'timeMarker',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -196,7 +207,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'timeMarker',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -218,7 +228,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'timeMarker',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -237,7 +246,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'timeMarker',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -294,7 +302,6 @@ def makeGenOpts(args):
                                                                      ] ],
         [ 'vulkan_xcb.h',         [ 'VK_KHR_xcb_surface'          ], commonSuppressExtensions ],
         [ 'vulkan_xlib.h',        [ 'VK_KHR_xlib_surface'         ], commonSuppressExtensions ],
-        [ 'vulkan_directfb.h',    [ 'VK_EXT_directfb_surface'     ], commonSuppressExtensions ],
         [ 'vulkan_xlib_xrandr.h', [ 'VK_EXT_acquire_xlib_display' ], commonSuppressExtensions ],
         [ 'vulkan_metal.h',       [ 'VK_EXT_metal_surface'        ], commonSuppressExtensions ],
         [ 'vulkan_beta.h',        betaRequireExtensions,             betaSuppressExtensions ],
@@ -314,7 +321,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = headername,
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -353,13 +359,12 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vulkan_core.h',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
             emitversions      = featuresPat,
             defaultExtensions = defaultExtensions,
-            addExtensions     = addExtensionsPat,
+            addExtensions     = None,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
             prefixText        = prefixStrings + vkPrefixStrings,
@@ -385,47 +390,14 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vulkan10.h',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = 'VK_VERSION_1_0',
             emitversions      = 'VK_VERSION_1_0',
-            defaultExtensions = None,
+            defaultExtensions = defaultExtensions,
             addExtensions     = None,
-            removeExtensions  = None,
-            emitExtensions    = None,
-            prefixText        = prefixStrings + vkPrefixStrings,
-            genFuncPointers   = True,
-            protectFile       = protectFile,
-            protectFeature    = False,
-            protectProto      = '#ifndef',
-            protectProtoStr   = 'VK_NO_PROTOTYPES',
-            apicall           = 'VKAPI_ATTR ',
-            apientry          = 'VKAPI_CALL ',
-            apientryp         = 'VKAPI_PTR *',
-            alignFuncParam    = 48)
-        ]
-
-    # Unused - vulkan11.h target.
-    # It is possible to generate a header with just the Vulkan 1.0 +
-    # extension interfaces defined, but since the promoted KHR extensions
-    # are now defined in terms of the 1.1 interfaces, such a header is very
-    # similar to vulkan_core.h.
-    genOpts['vulkan11.h'] = [
-          COutputGenerator,
-          CGeneratorOptions(
-            conventions       = conventions,
-            filename          = 'vulkan11.h',
-            directory         = directory,
-            genpath           = None,
-            apiname           = 'vulkan',
-            profile           = None,
-            versions          = '^VK_VERSION_1_[01]$',
-            emitversions      = '^VK_VERSION_1_[01]$',
-            defaultExtensions = None,
-            addExtensions     = None,
-            removeExtensions  = None,
-            emitExtensions    = None,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
             prefixText        = prefixStrings + vkPrefixStrings,
             genFuncPointers   = True,
             protectFile       = protectFile,
@@ -444,7 +416,6 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'alias.h',
             directory         = directory,
-            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -546,9 +517,7 @@ if __name__ == '__main__':
     parser.add_argument('-time', action='store_true',
                         help='Enable timing')
     parser.add_argument('-validate', action='store_true',
-                        help='Enable XML group validation')
-    parser.add_argument('-genpath', action='store', default='gen',
-                        help='Path to generated files')
+                        help='Enable group validation')
     parser.add_argument('-o', action='store', dest='directory',
                         default='.',
                         help='Create target and related files in specified directory')

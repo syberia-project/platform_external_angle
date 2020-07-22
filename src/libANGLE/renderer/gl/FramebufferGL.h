@@ -62,8 +62,6 @@ class FramebufferGL : public FramebufferImpl
                              const gl::Rectangle &area,
                              GLenum format,
                              GLenum type,
-                             const gl::PixelPackState &pack,
-                             gl::Buffer *packBuffer,
                              void *pixels) override;
 
     angle::Result blit(const gl::Context *context,

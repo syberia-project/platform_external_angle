@@ -96,7 +96,11 @@ void FuzzerPassSplitBlocks::Apply() {
     // If the position we have chosen turns out to be a valid place to split
     // the block, we apply the split. Otherwise the block just doesn't get
     // split.
-    MaybeApplyTransformation(transformation);
+    if (transformation.IsApplicable(GetIRContext(),
+                                    *GetTransformationContext())) {
+      transformation.Apply(GetIRContext(), GetTransformationContext());
+      *GetTransformations()->add_transformation() = transformation.ToMessage();
+    }
   }
 }
 

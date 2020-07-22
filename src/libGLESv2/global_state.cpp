@@ -11,6 +11,7 @@
 #include "common/debug.h"
 #include "common/platform.h"
 #include "common/system_utils.h"
+#include "common/tls.h"
 #include "libGLESv2/resource.h"
 
 #include <atomic>
@@ -57,9 +58,6 @@ Thread *AllocateCurrentThread()
         ERR() << "Could not set thread local storage.";
         return nullptr;
     }
-
-    // Initialize fast TLS slot
-    SetContextToAndroidOpenGLTLSSlot(nullptr);
 
     return thread;
 }
@@ -135,8 +133,6 @@ void SetContextCurrent(Thread *thread, gl::Context *context)
         }
     }
     thread->setCurrent(context);
-
-    SetContextToAndroidOpenGLTLSSlot(context);
 }
 }  // namespace egl
 

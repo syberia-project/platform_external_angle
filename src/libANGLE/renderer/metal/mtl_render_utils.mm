@@ -17,6 +17,8 @@
 #include "libANGLE/renderer/metal/DisplayMtl.h"
 #include "libANGLE/renderer/metal/mtl_common.h"
 #include "libANGLE/renderer/metal/mtl_utils.h"
+#include "libANGLE/renderer/metal/shaders/compiled/mtl_default_shaders.inc"
+#include "libANGLE/renderer/metal/shaders/mtl_default_shaders_src_autogen.inc"
 
 namespace rx
 {
@@ -29,11 +31,7 @@ namespace
 #define SOURCE_IDX_IS_U8_CONSTANT_NAME @"kSourceIndexIsU8"
 #define SOURCE_IDX_IS_U16_CONSTANT_NAME @"kSourceIndexIsU16"
 #define SOURCE_IDX_IS_U32_CONSTANT_NAME @"kSourceIndexIsU32"
-#define PREMULTIPLY_ALPHA_CONSTANT_NAME @"kPremultiplyAlpha"
-#define UNMULTIPLY_ALPHA_CONSTANT_NAME @"kUnmultiplyAlpha"
-#define SOURCE_TEXTURE_TYPE_CONSTANT_NAME @"kSourceTextureType"
 
-// See libANGLE/renderer/metal/shaders/clear.metal
 struct ClearParamsUniform
 {
     float clearColor[4];
@@ -41,18 +39,16 @@ struct ClearParamsUniform
     float padding[3];
 };
 
-// See libANGLE/renderer/metal/shaders/blit.metal
 struct BlitParamsUniform
 {
-    // 0: lower left, 1: lower right, 2: upper left
-    float srcTexCoords[3][2];
+    // 0: lower left, 1: lower right, 2: upper left, 3: upper right
+    float srcTexCoords[4][2];
     int srcLevel         = 0;
-    int srcLayer         = 0;
-    uint8_t dstFlipX     = 0;
+    uint8_t srcLuminance = 0;  // source texture is luminance texture
     uint8_t dstFlipY     = 0;
     uint8_t dstLuminance = 0;  // dest texture is luminace
     uint8_t padding1;
-    float padding2[3];
+    float padding2[2];
 };
 
 struct IndexConversionUniform
@@ -61,40 +57,6 @@ struct IndexConversionUniform
     uint32_t indexCount;
     uint32_t padding[2];
 };
-
-void GetBlitTexCoords(uint32_t srcWidth,
-                      uint32_t srcHeight,
-                      const gl::Rectangle &srcRect,
-                      bool srcYFlipped,
-                      bool unpackFlipY,
-                      float *u0,
-                      float *v0,
-                      float *u1,
-                      float *v1)
-{
-    int x0 = srcRect.x0();  // left
-    int x1 = srcRect.x1();  // right
-    int y0 = srcRect.y0();  // lower
-    int y1 = srcRect.y1();  // upper
-    if (srcYFlipped)
-    {
-        // If source's Y has been flipped, such as default framebuffer, then adjust the real source
-        // rectangle.
-        y0 = srcHeight - y1;
-        y1 = y0 + srcRect.height;
-        std::swap(y0, y1);
-    }
-
-    if (unpackFlipY)
-    {
-        std::swap(y0, y1);
-    }
-
-    *u0 = static_cast<float>(x0) / srcWidth;
-    *u1 = static_cast<float>(x1) / srcWidth;
-    *v0 = static_cast<float>(y0) / srcHeight;
-    *v1 = static_cast<float>(y1) / srcHeight;
-}
 
 template <typename T>
 angle::Result GenTriFanFromClientElements(ContextMtl *contextMtl,
@@ -136,220 +98,58 @@ void GetFirstLastIndicesFromClientElements(GLsizei count,
     memcpy(lastOut, indices + count - 1, sizeof(indices[0]));
 }
 
-int GetShaderTextureType(const TextureRef &texture)
-{
-    if (!texture)
-    {
-        return -1;
-    }
-    switch (texture->textureType())
-    {
-        case MTLTextureType2D:
-            return mtl_shader::kTextureType2D;
-        case MTLTextureType2DArray:
-            return mtl_shader::kTextureType2DArray;
-        case MTLTextureType2DMultisample:
-            return mtl_shader::kTextureType2DMultisample;
-        case MTLTextureTypeCube:
-            return mtl_shader::kTextureTypeCube;
-        case MTLTextureType3D:
-            return mtl_shader::kTextureType3D;
-        default:
-            UNREACHABLE();
-    }
-
-    return 0;
-}
-
-ANGLE_INLINE
-void EnsureComputePipelineInitialized(DisplayMtl *display,
-                                      NSString *functionName,
-                                      AutoObjCPtr<id<MTLComputePipelineState>> *pipelineOut)
-{
-    AutoObjCPtr<id<MTLComputePipelineState>> &pipeline = *pipelineOut;
-    if (pipeline)
-    {
-        return;
-    }
-
-    ANGLE_MTL_OBJC_SCOPE
-    {
-        id<MTLDevice> metalDevice = display->getMetalDevice();
-        id<MTLLibrary> shaderLib  = display->getDefaultShadersLib();
-        NSError *err              = nil;
-        id<MTLFunction> shader    = [shaderLib newFunctionWithName:functionName];
-
-        [shader ANGLE_MTL_AUTORELEASE];
-
-        pipeline = [[metalDevice newComputePipelineStateWithFunction:shader
-                                                               error:&err] ANGLE_MTL_AUTORELEASE];
-        if (err && !pipeline)
-        {
-            ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
-        }
-
-        ASSERT(pipeline);
-    }
-}
-
-ANGLE_INLINE
-void EnsureSpecializedComputePipelineInitialized(
-    DisplayMtl *display,
-    NSString *functionName,
-    MTLFunctionConstantValues *funcConstants,
-    AutoObjCPtr<id<MTLComputePipelineState>> *pipelineOut)
-{
-    if (!funcConstants)
-    {
-        // Non specialized constants provided, use default creation function.
-        EnsureComputePipelineInitialized(display, functionName, pipelineOut);
-        return;
-    }
-
-    AutoObjCPtr<id<MTLComputePipelineState>> &pipeline = *pipelineOut;
-    if (pipeline)
-    {
-        return;
-    }
-
-    ANGLE_MTL_OBJC_SCOPE
-    {
-        id<MTLDevice> metalDevice = display->getMetalDevice();
-        id<MTLLibrary> shaderLib  = display->getDefaultShadersLib();
-        NSError *err              = nil;
-
-        id<MTLFunction> shader = [shaderLib newFunctionWithName:functionName
-                                                 constantValues:funcConstants
-                                                          error:&err];
-        if (err && !shader)
-        {
-            ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
-        }
-        ASSERT([shader ANGLE_MTL_AUTORELEASE]);
-
-        pipeline = [[metalDevice newComputePipelineStateWithFunction:shader
-                                                               error:&err] ANGLE_MTL_AUTORELEASE];
-        if (err && !pipeline)
-        {
-            ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
-        }
-        ASSERT(pipeline);
-    }
-}
-
-template <typename T>
-void ClearRenderPipelineCacheArray(T *pipelineCacheArray)
-{
-    for (RenderPipelineCache &pipelineCache : *pipelineCacheArray)
-    {
-        pipelineCache.clear();
-    }
-}
-
-template <typename T>
-void ClearPipelineStateArray(T *pipelineCacheArray)
-{
-    for (auto &pipeline : *pipelineCacheArray)
-    {
-        pipeline = nil;
-    }
-}
-
-template <typename T>
-void ClearPipelineState2DArray(T *pipelineCache2DArray)
-{
-    for (auto &level1Array : *pipelineCache2DArray)
-    {
-        ClearPipelineStateArray(&level1Array);
-    }
-}
-
-void DispatchCompute(ContextMtl *contextMtl,
-                     ComputeCommandEncoder *cmdEncoder,
-                     id<MTLComputePipelineState> pipelineState,
-                     size_t numThreads)
-{
-    NSUInteger w = std::min<NSUInteger>(pipelineState.threadExecutionWidth, numThreads);
-    MTLSize threadsPerThreadgroup = MTLSizeMake(w, 1, 1);
-
-    if (contextMtl->getDisplay()->getFeatures().hasNonUniformDispatch.enabled)
-    {
-        MTLSize threads = MTLSizeMake(numThreads, 1, 1);
-        cmdEncoder->dispatchNonUniform(threads, threadsPerThreadgroup);
-    }
-    else
-    {
-        MTLSize groups = MTLSizeMake((numThreads + w - 1) / w, 1, 1);
-        cmdEncoder->dispatch(groups, threadsPerThreadgroup);
-    }
-}
-
-void SetupFullscreenDrawCommonStates(RenderCommandEncoder *cmdEncoder)
-{
-    cmdEncoder->setCullMode(MTLCullModeNone);
-    cmdEncoder->setTriangleFillMode(MTLTriangleFillModeFill);
-    cmdEncoder->setDepthBias(0, 0, 0);
-}
-
-void SetupBlitWithDrawUniformData(RenderCommandEncoder *cmdEncoder, const BlitParams &params)
-{
-
-    BlitParamsUniform uniformParams;
-    uniformParams.dstFlipY     = params.dstFlipY ? 1 : 0;
-    uniformParams.srcLevel     = params.srcLevel;
-    uniformParams.dstLuminance = params.dstLuminance ? 1 : 0;
-
-    // Compute source texCoords
-    uint32_t srcWidth = 0, srcHeight = 0;
-    if (params.src)
-    {
-        srcWidth  = params.src->width(params.srcLevel);
-        srcHeight = params.src->height(params.srcLevel);
-    }
-    else
-    {
-        UNREACHABLE();
-    }
-
-    float u0, v0, u1, v1;
-    GetBlitTexCoords(srcWidth, srcHeight, params.srcRect, params.srcYFlipped, params.unpackFlipY,
-                     &u0, &v0, &u1, &v1);
-
-    float du = u1 - u0;
-    float dv = v1 - v0;
-
-    // lower left
-    uniformParams.srcTexCoords[0][0] = u0;
-    uniformParams.srcTexCoords[0][1] = v0;
-
-    // lower right
-    uniformParams.srcTexCoords[1][0] = u1 + du;
-    uniformParams.srcTexCoords[1][1] = v0;
-
-    // upper left
-    uniformParams.srcTexCoords[2][0] = u0;
-    uniformParams.srcTexCoords[2][1] = v1 + dv;
-
-    cmdEncoder->setVertexData(uniformParams, 0);
-    cmdEncoder->setFragmentData(uniformParams, 0);
-}
 }  // namespace
 
-// RenderUtils implementation
+bool RenderUtils::IndexConvesionPipelineCacheKey::operator==(
+    const IndexConvesionPipelineCacheKey &other) const
+{
+    return srcType == other.srcType && srcBufferOffsetAligned == other.srcBufferOffsetAligned;
+}
+bool RenderUtils::IndexConvesionPipelineCacheKey::operator<(
+    const IndexConvesionPipelineCacheKey &other) const
+{
+    if (!srcBufferOffsetAligned && other.srcBufferOffsetAligned)
+    {
+        return true;
+    }
+    if (srcBufferOffsetAligned && !other.srcBufferOffsetAligned)
+    {
+        return false;
+    }
+    return static_cast<int>(srcType) < static_cast<int>(other.srcType);
+}
+
 RenderUtils::RenderUtils(DisplayMtl *display) : Context(display) {}
 
 RenderUtils::~RenderUtils() {}
 
 angle::Result RenderUtils::initialize()
 {
+    auto re = initShaderLibrary();
+    if (re != angle::Result::Continue)
+    {
+        return re;
+    }
+
+    initClearResources();
+    initBlitResources();
+
     return angle::Result::Continue;
 }
 
 void RenderUtils::onDestroy()
 {
-    mIndexUtils.onDestroy();
-    mClearUtils.onDestroy();
-    mColorBlitUtils.onDestroy();
+    mDefaultShaders = nil;
+
+    mClearRenderPipelineCache.clear();
+    mBlitRenderPipelineCache.clear();
+    mBlitPremultiplyAlphaRenderPipelineCache.clear();
+    mBlitUnmultiplyAlphaRenderPipelineCache.clear();
+
+    mIndexConversionPipelineCaches.clear();
+    mTriFanFromElemArrayGeneratorPipelineCaches.clear();
+
+    mTriFanFromArraysGeneratorPipeline = nil;
 }
 
 // override ErrorHandler
@@ -376,160 +176,125 @@ void RenderUtils::handleError(NSError *nserror,
           << nserror.localizedDescription.UTF8String;
 }
 
-// Clear current framebuffer
-angle::Result RenderUtils::clearWithDraw(const gl::Context *context,
-                                         RenderCommandEncoder *cmdEncoder,
-                                         const ClearRectParams &params)
+angle::Result RenderUtils::initShaderLibrary()
 {
-    return mClearUtils.clearWithDraw(context, cmdEncoder, params);
-}
+    AutoObjCObj<NSError> err = nil;
 
-// Blit texture data to current framebuffer
-angle::Result RenderUtils::blitWithDraw(const gl::Context *context,
-                                        RenderCommandEncoder *cmdEncoder,
-                                        const BlitParams &params)
-{
-    return mColorBlitUtils.blitWithDraw(context, cmdEncoder, params);
-}
+#if defined(ANGLE_MTL_DEBUG_INTERNAL_SHADERS)
+    mDefaultShaders = CreateShaderLibrary(getDisplay()->getMetalDevice(), default_metallib_src,
+                                          sizeof(default_metallib_src), &err);
+#else
+    mDefaultShaders =
+        CreateShaderLibraryFromBinary(getDisplay()->getMetalDevice(), compiled_default_metallib,
+                                      compiled_default_metallib_len, &err);
+#endif
 
-angle::Result RenderUtils::blitWithDraw(const gl::Context *context,
-                                        RenderCommandEncoder *cmdEncoder,
-                                        const TextureRef &srcTexture)
-{
-    if (!srcTexture)
+    if (err && !mDefaultShaders)
     {
-        return angle::Result::Continue;
+        ANGLE_MTL_CHECK(this, false, err.get());
+        return angle::Result::Stop;
     }
-    BlitParams params;
-    params.src     = srcTexture;
-    params.srcRect = gl::Rectangle(0, 0, srcTexture->width(), srcTexture->height());
-    return blitWithDraw(context, cmdEncoder, params);
+
+    return angle::Result::Continue;
 }
 
-angle::Result RenderUtils::convertIndexBufferGPU(ContextMtl *contextMtl,
-                                                 const IndexConversionParams &params)
-{
-    return mIndexUtils.convertIndexBufferGPU(contextMtl, params);
-}
-angle::Result RenderUtils::generateTriFanBufferFromArrays(ContextMtl *contextMtl,
-                                                          const TriFanFromArrayParams &params)
-{
-    return mIndexUtils.generateTriFanBufferFromArrays(contextMtl, params);
-}
-angle::Result RenderUtils::generateTriFanBufferFromElementsArray(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params)
-{
-    return mIndexUtils.generateTriFanBufferFromElementsArray(contextMtl, params);
-}
-
-angle::Result RenderUtils::generateLineLoopLastSegment(ContextMtl *contextMtl,
-                                                       uint32_t firstVertex,
-                                                       uint32_t lastVertex,
-                                                       const BufferRef &dstBuffer,
-                                                       uint32_t dstOffset)
-{
-    return mIndexUtils.generateLineLoopLastSegment(contextMtl, firstVertex, lastVertex, dstBuffer,
-                                                   dstOffset);
-}
-angle::Result RenderUtils::generateLineLoopLastSegmentFromElementsArray(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params)
-{
-    return mIndexUtils.generateLineLoopLastSegmentFromElementsArray(contextMtl, params);
-}
-
-// ClearUtils implementation
-ClearUtils::ClearUtils() = default;
-
-void ClearUtils::onDestroy()
-{
-    mClearRenderPipelineCache.clear();
-}
-
-void ClearUtils::ensureRenderPipelineStateCacheInitialized(ContextMtl *ctx)
+void RenderUtils::initClearResources()
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-
+        // Shader pipeline
         mClearRenderPipelineCache.setVertexShader(
-            ctx, [[shaderLib newFunctionWithName:@"clearVS"] ANGLE_MTL_AUTORELEASE]);
+            this, [[mDefaultShaders.get() newFunctionWithName:@"clearVS"] ANGLE_MTL_AUTORELEASE]);
         mClearRenderPipelineCache.setFragmentShader(
-            ctx, [[shaderLib newFunctionWithName:@"clearFS"] ANGLE_MTL_AUTORELEASE]);
+            this, [[mDefaultShaders.get() newFunctionWithName:@"clearFS"] ANGLE_MTL_AUTORELEASE]);
     }
 }
 
-id<MTLDepthStencilState> ClearUtils::getClearDepthStencilState(const gl::Context *context,
-                                                               const ClearRectParams &params)
+void RenderUtils::initBlitResources()
 {
-    ContextMtl *contextMtl = GetImpl(context);
-
-    if (!params.clearDepth.valid() && !params.clearStencil.valid())
+    ANGLE_MTL_OBJC_SCOPE
     {
-        // Doesn't clear depth nor stencil
-        return contextMtl->getDisplay()->getStateCache().getNullDepthStencilState(contextMtl);
-    }
+        auto shaderLib    = mDefaultShaders.get();
+        auto vertexShader = [[shaderLib newFunctionWithName:@"blitVS"] ANGLE_MTL_AUTORELEASE];
 
-    DepthStencilDesc desc;
-    desc.reset();
+        mBlitRenderPipelineCache.setVertexShader(this, vertexShader);
+        mBlitRenderPipelineCache.setFragmentShader(
+            this, [[shaderLib newFunctionWithName:@"blitFS"] ANGLE_MTL_AUTORELEASE]);
 
-    if (params.clearDepth.valid())
-    {
-        // Clear depth state
-        desc.depthWriteEnabled = true;
-    }
-    else
-    {
-        desc.depthWriteEnabled = false;
-    }
+        mBlitPremultiplyAlphaRenderPipelineCache.setVertexShader(this, vertexShader);
+        mBlitPremultiplyAlphaRenderPipelineCache.setFragmentShader(
+            this,
+            [[shaderLib newFunctionWithName:@"blitPremultiplyAlphaFS"] ANGLE_MTL_AUTORELEASE]);
 
-    if (params.clearStencil.valid())
-    {
-        // Clear stencil state
-        desc.frontFaceStencil.depthStencilPassOperation = MTLStencilOperationReplace;
-        desc.frontFaceStencil.writeMask                 = contextMtl->getStencilMask();
-        desc.backFaceStencil.depthStencilPassOperation  = MTLStencilOperationReplace;
-        desc.backFaceStencil.writeMask                  = contextMtl->getStencilMask();
+        mBlitUnmultiplyAlphaRenderPipelineCache.setVertexShader(this, vertexShader);
+        mBlitUnmultiplyAlphaRenderPipelineCache.setFragmentShader(
+            this, [[shaderLib newFunctionWithName:@"blitUnmultiplyAlphaFS"] ANGLE_MTL_AUTORELEASE]);
     }
-
-    return contextMtl->getDisplay()->getStateCache().getDepthStencilState(
-        contextMtl->getMetalDevice(), desc);
 }
 
-id<MTLRenderPipelineState> ClearUtils::getClearRenderPipelineState(const gl::Context *context,
-                                                                   RenderCommandEncoder *cmdEncoder,
-                                                                   const ClearRectParams &params)
+void RenderUtils::clearWithDraw(const gl::Context *context,
+                                RenderCommandEncoder *cmdEncoder,
+                                const ClearRectParams &params)
 {
-    ContextMtl *contextMtl      = GetImpl(context);
-    MTLColorWriteMask colorMask = contextMtl->getColorMask();
-    if (!params.clearColor.valid())
-    {
-        colorMask = MTLColorWriteMaskNone;
-    }
-
-    RenderPipelineDesc pipelineDesc;
+    auto overridedParams = params;
+    // Make sure we don't clear attachment that doesn't exist
     const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
+    if (renderPassDesc.numColorAttachments == 0)
+    {
+        overridedParams.clearColor.reset();
+    }
+    if (!renderPassDesc.depthAttachment.texture)
+    {
+        overridedParams.clearDepth.reset();
+    }
+    if (!renderPassDesc.stencilAttachment.texture)
+    {
+        overridedParams.clearStencil.reset();
+    }
 
-    renderPassDesc.populateRenderPipelineOutputDesc(colorMask, &pipelineDesc.outputDescriptor);
+    if (!overridedParams.clearColor.valid() && !overridedParams.clearDepth.valid() &&
+        !overridedParams.clearStencil.valid())
+    {
+        return;
+    }
 
-    pipelineDesc.inputPrimitiveTopology = kPrimitiveTopologyClassTriangle;
+    setupClearWithDraw(context, cmdEncoder, overridedParams);
 
-    ensureRenderPipelineStateCacheInitialized(contextMtl);
+    // Draw the screen aligned quad
+    cmdEncoder->draw(MTLPrimitiveTypeTriangle, 0, 6);
 
-    return mClearRenderPipelineCache.getRenderPipelineState(contextMtl, pipelineDesc);
+    // Invalidate current context's state
+    auto contextMtl = GetImpl(context);
+    contextMtl->invalidateState(context);
 }
 
-void ClearUtils::setupClearWithDraw(const gl::Context *context,
-                                    RenderCommandEncoder *cmdEncoder,
-                                    const ClearRectParams &params)
+void RenderUtils::blitWithDraw(const gl::Context *context,
+                               RenderCommandEncoder *cmdEncoder,
+                               const BlitParams &params)
+{
+    if (!params.src)
+    {
+        return;
+    }
+    setupBlitWithDraw(context, cmdEncoder, params);
+
+    // Draw the screen aligned quad
+    cmdEncoder->draw(MTLPrimitiveTypeTriangle, 0, 6);
+
+    // Invalidate current context's state
+    ContextMtl *contextMtl = GetImpl(context);
+    contextMtl->invalidateState(context);
+}
+
+void RenderUtils::setupClearWithDraw(const gl::Context *context,
+                                     RenderCommandEncoder *cmdEncoder,
+                                     const ClearRectParams &params)
 {
     // Generate render pipeline state
-    id<MTLRenderPipelineState> renderPipelineState =
-        getClearRenderPipelineState(context, cmdEncoder, params);
+    auto renderPipelineState = getClearRenderPipelineState(context, cmdEncoder, params);
     ASSERT(renderPipelineState);
     // Setup states
-    SetupFullscreenDrawCommonStates(cmdEncoder);
+    setupDrawCommonStates(cmdEncoder);
     cmdEncoder->setRenderPipelineState(renderPipelineState);
 
     id<MTLDepthStencilState> dsState = getClearDepthStencilState(context, params);
@@ -557,7 +322,7 @@ void ClearUtils::setupClearWithDraw(const gl::Context *context,
         renderPassAttachment = renderPassDesc.stencilAttachment;
     }
 
-    TextureRef texture = renderPassAttachment.texture;
+    auto texture = renderPassAttachment.texture;
 
     viewport =
         GetViewport(params.clearArea, texture->height(renderPassAttachment.level), params.flipY);
@@ -580,170 +345,25 @@ void ClearUtils::setupClearWithDraw(const gl::Context *context,
     cmdEncoder->setFragmentData(uniformParams, 0);
 }
 
-angle::Result ClearUtils::clearWithDraw(const gl::Context *context,
-                                        RenderCommandEncoder *cmdEncoder,
-                                        const ClearRectParams &params)
-{
-    ClearRectParams overridedParams = params;
-    // Make sure we don't clear attachment that doesn't exist
-    const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
-    if (renderPassDesc.numColorAttachments == 0)
-    {
-        overridedParams.clearColor.reset();
-    }
-    if (!renderPassDesc.depthAttachment.texture)
-    {
-        overridedParams.clearDepth.reset();
-    }
-    if (!renderPassDesc.stencilAttachment.texture)
-    {
-        overridedParams.clearStencil.reset();
-    }
-
-    if (!overridedParams.clearColor.valid() && !overridedParams.clearDepth.valid() &&
-        !overridedParams.clearStencil.valid())
-    {
-        return angle::Result::Continue;
-    }
-
-    setupClearWithDraw(context, cmdEncoder, overridedParams);
-
-    // Draw the screen aligned triangle
-    cmdEncoder->draw(MTLPrimitiveTypeTriangle, 0, 3);
-
-    // Invalidate current context's state
-    ContextMtl *contextMtl = GetImpl(context);
-    contextMtl->invalidateState(context);
-
-    return angle::Result::Continue;
-}
-
-// ColorBlitUtils implementation
-ColorBlitUtils::ColorBlitUtils() = default;
-
-void ColorBlitUtils::onDestroy()
-{
-    ClearRenderPipelineCacheArray(&mBlitRenderPipelineCache);
-    ClearRenderPipelineCacheArray(&mBlitPremultiplyAlphaRenderPipelineCache);
-    ClearRenderPipelineCacheArray(&mBlitUnmultiplyAlphaRenderPipelineCache);
-}
-
-void ColorBlitUtils::ensureRenderPipelineStateCacheInitialized(ContextMtl *ctx,
-                                                               int alphaPremultiplyType,
-                                                               int textureType,
-                                                               RenderPipelineCache *cacheOut)
-{
-    RenderPipelineCache &pipelineCache = *cacheOut;
-    if (pipelineCache.getVertexShader() && pipelineCache.getFragmentShader())
-    {
-        // Already initialized.
-        return;
-    }
-
-    ANGLE_MTL_OBJC_SCOPE
-    {
-        NSError *err             = nil;
-        id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-        id<MTLFunction> vertexShader =
-            [[shaderLib newFunctionWithName:@"blitVS"] ANGLE_MTL_AUTORELEASE];
-        MTLFunctionConstantValues *funcConstants =
-            [[[MTLFunctionConstantValues alloc] init] ANGLE_MTL_AUTORELEASE];
-
-        constexpr BOOL multiplyAlphaFlags[][2] = {// premultiply, unmultiply
-
-                                                  // Normal blit
-                                                  {NO, NO},
-                                                  // Blit premultiply-alpha
-                                                  {YES, NO},
-                                                  // Blit unmultiply alpha
-                                                  {NO, YES}};
-
-        // Set alpha multiply flags
-        [funcConstants setConstantValue:&multiplyAlphaFlags[alphaPremultiplyType][0]
-                                   type:MTLDataTypeBool
-                               withName:PREMULTIPLY_ALPHA_CONSTANT_NAME];
-        [funcConstants setConstantValue:&multiplyAlphaFlags[alphaPremultiplyType][1]
-                                   type:MTLDataTypeBool
-                               withName:UNMULTIPLY_ALPHA_CONSTANT_NAME];
-
-        // Set texture type constant
-        [funcConstants setConstantValue:&textureType
-                                   type:MTLDataTypeInt
-                               withName:SOURCE_TEXTURE_TYPE_CONSTANT_NAME];
-
-        id<MTLFunction> fragmentShader =
-            [[shaderLib newFunctionWithName:@"blitFS" constantValues:funcConstants
-                                      error:&err] ANGLE_MTL_AUTORELEASE];
-
-        ASSERT(vertexShader);
-        ASSERT(fragmentShader);
-        pipelineCache.setVertexShader(ctx, vertexShader);
-        pipelineCache.setFragmentShader(ctx, fragmentShader);
-    }
-}
-
-id<MTLRenderPipelineState> ColorBlitUtils::getBlitRenderPipelineState(
-    const gl::Context *context,
-    RenderCommandEncoder *cmdEncoder,
-    const BlitParams &params)
-{
-    ContextMtl *contextMtl = GetImpl(context);
-    RenderPipelineDesc pipelineDesc;
-    const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
-
-    renderPassDesc.populateRenderPipelineOutputDesc(params.dstColorMask,
-                                                    &pipelineDesc.outputDescriptor);
-
-    pipelineDesc.inputPrimitiveTopology = kPrimitiveTopologyClassTriangle;
-
-    RenderPipelineCache *pipelineCache;
-    int alphaPremultiplyType;
-    int textureType = GetShaderTextureType(params.src);
-    if (params.unpackPremultiplyAlpha == params.unpackUnmultiplyAlpha)
-    {
-        alphaPremultiplyType = 0;
-        pipelineCache        = &mBlitRenderPipelineCache[textureType];
-    }
-    else if (params.unpackPremultiplyAlpha)
-    {
-        alphaPremultiplyType = 1;
-        pipelineCache        = &mBlitPremultiplyAlphaRenderPipelineCache[textureType];
-    }
-    else
-    {
-        alphaPremultiplyType = 2;
-        pipelineCache        = &mBlitUnmultiplyAlphaRenderPipelineCache[textureType];
-    }
-
-    ensureRenderPipelineStateCacheInitialized(contextMtl, alphaPremultiplyType, textureType,
-                                              pipelineCache);
-
-    return pipelineCache->getRenderPipelineState(contextMtl, pipelineDesc);
-}
-
-void ColorBlitUtils::setupBlitWithDraw(const gl::Context *context,
-                                       RenderCommandEncoder *cmdEncoder,
-                                       const BlitParams &params)
+void RenderUtils::setupBlitWithDraw(const gl::Context *context,
+                                    RenderCommandEncoder *cmdEncoder,
+                                    const BlitParams &params)
 {
     ASSERT(cmdEncoder->renderPassDesc().numColorAttachments == 1 && params.src);
 
-    ContextMtl *contextMtl = mtl::GetImpl(context);
-
     // Generate render pipeline state
-    id<MTLRenderPipelineState> renderPipelineState =
-        getBlitRenderPipelineState(context, cmdEncoder, params);
+    auto renderPipelineState = getBlitRenderPipelineState(context, cmdEncoder, params);
     ASSERT(renderPipelineState);
     // Setup states
-    SetupFullscreenDrawCommonStates(cmdEncoder);
+    setupDrawCommonStates(cmdEncoder);
     cmdEncoder->setRenderPipelineState(renderPipelineState);
-    cmdEncoder->setDepthStencilState(
-        contextMtl->getDisplay()->getStateCache().getNullDepthStencilState(contextMtl));
+    cmdEncoder->setDepthStencilState(getDisplay()->getStateCache().getNullDepthStencilState(this));
 
     // Viewport
     const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
     const RenderPassColorAttachmentDesc &renderPassColorAttachment =
         renderPassDesc.colorAttachments[0];
-    mtl::TextureRef texture = renderPassColorAttachment.texture;
+    auto texture = renderPassColorAttachment.texture;
 
     gl::Rectangle dstRect(params.dstOffset.x, params.dstOffset.y, params.srcRect.width,
                           params.srcRect.height);
@@ -757,102 +377,244 @@ void ColorBlitUtils::setupBlitWithDraw(const gl::Context *context,
     cmdEncoder->setFragmentTexture(params.src, 0);
 
     // Uniform
-    SetupBlitWithDrawUniformData(cmdEncoder, params);
+    setupBlitWithDrawUniformData(cmdEncoder, params);
 }
 
-angle::Result ColorBlitUtils::blitWithDraw(const gl::Context *context,
-                                           RenderCommandEncoder *cmdEncoder,
-                                           const BlitParams &params)
+void RenderUtils::setupDrawCommonStates(RenderCommandEncoder *cmdEncoder)
 {
-    if (!params.src)
+    cmdEncoder->setCullMode(MTLCullModeNone);
+    cmdEncoder->setTriangleFillMode(MTLTriangleFillModeFill);
+    cmdEncoder->setDepthBias(0, 0, 0);
+}
+
+id<MTLDepthStencilState> RenderUtils::getClearDepthStencilState(const gl::Context *context,
+                                                                const ClearRectParams &params)
+{
+    if (!params.clearDepth.valid() && !params.clearStencil.valid())
     {
-        return angle::Result::Continue;
+        // Doesn't clear depth nor stencil
+        return getDisplay()->getStateCache().getNullDepthStencilState(this);
     }
+
     ContextMtl *contextMtl = GetImpl(context);
-    setupBlitWithDraw(context, cmdEncoder, params);
 
-    // Draw the screen aligned triangle
-    cmdEncoder->draw(MTLPrimitiveTypeTriangle, 0, 3);
+    DepthStencilDesc desc;
+    desc.reset();
 
-    // Invalidate current context's state
-    contextMtl->invalidateState(context);
+    if (params.clearDepth.valid())
+    {
+        // Clear depth state
+        desc.depthWriteEnabled = true;
+    }
+    else
+    {
+        desc.depthWriteEnabled = false;
+    }
 
-    return angle::Result::Continue;
+    if (params.clearStencil.valid())
+    {
+        // Clear stencil state
+        desc.frontFaceStencil.depthStencilPassOperation = MTLStencilOperationReplace;
+        desc.frontFaceStencil.writeMask                 = contextMtl->getStencilMask();
+        desc.backFaceStencil.depthStencilPassOperation  = MTLStencilOperationReplace;
+        desc.backFaceStencil.writeMask                  = contextMtl->getStencilMask();
+    }
+
+    return getDisplay()->getStateCache().getDepthStencilState(getDisplay()->getMetalDevice(), desc);
 }
 
-// IndexGeneratorUtils implementation
-void IndexGeneratorUtils::onDestroy()
+id<MTLRenderPipelineState> RenderUtils::getClearRenderPipelineState(
+    const gl::Context *context,
+    RenderCommandEncoder *cmdEncoder,
+    const ClearRectParams &params)
 {
-    ClearPipelineState2DArray(&mIndexConversionPipelineCaches);
-    ClearPipelineState2DArray(&mTriFanFromElemArrayGeneratorPipelineCaches);
+    ContextMtl *contextMtl      = GetImpl(context);
+    MTLColorWriteMask colorMask = contextMtl->getColorMask();
+    if (!params.clearColor.valid())
+    {
+        colorMask = MTLColorWriteMaskNone;
+    }
 
-    mTriFanFromArraysGeneratorPipeline = nil;
+    RenderPipelineDesc pipelineDesc;
+    const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
+
+    renderPassDesc.populateRenderPipelineOutputDesc(colorMask, &pipelineDesc.outputDescriptor);
+
+    pipelineDesc.inputPrimitiveTopology = kPrimitiveTopologyClassTriangle;
+
+    return mClearRenderPipelineCache.getRenderPipelineState(contextMtl, pipelineDesc);
 }
 
-AutoObjCPtr<id<MTLComputePipelineState>> IndexGeneratorUtils::getIndexConversionPipeline(
-    ContextMtl *contextMtl,
+id<MTLRenderPipelineState> RenderUtils::getBlitRenderPipelineState(const gl::Context *context,
+                                                                   RenderCommandEncoder *cmdEncoder,
+                                                                   const BlitParams &params)
+{
+    ContextMtl *contextMtl = GetImpl(context);
+    RenderPipelineDesc pipelineDesc;
+    const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
+
+    renderPassDesc.populateRenderPipelineOutputDesc(params.dstColorMask,
+                                                    &pipelineDesc.outputDescriptor);
+
+    pipelineDesc.inputPrimitiveTopology = kPrimitiveTopologyClassTriangle;
+
+    RenderPipelineCache *pipelineCache;
+    if (params.unpackPremultiplyAlpha == params.unpackUnmultiplyAlpha)
+    {
+        pipelineCache = &mBlitRenderPipelineCache;
+    }
+    else if (params.unpackPremultiplyAlpha)
+    {
+        pipelineCache = &mBlitPremultiplyAlphaRenderPipelineCache;
+    }
+    else
+    {
+        pipelineCache = &mBlitUnmultiplyAlphaRenderPipelineCache;
+    }
+
+    return pipelineCache->getRenderPipelineState(contextMtl, pipelineDesc);
+}
+
+void RenderUtils::setupBlitWithDrawUniformData(RenderCommandEncoder *cmdEncoder,
+                                               const BlitParams &params)
+{
+    BlitParamsUniform uniformParams;
+    uniformParams.dstFlipY     = params.dstFlipY ? 1 : 0;
+    uniformParams.srcLevel     = params.srcLevel;
+    uniformParams.dstLuminance = params.dstLuminance ? 1 : 0;
+
+    // Compute source texCoords
+    auto srcWidth  = params.src->width(params.srcLevel);
+    auto srcHeight = params.src->height(params.srcLevel);
+
+    int x0 = params.srcRect.x0();  // left
+    int x1 = params.srcRect.x1();  // right
+    int y0 = params.srcRect.y0();  // lower
+    int y1 = params.srcRect.y1();  // upper
+    if (params.srcYFlipped)
+    {
+        // If source's Y has been flipped, such as default framebuffer, then adjust the real source
+        // rectangle.
+        y0 = srcHeight - y1;
+        y1 = y0 + params.srcRect.height;
+        std::swap(y0, y1);
+    }
+
+    if (params.unpackFlipY)
+    {
+        std::swap(y0, y1);
+    }
+
+    float u0 = (float)x0 / srcWidth;
+    float u1 = (float)x1 / srcWidth;
+    float v0 = (float)y0 / srcHeight;
+    float v1 = (float)y1 / srcHeight;
+
+    // lower left
+    uniformParams.srcTexCoords[0][0] = u0;
+    uniformParams.srcTexCoords[0][1] = v0;
+
+    // lower right
+    uniformParams.srcTexCoords[1][0] = u1;
+    uniformParams.srcTexCoords[1][1] = v0;
+
+    // upper left
+    uniformParams.srcTexCoords[2][0] = u0;
+    uniformParams.srcTexCoords[2][1] = v1;
+
+    // upper right
+    uniformParams.srcTexCoords[3][0] = u1;
+    uniformParams.srcTexCoords[3][1] = v1;
+
+    cmdEncoder->setVertexData(uniformParams, 0);
+    cmdEncoder->setFragmentData(uniformParams, 0);
+}
+
+AutoObjCPtr<id<MTLComputePipelineState>> RenderUtils::getIndexConversionPipeline(
+    ContextMtl *context,
     gl::DrawElementsType srcType,
     uint32_t srcOffset)
 {
-    size_t elementSize = gl::GetDrawElementsTypeSize(srcType);
-    BOOL aligned       = (srcOffset % elementSize) == 0;
-    int srcTypeKey     = static_cast<int>(srcType);
-    AutoObjCPtr<id<MTLComputePipelineState>> &cache =
-        mIndexConversionPipelineCaches[srcTypeKey][aligned ? 1 : 0];
+    id<MTLDevice> metalDevice = context->getMetalDevice();
+    size_t elementSize        = gl::GetDrawElementsTypeSize(srcType);
+    bool aligned              = (srcOffset % elementSize) == 0;
+
+    IndexConvesionPipelineCacheKey key = {srcType, aligned};
+
+    auto &cache = mIndexConversionPipelineCaches[key];
 
     if (!cache)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
+            auto shaderLib         = mDefaultShaders.get();
+            id<MTLFunction> shader = nil;
             auto funcConstants = [[[MTLFunctionConstantValues alloc] init] ANGLE_MTL_AUTORELEASE];
+            NSError *err       = nil;
 
             [funcConstants setConstantValue:&aligned
                                        type:MTLDataTypeBool
                                    withName:SOURCE_BUFFER_ALIGNED_CONSTANT_NAME];
 
-            NSString *shaderName = nil;
             switch (srcType)
             {
                 case gl::DrawElementsType::UnsignedByte:
-                    // No need for specialized shader
-                    funcConstants = nil;
-                    shaderName    = @"convertIndexU8ToU16";
+                    shader = [shaderLib newFunctionWithName:@"convertIndexU8ToU16"];
                     break;
                 case gl::DrawElementsType::UnsignedShort:
-                    shaderName = @"convertIndexU16";
+                    shader = [shaderLib newFunctionWithName:@"convertIndexU16"
+                                             constantValues:funcConstants
+                                                      error:&err];
                     break;
                 case gl::DrawElementsType::UnsignedInt:
-                    shaderName = @"convertIndexU32";
+                    shader = [shaderLib newFunctionWithName:@"convertIndexU32"
+                                             constantValues:funcConstants
+                                                      error:&err];
                     break;
                 default:
                     UNREACHABLE();
             }
 
-            EnsureSpecializedComputePipelineInitialized(contextMtl->getDisplay(), shaderName,
-                                                        funcConstants, &cache);
+            if (err && !shader)
+            {
+                ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
+            }
+            ASSERT([shader ANGLE_MTL_AUTORELEASE]);
+
+            cache = [[metalDevice newComputePipelineStateWithFunction:shader
+                                                                error:&err] ANGLE_MTL_AUTORELEASE];
+            if (err && !cache)
+            {
+                ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
+            }
+            ASSERT(cache);
         }
     }
 
     return cache;
 }
 
-AutoObjCPtr<id<MTLComputePipelineState>>
-IndexGeneratorUtils::getTriFanFromElemArrayGeneratorPipeline(ContextMtl *contextMtl,
-                                                             gl::DrawElementsType srcType,
-                                                             uint32_t srcOffset)
+AutoObjCPtr<id<MTLComputePipelineState>> RenderUtils::getTriFanFromElemArrayGeneratorPipeline(
+    ContextMtl *context,
+    gl::DrawElementsType srcType,
+    uint32_t srcOffset)
 {
-    size_t elementSize = gl::GetDrawElementsTypeSize(srcType);
-    BOOL aligned       = (srcOffset % elementSize) == 0;
-    int srcTypeKey     = static_cast<int>(srcType);
+    id<MTLDevice> metalDevice = context->getMetalDevice();
+    size_t elementSize        = gl::GetDrawElementsTypeSize(srcType);
+    bool aligned              = (srcOffset % elementSize) == 0;
 
-    AutoObjCPtr<id<MTLComputePipelineState>> &cache =
-        mTriFanFromElemArrayGeneratorPipelineCaches[srcTypeKey][aligned ? 1 : 0];
+    IndexConvesionPipelineCacheKey key = {srcType, aligned};
+
+    auto &cache = mTriFanFromElemArrayGeneratorPipelineCaches[key];
 
     if (!cache)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
+            auto shaderLib         = mDefaultShaders.get();
+            id<MTLFunction> shader = nil;
             auto funcConstants = [[[MTLFunctionConstantValues alloc] init] ANGLE_MTL_AUTORELEASE];
+            NSError *err       = nil;
 
             bool isU8  = false;
             bool isU16 = false;
@@ -886,55 +648,96 @@ IndexGeneratorUtils::getTriFanFromElemArrayGeneratorPipeline(ContextMtl *context
                                        type:MTLDataTypeBool
                                    withName:SOURCE_IDX_IS_U32_CONSTANT_NAME];
 
-            EnsureSpecializedComputePipelineInitialized(
-                contextMtl->getDisplay(), @"genTriFanIndicesFromElements", funcConstants, &cache);
+            shader = [shaderLib newFunctionWithName:@"genTriFanIndicesFromElements"
+                                     constantValues:funcConstants
+                                              error:&err];
+            if (err && !shader)
+            {
+                ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
+            }
+            ASSERT([shader ANGLE_MTL_AUTORELEASE]);
+
+            cache = [[metalDevice newComputePipelineStateWithFunction:shader
+                                                                error:&err] ANGLE_MTL_AUTORELEASE];
+            if (err && !cache)
+            {
+                ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
+            }
+            ASSERT(cache);
         }
     }
 
     return cache;
 }
 
-void IndexGeneratorUtils::ensureTriFanFromArrayGeneratorInitialized(ContextMtl *contextMtl)
+angle::Result RenderUtils::ensureTriFanFromArrayGeneratorInitialized(ContextMtl *context)
 {
-    EnsureComputePipelineInitialized(contextMtl->getDisplay(), @"genTriFanIndicesFromArray",
-                                     &mTriFanFromArraysGeneratorPipeline);
+    if (!mTriFanFromArraysGeneratorPipeline)
+    {
+        ANGLE_MTL_OBJC_SCOPE
+        {
+            id<MTLDevice> metalDevice = context->getMetalDevice();
+            auto shaderLib            = mDefaultShaders.get();
+            NSError *err              = nil;
+            id<MTLFunction> shader = [shaderLib newFunctionWithName:@"genTriFanIndicesFromArray"];
+
+            [shader ANGLE_MTL_AUTORELEASE];
+
+            mTriFanFromArraysGeneratorPipeline =
+                [[metalDevice newComputePipelineStateWithFunction:shader
+                                                            error:&err] ANGLE_MTL_AUTORELEASE];
+            if (err && !mTriFanFromArraysGeneratorPipeline)
+            {
+                ERR() << "Internal error: " << err.localizedDescription.UTF8String << "\n";
+            }
+
+            ASSERT(mTriFanFromArraysGeneratorPipeline);
+        }
+    }
+    return angle::Result::Continue;
 }
 
-angle::Result IndexGeneratorUtils::convertIndexBufferGPU(ContextMtl *contextMtl,
-                                                         const IndexConversionParams &params)
+angle::Result RenderUtils::convertIndexBuffer(const gl::Context *context,
+                                              gl::DrawElementsType srcType,
+                                              uint32_t indexCount,
+                                              const BufferRef &srcBuffer,
+                                              uint32_t srcOffset,
+                                              const BufferRef &dstBuffer,
+                                              uint32_t dstOffset)
 {
+    ContextMtl *contextMtl            = GetImpl(context);
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
     AutoObjCPtr<id<MTLComputePipelineState>> pipelineState =
-        getIndexConversionPipeline(contextMtl, params.srcType, params.srcOffset);
+        getIndexConversionPipeline(contextMtl, srcType, srcOffset);
 
     ASSERT(pipelineState);
 
     cmdEncoder->setComputePipelineState(pipelineState);
 
-    ASSERT((params.dstOffset % kIndexBufferOffsetAlignment) == 0);
+    ASSERT((dstOffset % kIndexBufferOffsetAlignment) == 0);
 
     IndexConversionUniform uniform;
-    uniform.srcOffset  = params.srcOffset;
-    uniform.indexCount = params.indexCount;
+    uniform.srcOffset  = srcOffset;
+    uniform.indexCount = indexCount;
 
     cmdEncoder->setData(uniform, 0);
-    cmdEncoder->setBuffer(params.srcBuffer, 0, 1);
-    cmdEncoder->setBufferForWrite(params.dstBuffer, params.dstOffset, 2);
+    cmdEncoder->setBuffer(srcBuffer, 0, 1);
+    cmdEncoder->setBuffer(dstBuffer, dstOffset, 2);
 
-    DispatchCompute(contextMtl, cmdEncoder, pipelineState, params.indexCount);
+    ANGLE_TRY(dispatchCompute(context, cmdEncoder, pipelineState, indexCount));
 
     return angle::Result::Continue;
 }
 
-angle::Result IndexGeneratorUtils::generateTriFanBufferFromArrays(
-    ContextMtl *contextMtl,
-    const TriFanFromArrayParams &params)
+angle::Result RenderUtils::generateTriFanBufferFromArrays(const gl::Context *context,
+                                                          const TriFanFromArrayParams &params)
 {
+    ContextMtl *contextMtl            = GetImpl(context);
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
-    ensureTriFanFromArrayGeneratorInitialized(contextMtl);
+    ANGLE_TRY(ensureTriFanFromArrayGeneratorInitialized(contextMtl));
 
     ASSERT(params.vertexCount > 2);
 
@@ -953,38 +756,39 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromArrays(
     uniform.vertexCountFrom3rd = params.vertexCount - 2;
 
     cmdEncoder->setData(uniform, 0);
-    cmdEncoder->setBufferForWrite(params.dstBuffer, params.dstOffset, 2);
+    cmdEncoder->setBuffer(params.dstBuffer, params.dstOffset, 2);
 
-    DispatchCompute(contextMtl, cmdEncoder, mTriFanFromArraysGeneratorPipeline,
-                    uniform.vertexCountFrom3rd);
+    ANGLE_TRY(dispatchCompute(context, cmdEncoder, mTriFanFromArraysGeneratorPipeline,
+                              uniform.vertexCountFrom3rd));
 
     return angle::Result::Continue;
 }
 
-angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArray(
-    ContextMtl *contextMtl,
+angle::Result RenderUtils::generateTriFanBufferFromElementsArray(
+    const gl::Context *context,
     const IndexGenerationParams &params)
 {
-    const gl::VertexArray *vertexArray = contextMtl->getState().getVertexArray();
+    ContextMtl *contextMtl             = GetImpl(context);
+    const gl::VertexArray *vertexArray = context->getState().getVertexArray();
     const gl::Buffer *elementBuffer    = vertexArray->getElementArrayBuffer();
     if (elementBuffer)
     {
-        BufferMtl *elementBufferMtl = GetImpl(elementBuffer);
-        size_t srcOffset            = reinterpret_cast<size_t>(params.indices);
+        size_t srcOffset = reinterpret_cast<size_t>(params.indices);
         ANGLE_CHECK(contextMtl, srcOffset <= std::numeric_limits<uint32_t>::max(),
                     "Index offset is too large", GL_INVALID_VALUE);
         return generateTriFanBufferFromElementsArrayGPU(
-            contextMtl, params.srcType, params.indexCount, elementBufferMtl->getCurrentBuffer(),
-            static_cast<uint32_t>(srcOffset), params.dstBuffer, params.dstOffset);
+            context, params.srcType, params.indexCount,
+            GetImpl(elementBuffer)->getCurrentBuffer(context), static_cast<uint32_t>(srcOffset),
+            params.dstBuffer, params.dstOffset);
     }
     else
     {
-        return generateTriFanBufferFromElementsArrayCPU(contextMtl, params);
+        return generateTriFanBufferFromElementsArrayCPU(context, params);
     }
 }
 
-angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayGPU(
-    ContextMtl *contextMtl,
+angle::Result RenderUtils::generateTriFanBufferFromElementsArrayGPU(
+    const gl::Context *context,
     gl::DrawElementsType srcType,
     uint32_t indexCount,
     const BufferRef &srcBuffer,
@@ -993,6 +797,7 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayGPU(
     // Must be multiples of kIndexBufferOffsetAlignment
     uint32_t dstOffset)
 {
+    ContextMtl *contextMtl            = GetImpl(context);
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
@@ -1012,17 +817,18 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayGPU(
 
     cmdEncoder->setData(uniform, 0);
     cmdEncoder->setBuffer(srcBuffer, 0, 1);
-    cmdEncoder->setBufferForWrite(dstBuffer, dstOffset, 2);
+    cmdEncoder->setBuffer(dstBuffer, dstOffset, 2);
 
-    DispatchCompute(contextMtl, cmdEncoder, pipelineState, uniform.indexCount);
+    ANGLE_TRY(dispatchCompute(context, cmdEncoder, pipelineState, uniform.indexCount));
 
     return angle::Result::Continue;
 }
 
-angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayCPU(
-    ContextMtl *contextMtl,
+angle::Result RenderUtils::generateTriFanBufferFromElementsArrayCPU(
+    const gl::Context *context,
     const IndexGenerationParams &params)
 {
+    ContextMtl *contextMtl = GetImpl(context);
     switch (params.srcType)
     {
         case gl::DrawElementsType::UnsignedByte:
@@ -1044,13 +850,14 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayCPU(
     return angle::Result::Stop;
 }
 
-angle::Result IndexGeneratorUtils::generateLineLoopLastSegment(ContextMtl *contextMtl,
-                                                               uint32_t firstVertex,
-                                                               uint32_t lastVertex,
-                                                               const BufferRef &dstBuffer,
-                                                               uint32_t dstOffset)
+angle::Result RenderUtils::generateLineLoopLastSegment(const gl::Context *context,
+                                                       uint32_t firstVertex,
+                                                       uint32_t lastVertex,
+                                                       const BufferRef &dstBuffer,
+                                                       uint32_t dstOffset)
 {
-    uint8_t *ptr = dstBuffer->map(contextMtl) + dstOffset;
+    ContextMtl *contextMtl = GetImpl(context);
+    uint8_t *ptr           = dstBuffer->map(contextMtl);
 
     uint32_t indices[2] = {lastVertex, firstVertex};
     memcpy(ptr, indices, sizeof(indices));
@@ -1060,11 +867,12 @@ angle::Result IndexGeneratorUtils::generateLineLoopLastSegment(ContextMtl *conte
     return angle::Result::Continue;
 }
 
-angle::Result IndexGeneratorUtils::generateLineLoopLastSegmentFromElementsArray(
-    ContextMtl *contextMtl,
+angle::Result RenderUtils::generateLineLoopLastSegmentFromElementsArray(
+    const gl::Context *context,
     const IndexGenerationParams &params)
 {
-    const gl::VertexArray *vertexArray = contextMtl->getState().getVertexArray();
+    ContextMtl *contextMtl             = GetImpl(context);
+    const gl::VertexArray *vertexArray = context->getState().getVertexArray();
     const gl::Buffer *elementBuffer    = vertexArray->getElementArrayBuffer();
     if (elementBuffer)
     {
@@ -1074,20 +882,21 @@ angle::Result IndexGeneratorUtils::generateLineLoopLastSegmentFromElementsArray(
 
         BufferMtl *bufferMtl = GetImpl(elementBuffer);
         std::pair<uint32_t, uint32_t> firstLast;
-        ANGLE_TRY(bufferMtl->getFirstLastIndices(params.srcType, static_cast<uint32_t>(srcOffset),
+        ANGLE_TRY(bufferMtl->getFirstLastIndices(context, params.srcType,
+                                                 static_cast<uint32_t>(srcOffset),
                                                  params.indexCount, &firstLast));
 
-        return generateLineLoopLastSegment(contextMtl, firstLast.first, firstLast.second,
+        return generateLineLoopLastSegment(context, firstLast.first, firstLast.second,
                                            params.dstBuffer, params.dstOffset);
     }
     else
     {
-        return generateLineLoopLastSegmentFromElementsArrayCPU(contextMtl, params);
+        return generateLineLoopLastSegmentFromElementsArrayCPU(context, params);
     }
 }
 
-angle::Result IndexGeneratorUtils::generateLineLoopLastSegmentFromElementsArrayCPU(
-    ContextMtl *contextMtl,
+angle::Result RenderUtils::generateLineLoopLastSegmentFromElementsArrayCPU(
+    const gl::Context *context,
     const IndexGenerationParams &params)
 {
     uint32_t first, last;
@@ -1111,8 +920,29 @@ angle::Result IndexGeneratorUtils::generateLineLoopLastSegmentFromElementsArrayC
             return angle::Result::Stop;
     }
 
-    return generateLineLoopLastSegment(contextMtl, first, last, params.dstBuffer, params.dstOffset);
+    return generateLineLoopLastSegment(context, first, last, params.dstBuffer, params.dstOffset);
 }
 
+angle::Result RenderUtils::dispatchCompute(const gl::Context *context,
+                                           ComputeCommandEncoder *cmdEncoder,
+                                           id<MTLComputePipelineState> pipelineState,
+                                           size_t numThreads)
+{
+    NSUInteger w                  = pipelineState.threadExecutionWidth;
+    MTLSize threadsPerThreadgroup = MTLSizeMake(w, 1, 1);
+
+    if (getDisplay()->getFeatures().hasNonUniformDispatch.enabled)
+    {
+        MTLSize threads = MTLSizeMake(numThreads, 1, 1);
+        cmdEncoder->dispatchNonUniform(threads, threadsPerThreadgroup);
+    }
+    else
+    {
+        MTLSize groups = MTLSizeMake((numThreads + w - 1) / w, 1, 1);
+        cmdEncoder->dispatch(groups, threadsPerThreadgroup);
+    }
+
+    return angle::Result::Continue;
+}
 }  // namespace mtl
 }  // namespace rx
