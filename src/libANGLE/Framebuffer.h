@@ -65,7 +65,7 @@ class FramebufferState final : angle::NonCopyable
     FramebufferState(const Caps &caps, FramebufferID id, ContextID owningContextID);
     ~FramebufferState();
 
-    const std::string &getLabel();
+    const std::string &getLabel() const;
     size_t getReadIndex() const;
 
     const FramebufferAttachment *getAttachment(const Context *context, GLenum attachment) const;
@@ -248,6 +248,8 @@ class Framebuffer final : public angle::ObserverInterface,
         return mState.mColorAttachments;
     }
 
+    const FramebufferState &getState() const { return mState; }
+
     const FramebufferAttachment *getAttachment(const Context *context, GLenum attachment) const;
     bool isMultiview() const;
     bool readDisallowedByMultiview() const;
@@ -356,6 +358,8 @@ class Framebuffer final : public angle::ObserverInterface,
                              const Rectangle &area,
                              GLenum format,
                              GLenum type,
+                             const PixelPackState &pack,
+                             Buffer *packBuffer,
                              void *pixels);
 
     angle::Result blit(const Context *context,

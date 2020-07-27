@@ -210,9 +210,9 @@ angle::Result OffscreenSurfaceVk::AttachmentImage::initializeWithExternalMemory(
     image.getImage().getMemoryRequirements(renderer->getDevice(), &externalMemoryRequirements);
 
     VkMemoryPropertyFlags flags = 0;
-    ANGLE_TRY(image.initExternalMemory(displayVk, renderer->getMemoryProperties(),
-                                       externalMemoryRequirements, &importMemoryHostPointerInfo,
-                                       VK_QUEUE_FAMILY_EXTERNAL, flags));
+    ANGLE_TRY(image.initExternalMemory(
+        displayVk, renderer->getMemoryProperties(), externalMemoryRequirements, nullptr,
+        &importMemoryHostPointerInfo, VK_QUEUE_FAMILY_EXTERNAL, flags));
 
     return angle::Result::Continue;
 }
@@ -864,6 +864,7 @@ angle::Result WindowSurfaceVk::createSwapChain(vk::Context *context,
     // We need transfer src for reading back from the backbuffer.
     VkImageUsageFlags imageUsageFlags = kSurfaceVKColorImageUsageFlags;
 
+#if ANGLE_ENABLE_OVERLAY
     // We need storage image for compute writes (debug overlay output).
     VkFormatFeatureFlags featureBits =
         renderer->getImageFormatFeatureBits(nativeFormat, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
@@ -871,6 +872,7 @@ angle::Result WindowSurfaceVk::createSwapChain(vk::Context *context,
     {
         imageUsageFlags |= VK_IMAGE_USAGE_STORAGE_BIT;
     }
+#endif
 
     VkSwapchainCreateInfoKHR swapchainInfo = {};
     swapchainInfo.sType                    = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -1234,6 +1236,11 @@ angle::Result WindowSurfaceVk::present(ContextVk *contextVk,
             rect.extent.width  = gl::clamp(*eglRects++, 0, width - rect.offset.x);
             rect.extent.height = gl::clamp(*eglRects++, 0, height - rect.offset.y);
             rect.layer         = 0;
+            if (Is90DegreeRotation(mPreTransform))
+            {
+                std::swap(rect.offset.x, rect.offset.y);
+                std::swap(rect.extent.width, rect.extent.height);
+            }
         }
         presentRegion.pRectangles = vkRects.data();
 
