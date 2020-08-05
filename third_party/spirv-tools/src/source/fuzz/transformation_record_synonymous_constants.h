@@ -32,12 +32,17 @@ class TransformationRecordSynonymousConstants : public Transformation {
   // - |message_.constant_id| and |message_.synonym_id| are distinct ids
   //   of constants
   // - |message_.constant_id| and |message_.synonym_id| refer to constants
-  //   that are equal or equivalent.
-  //   Two integers with the same width and value are equal, even if one is
-  //   signed and the other is not.
-  //   Constants are equivalent if both of them represent zero-like scalar
-  //   values of the same type (for example OpConstant of type int and value
-  //   0 and OpConstantNull of type int).
+  //   that are equivalent.
+  // Constants are equivalent if at least one of the following holds:
+  // - they are equal (i.e. they have the same type ids and equal values)
+  // - both of them represent zero-like values of compatible types
+  // - they are composite constants with compatible types and their
+  //   components are pairwise equivalent
+  // Two types are compatible if at least one of the following holds:
+  // - they have the same id
+  // - they are integer scalar types with the same width
+  // - they are integer vectors and their components have the same width
+  //   (this is always the case if the components are equivalent)
   bool IsApplicable(
       opt::IRContext* ir_context,
       const TransformationContext& transformation_context) const override;
@@ -51,6 +56,13 @@ class TransformationRecordSynonymousConstants : public Transformation {
 
  private:
   protobufs::TransformationRecordSynonymousConstants message_;
+
+  // Returns true if the two given constants are equivalent
+  // (the description of IsApplicable specifies the conditions they must satisfy
+  // to be considered equivalent)
+  static bool AreEquivalentConstants(opt::IRContext* ir_context,
+                                     uint32_t constant_id1,
+                                     uint32_t constant_id2);
 };
 
 }  // namespace fuzz

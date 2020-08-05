@@ -16,7 +16,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -36,6 +36,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -48,6 +50,7 @@ cc_defaults {
             ],
             cflags: [
                 "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-Wno-max-tokens",
                 "-mpclmul",
             ],
         },
@@ -57,6 +60,7 @@ cc_defaults {
             ],
             cflags: [
                 "-DCRC32_SIMD_SSE42_PCLMUL",
+                "-Wno-max-tokens",
                 "-mpclmul",
             ],
         },
@@ -80,7 +84,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DJSON_USE_EXCEPTION=0",
@@ -102,11 +106,25 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_library_shared {
     generated_headers: [
@@ -142,7 +160,7 @@ cc_library_shared {
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBFEATURE_SUPPORT_IMPLEMENTATION",
@@ -163,6 +181,8 @@ cc_library_shared {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -172,11 +192,13 @@ cc_library_shared {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -209,7 +231,7 @@ cc_defaults {
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DANGLE_USE_EGL_LOADER",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DEGL_EGLEXT_PROTOTYPES",
         "-DEGL_EGL_PROTOTYPES=1",
@@ -232,6 +254,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -241,11 +265,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -275,6 +301,7 @@ cc_library_shared {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -316,7 +343,7 @@ cc_library_shared {
         "-DANGLE_EGL_LIBRARY_NAME=\"libEGL_angle\"",
         "-DANGLE_GLESV2_LIBRARY_NAME=\"libGLESv2_angle\"",
         "-DANGLE_USE_EGL_LOADER",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DEGLAPI=__attribute__((visibility(\"default\")))",
         "-DEGL_EGLEXT_PROTOTYPES",
@@ -341,6 +368,8 @@ cc_library_shared {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -350,11 +379,13 @@ cc_library_shared {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -387,6 +418,7 @@ cc_library_shared {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -423,7 +455,7 @@ cc_library_shared {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DEGL_EGLEXT_PROTOTYPES",
         "-DEGL_EGL_PROTOTYPES=1",
@@ -448,6 +480,8 @@ cc_library_shared {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -457,11 +491,13 @@ cc_library_shared {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -484,9 +520,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-trinary-minmax.grammar.json) --vendor-insts-output $(location spv-amd-shader-trinary-minmax.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-trinary-minmax.grammar.json) --vendor-insts-output $(location spv-amd-shader-trinary-minmax.insts.inc) --vendor-operand-kind-prefix ...nil...",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.spv-amd-shader-trinary-minmax.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-trinary-minmax.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -498,9 +534,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json) --vendor-insts-output $(location spv-amd-shader-explicit-vertex-parameter.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json) --vendor-insts-output $(location spv-amd-shader-explicit-vertex-parameter.insts.inc) --vendor-operand-kind-prefix ...nil...",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-explicit-vertex-parameter.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -512,9 +548,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-shader-ballot.grammar.json) --vendor-insts-output $(location spv-amd-shader-ballot.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-ballot.grammar.json) --vendor-insts-output $(location spv-amd-shader-ballot.insts.inc) --vendor-operand-kind-prefix ...nil...",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.spv-amd-shader-ballot.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-shader-ballot.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -526,9 +562,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.spv-amd-gcn-shader.grammar.json) --vendor-insts-output $(location spv-amd-gcn-shader.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-gcn-shader.grammar.json) --vendor-insts-output $(location spv-amd-gcn-shader.insts.inc) --vendor-operand-kind-prefix ...nil...",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.spv-amd-gcn-shader.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.spv-amd-gcn-shader.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -540,9 +576,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --vendor-insts-output $(location opencl.debuginfo.100.insts.inc) --vendor-operand-kind-prefix CLDEBUG100_",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --vendor-insts-output $(location opencl.debuginfo.100.insts.inc) --vendor-operand-kind-prefix CLDEBUG100_",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -550,13 +586,27 @@ cc_genrule {
     ],
 }
 cc_genrule {
+    name: "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
+    tool_files: [
+        "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
+    ],
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.nonsemantic.clspvreflection.grammar.json) --vendor-insts-output $(location nonsemantic.clspvreflection.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    srcs: [
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.nonsemantic.clspvreflection.grammar.json",
+    ],
+    sdk_version: "28",
+    out: [
+        "nonsemantic.clspvreflection.insts.inc",
+    ],
+}
+cc_genrule {
     name: "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --vendor-insts-output $(location debuginfo.insts.inc) --vendor-operand-kind-prefix ...nil...",
+    cmd: "$(location) --extinst-vendor-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --vendor-insts-output $(location debuginfo.insts.inc) --vendor-operand-kind-prefix ...nil...",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -568,12 +618,12 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-opencl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.opencl.std.100.grammar.json) --opencl-insts-output $(location opencl.std.insts.inc)",
+    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --extinst-opencl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.opencl.std.100.grammar.json) --opencl-insts-output $(location opencl.std.insts.inc)",
     srcs: [
         "third_party/spirv-headers/src/include/spirv/1.0/extinst.opencl.std.100.grammar.json",
         "third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -585,9 +635,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_language_headers.py",
     ],
-    cmd: "$(location) --extinst-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-output-path $(location DebugInfo.h)",
+    cmd: "$(location) --extinst-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --extinst-output-path $(location DebugInfo.h)",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -599,9 +649,9 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_language_headers.py",
     ],
-    cmd: "$(location) --extinst-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-output-path $(location OpenCLDebugInfo100.h)",
+    cmd: "$(location) --extinst-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --extinst-output-path $(location OpenCLDebugInfo100.h)",
     srcs: [
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -613,12 +663,12 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extinst-glsl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.glsl.std.450.grammar.json) --glsl-insts-output $(location glsl.std.450.insts.inc)",
+    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --extinst-glsl-grammar $(location third_party/spirv-headers/src/include/spirv/1.0/extinst.glsl.std.450.grammar.json) --glsl-insts-output $(location glsl.std.450.insts.inc)",
     srcs: [
         "third_party/spirv-headers/src/include/spirv/1.0/extinst.glsl.std.450.grammar.json",
         "third_party/spirv-headers/src/include/spirv/1.0/spirv.core.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -644,11 +694,11 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --core-insts-output $(location core.insts-unified1.inc) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --operand-kinds-output $(location operand.kinds-unified1.inc)",
+    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --core-insts-output $(location core.insts-unified1.inc) --extinst-debuginfo-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --operand-kinds-output $(location operand.kinds-unified1.inc)",
     srcs: [
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
         "third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -661,11 +711,11 @@ cc_genrule {
     tool_files: [
         "third_party/spirv-tools/src/utils/generate_grammar_tables.py",
     ],
-    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json) --extension-enum-output $(location extension_enum.inc) --enum-string-mapping-output $(location enum_string_mapping.inc)",
+    cmd: "$(location) --spirv-core-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json) --extinst-debuginfo-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json) --extinst-cldebuginfo100-grammar $(location third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json) --extension-enum-output $(location extension_enum.inc) --enum-string-mapping-output $(location enum_string_mapping.inc)",
     srcs: [
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.debuginfo.grammar.json",
+        "third_party/spirv-headers/src/include/spirv/unified1/extinst.opencl.debuginfo.100.grammar.json",
         "third_party/spirv-headers/src/include/spirv/unified1/spirv.core.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.debuginfo.grammar.json",
-        "third_party/spirv-tools/src/source/extinst.opencl.debuginfo.100.grammar.json",
     ],
     sdk_version: "28",
     out: [
@@ -683,6 +733,7 @@ cc_library_static {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -727,7 +778,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -747,11 +798,25 @@ cc_library_static {
         "-Wno-missing-field-initializers",
         "-Wno-newline-eof",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
     defaults: [
         "third_party_spirv_headers_src_spv_headers",
         "third_party_spirv_tools_src_spvtools_headers",
@@ -767,6 +832,7 @@ cc_library_static {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -830,7 +896,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -850,23 +916,41 @@ cc_library_static {
         "-Wno-missing-field-initializers",
         "-Wno-newline-eof",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
     defaults: [
         "third_party_spirv_tools_src_spvtools_headers",
     ],
 }
 cc_defaults {
-    stl: "libc++_static",
-    sdk_version: "28",
     name: "third_party_vulkan_memory_allocator_vulkan_memory_allocator",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/vulkan_memory_allocator/src/",
+    ],
+    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -886,6 +970,8 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
         "-Wno-nullability-completeness",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -893,10 +979,18 @@ cc_defaults {
         "-Wno-unused-private-field",
         "-Wno-unused-variable",
     ],
-    local_include_dirs: [
-        "",
-        "third_party/vulkan_memory_allocator/src/",
-    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_defaults {
     name: "src_libANGLE_renderer_vulkan_angle_vk_mem_alloc_wrapper",
@@ -916,7 +1010,7 @@ cc_defaults {
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DANGLE_SHARED_LIBVULKAN=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -939,6 +1033,8 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
         "-Wno-nullability-completeness",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -950,11 +1046,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1004,7 +1102,7 @@ cc_defaults {
         "-DANGLE_SHARED_LIBVULKAN=1",
         "-DANGLE_VK_LAYERS_DIR=\"angledata\"",
         "-DANGLE_VK_MOCK_ICD_JSON=\"angledata/VkICD_mock_icd.json\"",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1024,6 +1122,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1033,11 +1133,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1070,7 +1172,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1090,11 +1192,25 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
     defaults: [
         "third_party_vulkan_headers_src_vulkan_headers",
     ],
@@ -1113,7 +1229,7 @@ cc_defaults {
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
         "-DANGLE_SHARED_LIBVULKAN=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1133,6 +1249,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1142,11 +1260,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1179,49 +1299,17 @@ cc_defaults {
     ],
 }
 cc_defaults {
-    stl: "libc++_static",
-    sdk_version: "28",
     name: "third_party_spirv_tools_src_spvtools_headers",
-    cflags: [
-        "-DANDROID",
-        "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
-        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
-        "-DHAVE_SYS_UIO_H",
-        "-DNDEBUG",
-        "-DNVALGRIND",
-        "-D_FORTIFY_SOURCE=2",
-        "-D_GNU_SOURCE",
-        "-D__STDC_CONSTANT_MACROS",
-        "-D__STDC_FORMAT_MACROS",
-        "-Wno-builtin-assume-aligned-alignment",
-        "-Wno-builtin-macro-redefined",
-        "-Wno-c++11-narrowing",
-        "-Wno-deprecated-copy",
-        "-Wno-final-dtor-non-final-class",
-        "-Wno-ignored-pragma-optimize",
-        "-Wno-implicit-fallthrough",
-        "-Wno-implicit-int-float-conversion",
-        "-Wno-missing-field-initializers",
-        "-Wno-non-c-typedef-for-linkage",
-        "-Wno-undefined-var-template",
-        "-Wno-unknown-warning-option",
-        "-Wno-unneeded-internal-declaration",
-        "-Wno-unused-parameter",
-    ],
+    stl: "libc++_static",
     local_include_dirs: [
         "",
         "third_party/spirv-tools/src/include/",
     ],
-}
-cc_defaults {
-    stl: "libc++_static",
     sdk_version: "28",
-    name: "third_party_spirv_headers_src_spv_headers",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1240,15 +1328,75 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
+}
+cc_defaults {
+    name: "third_party_spirv_headers_src_spv_headers",
+    stl: "libc++_static",
     local_include_dirs: [
         "",
         "third_party/spirv-headers/src/include/",
     ],
+    sdk_version: "28",
+    cflags: [
+        "-DANDROID",
+        "-DANDROID_NDK_VERSION_ROLL=r20_1",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
+        "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DHAVE_SYS_UIO_H",
+        "-DNDEBUG",
+        "-DNVALGRIND",
+        "-D_FORTIFY_SOURCE=2",
+        "-D_GNU_SOURCE",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_FORMAT_MACROS",
+        "-Wno-builtin-assume-aligned-alignment",
+        "-Wno-builtin-macro-redefined",
+        "-Wno-c++11-narrowing",
+        "-Wno-deprecated-copy",
+        "-Wno-final-dtor-non-final-class",
+        "-Wno-ignored-pragma-optimize",
+        "-Wno-implicit-fallthrough",
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-missing-field-initializers",
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
+        "-Wno-undefined-var-template",
+        "-Wno-unknown-warning-option",
+        "-Wno-unneeded-internal-declaration",
+        "-Wno-unused-parameter",
+    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_genrule {
     name: "third_party_glslang_src_glslang_build_info",
@@ -1283,7 +1431,6 @@ cc_defaults {
         "third_party/glslang/src/SPIRV/SPVRemapper.cpp",
         "third_party/glslang/src/SPIRV/SpvBuilder.cpp",
         "third_party/glslang/src/SPIRV/SpvPostProcess.cpp",
-        "third_party/glslang/src/SPIRV/SpvTools.cpp",
         "third_party/glslang/src/SPIRV/disassemble.cpp",
         "third_party/glslang/src/SPIRV/doc.cpp",
         "third_party/glslang/src/glslang/GenericCodeGen/CodeGen.cpp",
@@ -1321,8 +1468,9 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
+        "-DGLSLANG_ANGLE",
         "-DGLSLANG_OSINCLUDE_UNIX",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1343,13 +1491,27 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wno-newline-eof",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
         "-Wno-sign-compare",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_defaults {
     name: "third_party_glslang_src_glslang_default_resource_limits_sources",
@@ -1365,7 +1527,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1382,12 +1544,26 @@ cc_defaults {
         "-Wno-misleading-indentation",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_defaults {
     generated_headers: [
@@ -1419,7 +1595,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
@@ -1439,6 +1615,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1448,11 +1626,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1486,6 +1666,7 @@ cc_defaults {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -1572,7 +1753,7 @@ cc_defaults {
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_SHARED_LIBVULKAN=1",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
@@ -1593,6 +1774,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1602,11 +1785,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1665,7 +1850,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1684,6 +1869,8 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1693,11 +1880,13 @@ cc_library_static {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1854,7 +2043,7 @@ cc_library_static {
         "-DANGLE_ENABLE_ESSL",
         "-DANGLE_ENABLE_GLSL",
         "-DANGLE_ENABLE_VULKAN",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1873,6 +2062,8 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1882,11 +2073,13 @@ cc_library_static {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1916,7 +2109,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -1935,6 +2128,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -1944,11 +2139,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -1995,7 +2192,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
@@ -2015,6 +2212,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2024,11 +2223,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2068,7 +2269,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2087,6 +2288,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2096,11 +2299,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2143,7 +2348,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2162,6 +2367,8 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2171,11 +2378,13 @@ cc_library_static {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2194,13 +2403,17 @@ cc_library_static {
     ],
 }
 cc_defaults {
-    stl: "libc++_static",
-    sdk_version: "28",
     name: "third_party_vulkan_headers_src_vulkan_headers",
+    stl: "libc++_static",
+    local_include_dirs: [
+        "",
+        "third_party/vulkan-headers/src/include/",
+    ],
+    sdk_version: "28",
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2220,15 +2433,25 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
-    local_include_dirs: [
-        "",
-        "third_party/vulkan-headers/src/include/",
-    ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_library_static {
     generated_headers: [
@@ -2262,7 +2485,7 @@ cc_library_static {
         "-DANGLE_ENABLE_OPENGL_NULL",
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2282,6 +2505,8 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2291,11 +2516,13 @@ cc_library_static {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2323,7 +2550,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2343,6 +2570,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2357,6 +2586,7 @@ cc_defaults {
             cflags: [
                 "-DCRC32_SIMD_SSE42_PCLMUL",
                 "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-Wno-max-tokens",
                 "-mpclmul",
             ],
         },
@@ -2368,6 +2598,7 @@ cc_defaults {
             cflags: [
                 "-DCRC32_SIMD_SSE42_PCLMUL",
                 "-DDEFLATE_FILL_WINDOW_SSE2",
+                "-Wno-max-tokens",
                 "-mpclmul",
             ],
         },
@@ -2388,7 +2619,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2406,6 +2637,8 @@ cc_defaults {
         "-Wno-misleading-indentation",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2417,11 +2650,13 @@ cc_defaults {
             cflags: [
                 "-DINFLATE_CHUNK_READ_64LE",
                 "-DINFLATE_CHUNK_SIMD_SSE2",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DINFLATE_CHUNK_SIMD_SSE2",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2454,7 +2689,7 @@ cc_defaults {
                 "-DANDROID_NDK_VERSION_ROLL=r20_1",
                 "-DARMV8_OS_ANDROID",
                 "-DCRC32_ARMV8_CRC32",
-                "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+                "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
                 "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
                 "-DHAVE_SYS_UIO_H",
                 "-DNDEBUG",
@@ -2474,6 +2709,8 @@ cc_defaults {
                 "-Wno-implicit-int-float-conversion",
                 "-Wno-missing-field-initializers",
                 "-Wno-non-c-typedef-for-linkage",
+                "-Wno-psabi",
+                "-Wno-trigraphs",
                 "-Wno-undefined-var-template",
                 "-Wno-unknown-warning-option",
                 "-Wno-unneeded-internal-declaration",
@@ -2493,7 +2730,7 @@ cc_defaults {
                 "-DANDROID_NDK_VERSION_ROLL=r20_1",
                 "-DARMV8_OS_ANDROID",
                 "-DCRC32_ARMV8_CRC32",
-                "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+                "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
                 "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
                 "-DHAVE_SYS_UIO_H",
                 "-DNDEBUG",
@@ -2513,6 +2750,8 @@ cc_defaults {
                 "-Wno-implicit-int-float-conversion",
                 "-Wno-missing-field-initializers",
                 "-Wno-non-c-typedef-for-linkage",
+                "-Wno-psabi",
+                "-Wno-trigraphs",
                 "-Wno-undefined-var-template",
                 "-Wno-unknown-warning-option",
                 "-Wno-unneeded-internal-declaration",
@@ -2535,7 +2774,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2555,6 +2794,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2565,12 +2806,14 @@ cc_defaults {
             cflags: [
                 "-DADLER32_SIMD_SSSE3",
                 "-DX86_NOT_WINDOWS",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DADLER32_SIMD_SSSE3",
                 "-DX86_NOT_WINDOWS",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2599,7 +2842,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2616,6 +2859,8 @@ cc_defaults {
         "-Wno-misleading-indentation",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2623,6 +2868,18 @@ cc_defaults {
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_library_static {
     name: "chrome_zlib",
@@ -2653,7 +2910,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2671,6 +2928,8 @@ cc_library_static {
         "-Wno-misleading-indentation",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2687,6 +2946,7 @@ cc_library_static {
                 "-DINFLATE_CHUNK_SIMD_SSE2",
                 "-DX86_NOT_WINDOWS",
                 "-Wno-incompatible-pointer-types",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
@@ -2697,6 +2957,7 @@ cc_library_static {
                 "-DINFLATE_CHUNK_SIMD_SSE2",
                 "-DX86_NOT_WINDOWS",
                 "-Wno-incompatible-pointer-types",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2743,7 +3004,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2762,11 +3023,25 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
         "-Wno-unused-parameter",
     ],
+    arch: {
+        x86_64: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+        x86: {
+            cflags: [
+                "-Wno-max-tokens",
+            ],
+        },
+    },
 }
 cc_defaults {
     stl: "libc++_static",
@@ -2794,7 +3069,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2813,6 +3088,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2822,11 +3099,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2857,7 +3136,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2876,6 +3155,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2885,11 +3166,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -2944,7 +3227,7 @@ cc_library_static {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -2963,6 +3246,8 @@ cc_library_static {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -2972,11 +3257,13 @@ cc_library_static {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -3009,6 +3296,7 @@ cc_defaults {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -3195,7 +3483,7 @@ cc_defaults {
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_SHARED_LIBVULKAN=1",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
@@ -3216,6 +3504,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -3225,11 +3515,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -3263,6 +3555,7 @@ cc_defaults {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -3308,7 +3601,7 @@ cc_defaults {
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_SHARED_LIBVULKAN=1",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DLIBANGLE_IMPLEMENTATION",
@@ -3329,6 +3622,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -3338,11 +3633,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -3371,7 +3668,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -3390,6 +3687,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -3399,11 +3698,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -3424,9 +3725,6 @@ cc_genrule {
         "src/commit_id.py",
     ],
     cmd: "$(location) gen $(location commit.h)",
-    srcs: [
-        ".git/HEAD",
-    ],
     sdk_version: "28",
     out: [
         "commit.h",
@@ -3447,7 +3745,7 @@ cc_defaults {
     cflags: [
         "-DANDROID",
         "-DANDROID_NDK_VERSION_ROLL=r20_1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DHAVE_SYS_UIO_H",
         "-DNDEBUG",
@@ -3466,6 +3764,8 @@ cc_defaults {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -3475,11 +3775,13 @@ cc_defaults {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {
@@ -3506,6 +3808,7 @@ cc_library_shared {
         "third_party_spirv_tools_src_spvtools_language_header_debuginfo",
         "third_party_spirv_tools_src_spvtools_opencl_tables_opencl1-0",
         "third_party_spirv_tools_src_spvtools_vendor_tables_debuginfo",
+        "third_party_spirv_tools_src_spvtools_vendor_tables_nonsemantic.clspvreflection",
         "third_party_spirv_tools_src_spvtools_vendor_tables_opencl.debuginfo.100",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-gcn-shader",
         "third_party_spirv_tools_src_spvtools_vendor_tables_spv-amd-shader-ballot",
@@ -3563,7 +3866,7 @@ cc_library_shared {
         "-DANGLE_ENABLE_VULKAN",
         "-DANGLE_SHARED_LIBVULKAN=1",
         "-DANGLE_USE_CUSTOM_VULKAN_CMD_BUFFERS=1",
-        "-DCR_CLANG_REVISION=\"n346557-4e0d9925-2\"",
+        "-DCR_CLANG_REVISION=\"n362116-1bd7046e-2\"",
         "-DDYNAMIC_ANNOTATIONS_ENABLED=0",
         "-DEGL_EGLEXT_PROTOTYPES",
         "-DEGL_EGL_PROTOTYPES=1",
@@ -3591,6 +3894,8 @@ cc_library_shared {
         "-Wno-implicit-int-float-conversion",
         "-Wno-missing-field-initializers",
         "-Wno-non-c-typedef-for-linkage",
+        "-Wno-psabi",
+        "-Wno-trigraphs",
         "-Wno-undefined-var-template",
         "-Wno-unknown-warning-option",
         "-Wno-unneeded-internal-declaration",
@@ -3600,11 +3905,13 @@ cc_library_shared {
         x86_64: {
             cflags: [
                 "-DANGLE_IS_64_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         x86: {
             cflags: [
                 "-DANGLE_IS_32_BIT_CPU",
+                "-Wno-max-tokens",
             ],
         },
         arm: {

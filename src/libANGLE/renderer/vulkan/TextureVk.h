@@ -182,7 +182,7 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
                                       const gl::ImageUnit &binding,
                                       const vk::ImageView **imageViewOut);
 
-    const vk::Sampler &getSampler() const
+    const vk::SamplerHelper &getSampler() const
     {
         ASSERT(mSampler.valid());
         return mSampler.get();
@@ -191,7 +191,7 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     // Normally, initialize the image with enabled mipmap level counts.
     angle::Result ensureImageInitialized(ContextVk *contextVk, ImageMipLevels mipLevels);
 
-    TextureSerial getSerial() const { return mSerial; }
+    vk::ImageViewSubresourceSerial getImageViewSubresourceSerial() const;
 
     void overrideStagingBufferSizeForTesting(size_t initialSizeForTesting)
     {
@@ -277,6 +277,13 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
                                         uint32_t imageHeight,
                                         const gl::Box &sourceArea,
                                         size_t offset);
+
+    // Called from syncState to prepare the image for mipmap generation.
+    void prepareForGenerateMipmap(ContextVk *contextVk);
+
+    // Generate mipmaps from level 0 into the rest of the mips.  This requires the image to have
+    // STORAGE usage.
+    angle::Result generateMipmapsWithCompute(ContextVk *contextVk);
 
     angle::Result generateMipmapsWithCPU(const gl::Context *context);
 
@@ -413,16 +420,18 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     // reallocated independently of |mImage| on state changes.
     vk::ImageViewHelper mImageViews;
 
+    // If multisampled rendering to texture, an intermediate multisampled image is created for use
+    // as renderpass color or depth/stencil attachment.
+    vk::ImageHelper mMultisampledImage;
+    vk::ImageViewHelper mMultisampledImageViews;
+
     // |mSampler| contains the relevant Vulkan sampler states representing the OpenGL Texture
     // sampling states for the Texture.
-    vk::BindingPointer<vk::Sampler> mSampler;
+    vk::SamplerBinding mSampler;
 
     // Render targets stored as vector of vectors
     // Level is first dimension, layer is second
     std::vector<RenderTargetVector> mRenderTargets;
-
-    // The unique object id is used for cache indexing.
-    TextureSerial mSerial;
 
     // Overridden in some tests.
     size_t mStagingBufferInitialSize;

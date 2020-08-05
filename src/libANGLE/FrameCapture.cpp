@@ -55,7 +55,11 @@ constexpr char kCaptureLabel[]                 = "ANGLE_CAPTURE_LABEL";
 constexpr char kCompression[]                  = "ANGLE_CAPTURE_COMPRESSION";
 constexpr char kSerializeStateEnabledVarName[] = "ANGLE_CAPTURE_SERIALIZE_STATE";
 
-constexpr size_t kBinaryAlignment = 16;
+constexpr size_t kBinaryAlignment   = 16;
+constexpr size_t kFunctionSizeLimit = 50000;
+
+// Limit based on MSVC Compiler Error C2026
+constexpr size_t kStringLengthLimit = 16380;
 
 #if defined(ANGLE_PLATFORM_ANDROID)
 
@@ -354,7 +358,15 @@ void WriteStringPointerParamReplay(DataCounters *counters,
         // null terminate C style string
         ASSERT(data.size() > 0 && data.back() == '\0');
         std::string str(data.begin(), data.end() - 1);
-        header << "    R\"(" << str << ")\",\n";
+
+        // Break up long strings for MSVC
+        for (size_t i = 0; i < str.length(); i += kStringLengthLimit)
+        {
+            size_t copyLength = ((str.length() - i) >= kStringLengthLimit) ? kStringLengthLimit
+                                                                           : (str.length() - i);
+            header << "    R\"(" << str.substr(i, copyLength) << ")\"\n";
+        }
+        header << ",";
     }
 
     header << " };\n";
@@ -855,6 +867,7 @@ void WriteCppReplay(bool compression,
     std::stringstream header;
 
     header << "#include \"" << FmtCapturePrefix(context->id(), captureLabel) << ".h\"\n";
+    header << "#include \"angle_trace_gl.h\"\n";
     header << "";
     header << "\n";
     header << "namespace\n";
@@ -868,22 +881,65 @@ void WriteCppReplay(bool compression,
 
     if (frameIndex == frameStart)
     {
-        out << "void SetupContext" << Str(static_cast<int>(context->id())) << "Replay()\n";
-        out << "{\n";
-
         std::stringstream setupCallStream;
+        std::stringstream setupCallStreamParts;
+
+        setupCallStream << "void SetupContext" << Str(static_cast<int>(context->id()))
+                        << "Replay()\n";
+        setupCallStream << "{\n";
 
         WriteLoadBinaryDataCall(compression, setupCallStream, context->id(), captureLabel);
 
+        int callCount = 0;
+        int partCount = 0;
+
+        // Setup can get quite large. If over a certain size, break up the function to avoid
+        // overflowing the stack
+        if (setupCalls.size() > kFunctionSizeLimit)
+        {
+            setupCallStreamParts << "void SetupContext" << Str(static_cast<int>(context->id()))
+                                 << "ReplayPart" << ++partCount << "()\n";
+            setupCallStreamParts << "{\n";
+        }
+
         for (const CallCapture &call : setupCalls)
         {
-            setupCallStream << "    ";
-            WriteCppReplayForCall(call, &counters, setupCallStream, header, binaryData);
-            setupCallStream << ";\n";
+            setupCallStreamParts << "    ";
+            WriteCppReplayForCall(call, &counters, setupCallStreamParts, header, binaryData);
+            setupCallStreamParts << ";\n";
+
+            if (partCount > 0 && ++callCount % kFunctionSizeLimit == 0)
+            {
+                setupCallStreamParts << "}\n";
+                setupCallStreamParts << "\n";
+                setupCallStreamParts << "void SetupContext" << Str(static_cast<int>(context->id()))
+                                     << "ReplayPart" << ++partCount << "()\n";
+                setupCallStreamParts << "{\n";
+            }
+        }
+
+        if (partCount > 0)
+        {
+            setupCallStreamParts << "}\n";
+            setupCallStreamParts << "\n";
+
+            // Write out the parts
+            out << setupCallStreamParts.str();
+
+            // Write out the calls to the parts
+            for (int i = 1; i <= partCount; i++)
+            {
+                setupCallStream << "    SetupContext" << Str(static_cast<int>(context->id()))
+                                << "ReplayPart" << i << "();\n";
+            }
+        }
+        else
+        {
+            // If we didn't chunk it up, write all the calls directly to SetupContext
+            setupCallStream << setupCallStreamParts.str();
         }
 
         out << setupCallStream.str();
-
         out << "}\n";
         out << "\n";
     }
@@ -992,7 +1048,8 @@ void WriteCppReplayIndexFiles(bool compression,
 
     header << "#pragma once\n";
     header << "\n";
-    header << "#include \"util/util_gl.h\"\n";
+    header << "#include <EGL/egl.h>\n";
+    header << "#include \"angle_gl.h\"\n";
     header << "\n";
     header << "#include <cstdint>\n";
     header << "#include <cstdio>\n";
@@ -1019,19 +1076,36 @@ void WriteCppReplayIndexFiles(bool compression,
     header << "void UpdateCurrentProgram(GLuint program);\n";
     header << "\n";
     header << "// Maps from captured Resource ID to run-time Resource ID.\n";
-    header << "using ResourceMap = std::unordered_map<GLuint, GLuint>;\n";
-    header << "\n";
+    header << "class ResourceMap\n\n";
+    header << "{\n";
+    header << "  public:\n";
+    header << "    ResourceMap() {}\n";
+    header << "    GLuint &operator[](GLuint index)\n";
+    header << "    {\n";
+    header << "        if (mIDs.size() <= static_cast<size_t>(index))\n";
+    header << "            mIDs.resize(index + 1, 0);\n";
+    header << "        return mIDs[index];\n";
+    header << "    }\n";
+    header << "  private:\n";
+    header << "    std::vector<GLuint> mIDs;\n";
+    header << "};\n";
     header << "\n";
     header << "constexpr uint32_t kReplayFrameStart = " << frameStart << ";\n";
     header << "constexpr uint32_t kReplayFrameEnd = " << frameEnd << ";\n";
     header << "constexpr EGLint kReplayDrawSurfaceWidth = " << drawSurfaceWidth << ";\n";
     header << "constexpr EGLint kReplayDrawSurfaceHeight = " << drawSurfaceHeight << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferRedBits = " << config->redSize << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferGreenBits = " << config->greenSize << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferBlueBits = " << config->blueSize << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferAlphaBits = " << config->alphaSize << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferDepthBits = " << config->depthSize << ";\n";
-    header << "constexpr EGLint kDefaultFramebufferStencilBits = " << config->stencilSize << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferRedBits = "
+           << (config ? std::to_string(config->redSize) : "EGL_DONT_CARE") << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferGreenBits = "
+           << (config ? std::to_string(config->greenSize) : "EGL_DONT_CARE") << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferBlueBits = "
+           << (config ? std::to_string(config->blueSize) : "EGL_DONT_CARE") << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferAlphaBits = "
+           << (config ? std::to_string(config->alphaSize) : "EGL_DONT_CARE") << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferDepthBits = "
+           << (config ? std::to_string(config->depthSize) : "EGL_DONT_CARE") << ";\n";
+    header << "constexpr EGLint kDefaultFramebufferStencilBits = "
+           << (config ? std::to_string(config->stencilSize) : "EGL_DONT_CARE") << ";\n";
     header << "\n";
     header << "void SetupContext" << static_cast<int>(contextId) << "Replay();\n";
     header << "void ReplayContext" << static_cast<int>(contextId)
@@ -1042,12 +1116,6 @@ void WriteCppReplayIndexFiles(bool compression,
         header << "std::vector<uint8_t> GetSerializedContext" << static_cast<int>(contextId)
                << "StateData(uint32_t frameIndex);\n";
     }
-    header << "\n";
-    header << "using FramebufferChangeCallback = void(*)(void *userData, GLenum target, GLuint "
-              "framebuffer);\n";
-    header << "void SetFramebufferChangeCallback(void *userData, FramebufferChangeCallback "
-              "callback);\n";
-    header << "void OnFramebufferChange(GLenum target, GLuint framebuffer);\n";
     header << "\n";
     for (uint32_t frameIndex = frameStart; frameIndex <= frameEnd; ++frameIndex)
     {
@@ -1077,6 +1145,7 @@ void WriteCppReplayIndexFiles(bool compression,
     header << "extern uint8_t *gBinaryData;\n";
 
     source << "#include \"" << FmtCapturePrefix(contextId, captureLabel) << ".h\"\n";
+    source << "#include \"angle_trace_gl.h\"\n";
     source << "\n";
 
     if (!captureLabel.empty())
@@ -1102,8 +1171,6 @@ void WriteCppReplayIndexFiles(bool compression,
     source << "\n";
     source << "DecompressCallback gDecompressCallback;\n";
     source << "const char *gBinaryDataDir = \".\";\n";
-    source << "FramebufferChangeCallback gFramebufferChangeCallback;\n";
-    source << "void *gFramebufferChangeCallbackUserData;\n";
     source << "}  // namespace\n";
     source << "\n";
     source << "LocationsMap gUniformLocations;\n";
@@ -1150,21 +1217,6 @@ void WriteCppReplayIndexFiles(bool compression,
     source << "SyncResourceMap gSyncMap;\n";
 
     header << "\n";
-
-    source << "\n";
-    source << "void SetFramebufferChangeCallback(void *userData, FramebufferChangeCallback "
-              "callback)\n";
-    source << "{\n";
-    source << "    gFramebufferChangeCallbackUserData = userData;\n";
-    source << "    gFramebufferChangeCallback = callback;\n";
-    source << "}\n";
-    source << "\n";
-    source << "void OnFramebufferChange(GLenum target, GLuint framebuffer)\n";
-    source << "{\n";
-    source << "    if (gFramebufferChangeCallback)\n";
-    source << "        gFramebufferChangeCallback(gFramebufferChangeCallbackUserData, target, "
-              "framebuffer);\n";
-    source << "}\n";
 
     source << "\n";
     source << "void ReplayContext" << static_cast<int>(contextId) << "Frame(uint32_t frameIndex)\n";
@@ -1394,30 +1446,43 @@ void CaptureUpdateUniformLocations(const gl::Program *program, std::vector<CallC
     for (GLint location = 0; location < static_cast<GLint>(locations.size()); ++location)
     {
         const gl::VariableLocation &locationVar = locations[location];
-        const gl::LinkedUniform &uniform        = uniforms[locationVar.index];
 
+        // This handles the case where the application calls glBindUniformLocationCHROMIUM
+        // on an unused uniform. We must still store a -1 into gUniformLocations in case the
+        // application attempts to call a glUniform* call. To do this we'll pass in a blank name to
+        // force glGetUniformLocation to return -1.
+        std::string name;
         ParamBuffer params;
         params.addValueParam("program", ParamType::TShaderProgramID, program->id());
 
-        std::string name = uniform.name;
-
-        if (uniform.isArray())
+        if (locationVar.index >= uniforms.size())
         {
-            if (locationVar.arrayIndex > 0)
-            {
-                // Non-sequential array uniform locations are not currently handled.
-                // In practice array locations shouldn't ever be non-sequential.
-                ASSERT(uniform.location == -1 ||
-                       location == uniform.location + static_cast<int>(locationVar.arrayIndex));
-                continue;
-            }
+            name = "";
+        }
+        else
+        {
+            const gl::LinkedUniform &uniform = uniforms[locationVar.index];
 
-            if (uniform.isArrayOfArrays())
-            {
-                UNIMPLEMENTED();
-            }
+            name = uniform.name;
 
-            name = gl::StripLastArrayIndex(name);
+            if (uniform.isArray())
+            {
+                if (locationVar.arrayIndex > 0)
+                {
+                    // Non-sequential array uniform locations are not currently handled.
+                    // In practice array locations shouldn't ever be non-sequential.
+                    ASSERT(uniform.location == -1 ||
+                           location == uniform.location + static_cast<int>(locationVar.arrayIndex));
+                    continue;
+                }
+
+                if (uniform.isArrayOfArrays())
+                {
+                    UNIMPLEMENTED();
+                }
+
+                name = gl::StripLastArrayIndex(name);
+            }
         }
 
         ParamCapture nameParam("name", ParamType::TGLcharConstPointer);
@@ -1434,16 +1499,6 @@ void CaptureDeleteUniformLocations(gl::ShaderProgramID program, std::vector<Call
     ParamBuffer params;
     params.addValueParam("program", ParamType::TShaderProgramID, program);
     callsOut->emplace_back("DeleteUniformLocations", std::move(params));
-}
-
-void CaptureOnFramebufferChange(GLenum target,
-                                gl::FramebufferID framebufferID,
-                                std::vector<CallCapture> *callsOut)
-{
-    ParamBuffer params;
-    params.addValueParam("target", ParamType::TGLenum, target);
-    params.addValueParam("framebuffer", ParamType::TFramebufferID, framebufferID);
-    callsOut->emplace_back("OnFramebufferChange", std::move(params));
 }
 
 void MaybeCaptureUpdateResourceIDs(std::vector<CallCapture> *callsOut)
@@ -2061,7 +2116,7 @@ void CaptureMidExecutionSetup(const gl::Context *context,
                               FrameCapture *frameCapture)
 {
     const gl::State &apiState = context->getState();
-    gl::State replayState(nullptr, nullptr, nullptr, nullptr, EGL_OPENGL_ES_API,
+    gl::State replayState(nullptr, nullptr, nullptr, nullptr, nullptr, EGL_OPENGL_ES_API,
                           apiState.getClientVersion(), false, true, true, true, false,
                           EGL_CONTEXT_PRIORITY_MEDIUM_IMG);
 
@@ -3888,15 +3943,6 @@ void FrameCapture::maybeCapturePostCallUpdates(const gl::Context *context)
             CaptureDeleteUniformLocations(param.value.ShaderProgramIDVal, &mFrameCalls);
             break;
         }
-        case gl::EntryPoint::BindFramebuffer:
-        {
-            const ParamCapture &target = lastCall.params.getParam("target", ParamType::TGLenum, 0);
-            const ParamCapture &framebuffer =
-                lastCall.params.getParam("framebufferPacked", ParamType::TFramebufferID, 1);
-            CaptureOnFramebufferChange(target.value.GLenumVal, framebuffer.value.FramebufferIDVal,
-                                       &mFrameCalls);
-            break;
-        }
         default:
             break;
     }
@@ -4265,19 +4311,43 @@ gl::Program *GetProgramForCapture(const gl::State &glState, gl::ShaderProgramID 
     return program;
 }
 
+void CaptureGetActiveUniformBlockivParameters(const gl::State &glState,
+                                              gl::ShaderProgramID handle,
+                                              GLuint uniformBlockIndex,
+                                              GLenum pname,
+                                              ParamCapture *paramCapture)
+{
+    int numParams = 1;
+
+    // From the OpenGL ES 3.0 spec:
+    // If pname is UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES, then a list of the
+    // active uniform indices for the uniform block identified by uniformBlockIndex is
+    // returned. The number of elements that will be written to params is the value of
+    // UNIFORM_BLOCK_ACTIVE_UNIFORMS for uniformBlockIndex
+    if (pname == GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES)
+    {
+        gl::Program *program = GetProgramForCapture(glState, handle);
+        if (program)
+        {
+            gl::QueryActiveUniformBlockiv(program, uniformBlockIndex,
+                                          GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &numParams);
+        }
+    }
+
+    paramCapture->readBufferSizeBytes = sizeof(GLint) * numParams;
+}
+
 void CaptureGetParameter(const gl::State &glState,
                          GLenum pname,
                          size_t typeSize,
                          ParamCapture *paramCapture)
 {
-    GLenum nativeType;
-    unsigned int numParams;
-    if (!gl::GetQueryParameterInfo(glState, pname, &nativeType, &numParams))
-    {
-        numParams = 1;
-    }
-
-    paramCapture->readBufferSizeBytes = typeSize * numParams;
+    // kMaxReportedCapabilities is the biggest array we'll need to hold data from glGet calls.
+    // This value needs to be updated if any new extensions are introduced that would allow for
+    // more compressed texture formats. The current value is taken from:
+    // http://opengles.gpuinfo.org/displaycapability.php?name=GL_NUM_COMPRESSED_TEXTURE_FORMATS&esversion=2
+    constexpr unsigned int kMaxReportedCapabilities = 69;
+    paramCapture->readBufferSizeBytes               = typeSize * kMaxReportedCapabilities;
 }
 
 void CaptureGenHandlesImpl(GLsizei n, GLuint *handles, ParamCapture *paramCapture)

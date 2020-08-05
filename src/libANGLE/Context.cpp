@@ -259,12 +259,24 @@ enum SubjectIndexes : angle::SubjectIndex
     kDrawFramebufferSubjectIndex,
     kProgramPipelineSubjectIndex
 };
+
+bool IsClearBufferEnabled(const FramebufferState &mState, GLenum buffer, GLint drawbuffer)
+{
+    return buffer != GL_COLOR || mState.getEnabledDrawBuffers()[drawbuffer];
+}
+
+bool IsColorMaskedOut(const BlendState &blend)
+{
+    return (!blend.colorMaskRed && !blend.colorMaskGreen && !blend.colorMaskBlue &&
+            !blend.colorMaskAlpha);
+}
 }  // anonymous namespace
 
 Context::Context(egl::Display *display,
                  const egl::Config *config,
                  const Context *shareContext,
                  TextureManager *shareTextures,
+                 SemaphoreManager *shareSemaphores,
                  MemoryProgramCache *memoryProgramCache,
                  const EGLenum clientType,
                  const egl::AttributeMap &attribs,
@@ -273,6 +285,7 @@ Context::Context(egl::Display *display,
     : mState(shareContext ? &shareContext->mState : nullptr,
              AllocateOrGetShareGroup(display, shareContext),
              shareTextures,
+             shareSemaphores,
              &mOverlay,
              clientType,
              GetClientVersion(display, attribs),
@@ -285,6 +298,7 @@ Context::Context(egl::Display *display,
       mShared(shareContext != nullptr),
       mSkipValidation(GetNoError(attribs)),
       mDisplayTextureShareGroup(shareTextures != nullptr),
+      mDisplaySemaphoreShareGroup(shareSemaphores != nullptr),
       mErrors(this),
       mImplementation(display->getImplementation()
                           ->createContext(mState, &mErrors, config, shareContext, attribs)),
@@ -2042,12 +2056,12 @@ void Context::getRenderbufferParameterivRobust(GLenum target,
     getRenderbufferParameteriv(target, pname, params);
 }
 
-void Context::texBuffer(GLenum target, GLenum internalformat, BufferID buffer)
+void Context::texBuffer(TextureType target, GLenum internalformat, BufferID buffer)
 {
     UNIMPLEMENTED();
 }
 
-void Context::texBufferRange(GLenum target,
+void Context::texBufferRange(TextureType target,
                              GLenum internalformat,
                              BufferID buffer,
                              GLintptr offset,
@@ -2234,7 +2248,7 @@ void Context::drawArraysInstanced(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(
         mImplementation->drawArraysInstanced(this, mode, first, count, instanceCount));
     MarkTransformFeedbackBufferUsage(this, count, instanceCount);
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawElementsInstanced(PrimitiveMode mode,
@@ -2252,7 +2266,7 @@ void Context::drawElementsInstanced(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(
         mImplementation->drawElementsInstanced(this, mode, count, type, indices, instances));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawElementsBaseVertex(PrimitiveMode mode,
@@ -2270,7 +2284,7 @@ void Context::drawElementsBaseVertex(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(
         mImplementation->drawElementsBaseVertex(this, mode, count, type, indices, basevertex));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawElementsInstancedBaseVertex(PrimitiveMode mode,
@@ -2289,7 +2303,7 @@ void Context::drawElementsInstancedBaseVertex(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawElementsInstancedBaseVertex(
         this, mode, count, type, indices, instancecount, basevertex));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawRangeElements(PrimitiveMode mode,
@@ -2308,7 +2322,7 @@ void Context::drawRangeElements(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(
         mImplementation->drawRangeElements(this, mode, start, end, count, type, indices));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawRangeElementsBaseVertex(PrimitiveMode mode,
@@ -2328,21 +2342,21 @@ void Context::drawRangeElementsBaseVertex(PrimitiveMode mode,
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawRangeElementsBaseVertex(this, mode, start, end, count,
                                                                    type, indices, basevertex));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawArraysIndirect(PrimitiveMode mode, const void *indirect)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawArraysIndirect(this, mode, indirect));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::drawElementsIndirect(PrimitiveMode mode, DrawElementsType type, const void *indirect)
 {
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawElementsIndirect(this, mode, type, indirect));
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::flush()
@@ -3650,6 +3664,30 @@ void Context::blitFramebuffer(GLint srcX0,
     Framebuffer *drawFramebuffer = mState.getDrawFramebuffer();
     ASSERT(drawFramebuffer);
 
+    // Note that blitting is called against draw framebuffer.
+    // See the code in gl::Context::blitFramebuffer.
+    if ((mask & GL_COLOR_BUFFER_BIT) && !drawFramebuffer->hasEnabledDrawBuffer())
+    {
+        mask &= ~GL_COLOR_BUFFER_BIT;
+    }
+
+    if ((mask & GL_STENCIL_BUFFER_BIT) &&
+        drawFramebuffer->getState().getStencilAttachment() == nullptr)
+    {
+        mask &= ~GL_STENCIL_BUFFER_BIT;
+    }
+
+    if ((mask & GL_DEPTH_BUFFER_BIT) && drawFramebuffer->getState().getDepthAttachment() == nullptr)
+    {
+        mask &= ~GL_DEPTH_BUFFER_BIT;
+    }
+
+    // Early out if none of the specified attachments exist or are enabled.
+    if (mask == 0)
+    {
+        return;
+    }
+
     Rectangle srcArea(srcX0, srcY0, srcX1 - srcX0, srcY1 - srcY0);
     Rectangle dstArea(dstX0, dstY0, dstX1 - dstX0, dstY1 - dstY0);
 
@@ -3665,12 +3703,76 @@ void Context::blitFramebuffer(GLint srcX0,
 
 void Context::clear(GLbitfield mask)
 {
+    if (mState.isRasterizerDiscardEnabled())
+    {
+        return;
+    }
+
+    // Remove clear bits that are ineffective. An effective clear changes at least one fragment. If
+    // color/depth/stencil masks make the clear ineffective we skip it altogether.
+
+    // If all color channels in all draw buffers are masked, don't attempt to clear color.
+    if (mState.allActiveDrawBufferChannelsMasked())
+    {
+        mask &= ~GL_COLOR_BUFFER_BIT;
+    }
+
+    // If depth write is disabled, don't attempt to clear depth.
+    if (!mState.getDepthStencilState().depthMask)
+    {
+        mask &= ~GL_DEPTH_BUFFER_BIT;
+    }
+
+    // If all stencil bits are masked, don't attempt to clear stencil.
+    if (mState.getDepthStencilState().stencilWritemask == 0)
+    {
+        mask &= ~GL_STENCIL_BUFFER_BIT;
+    }
+
+    if (mask == 0)
+    {
+        return;
+    }
+
     ANGLE_CONTEXT_TRY(prepareForClear(mask));
     ANGLE_CONTEXT_TRY(mState.getDrawFramebuffer()->clear(this, mask));
 }
 
+bool Context::isClearBufferMaskedOut(GLenum buffer, GLint drawbuffer) const
+{
+    switch (buffer)
+    {
+        case GL_COLOR:
+            ASSERT(static_cast<size_t>(drawbuffer) < mState.getBlendStateArray().size());
+            return IsColorMaskedOut(mState.getBlendStateArray()[drawbuffer]);
+        case GL_DEPTH:
+            return mState.getDepthStencilState().isDepthMaskedOut();
+        case GL_STENCIL:
+            return mState.getDepthStencilState().isStencilMaskedOut();
+        case GL_DEPTH_STENCIL:
+            return mState.getDepthStencilState().isDepthMaskedOut() &&
+                   mState.getDepthStencilState().isStencilMaskedOut();
+        default:
+            UNREACHABLE();
+            return true;
+    }
+}
+
+bool Context::noopClearBuffer(GLenum buffer, GLint drawbuffer) const
+{
+    Framebuffer *framebufferObject = mState.getDrawFramebuffer();
+
+    return !IsClearBufferEnabled(framebufferObject->getState(), buffer, drawbuffer) ||
+           mState.isRasterizerDiscardEnabled() || isClearBufferMaskedOut(buffer, drawbuffer);
+}
+
 void Context::clearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *values)
 {
+    if (noopClearBuffer(buffer, drawbuffer))
+    {
+        return;
+    }
+
     Framebuffer *framebufferObject          = mState.getDrawFramebuffer();
     const FramebufferAttachment *attachment = nullptr;
     if (buffer == GL_DEPTH)
@@ -3694,6 +3796,11 @@ void Context::clearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *valu
 
 void Context::clearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *values)
 {
+    if (noopClearBuffer(buffer, drawbuffer))
+    {
+        return;
+    }
+
     Framebuffer *framebufferObject          = mState.getDrawFramebuffer();
     const FramebufferAttachment *attachment = nullptr;
     if (buffer == GL_COLOR &&
@@ -3713,6 +3820,11 @@ void Context::clearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *valu
 
 void Context::clearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *values)
 {
+    if (noopClearBuffer(buffer, drawbuffer))
+    {
+        return;
+    }
+
     Framebuffer *framebufferObject          = mState.getDrawFramebuffer();
     const FramebufferAttachment *attachment = nullptr;
     if (buffer == GL_STENCIL)
@@ -3736,6 +3848,11 @@ void Context::clearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *values
 
 void Context::clearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)
 {
+    if (noopClearBuffer(buffer, drawbuffer))
+    {
+        return;
+    }
+
     Framebuffer *framebufferObject = mState.getDrawFramebuffer();
     ASSERT(framebufferObject);
 
@@ -5460,20 +5577,18 @@ void Context::renderbufferStorageMultisample(GLenum target,
 
 void Context::framebufferTexture2DMultisample(GLenum target,
                                               GLenum attachment,
-                                              GLenum textarget,
-                                              GLuint texture,
+                                              TextureTarget textarget,
+                                              TextureID texture,
                                               GLint level,
                                               GLsizei samples)
 {
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (texture != 0)
+    if (texture.value != 0)
     {
-        TextureTarget textargetPacked = FromGLenum<TextureTarget>(textarget);
-        TextureID texturePacked       = FromGL<TextureID>(texture);
-        Texture *textureObj           = getTexture(texturePacked);
-        ImageIndex index              = ImageIndex::MakeFromTarget(textargetPacked, level, 1);
+        Texture *textureObj = getTexture(texture);
+        ImageIndex index    = ImageIndex::MakeFromTarget(textarget, level, 1);
         framebuffer->setAttachmentMultisample(this, GL_TEXTURE, attachment, index, textureObj,
                                               samples);
     }
@@ -5572,7 +5687,7 @@ void Context::dispatchCompute(GLuint numGroupsX, GLuint numGroupsY, GLuint numGr
         return;
     }
 
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::convertPpoToComputeOrDraw(bool isCompute)
@@ -5593,7 +5708,7 @@ void Context::dispatchComputeIndirect(GLintptr indirect)
     ANGLE_CONTEXT_TRY(prepareForDispatch());
     ANGLE_CONTEXT_TRY(mImplementation->dispatchComputeIndirect(this, indirect));
 
-    MarkShaderStorageBufferUsage(this);
+    MarkShaderStorageUsage(this);
 }
 
 void Context::texStorage2D(TextureType target,
@@ -7673,6 +7788,62 @@ void Context::importMemoryFd(MemoryObjectID memory, GLuint64 size, HandleType ha
     ANGLE_CONTEXT_TRY(memoryObject->importFd(this, size, handleType, fd));
 }
 
+void Context::texStorageMemFlags2D(TextureType target,
+                                   GLsizei levels,
+                                   GLenum internalFormat,
+                                   GLsizei width,
+                                   GLsizei height,
+                                   MemoryObjectID memory,
+                                   GLuint64 offset,
+                                   GLbitfield createFlags,
+                                   GLbitfield usageFlags)
+{
+    UNIMPLEMENTED();
+}
+
+void Context::texStorageMemFlags2DMultisample(TextureType target,
+                                              GLsizei samples,
+                                              GLenum internalFormat,
+                                              GLsizei width,
+                                              GLsizei height,
+                                              GLboolean fixedSampleLocations,
+                                              MemoryObjectID memory,
+                                              GLuint64 offset,
+                                              GLbitfield createFlags,
+                                              GLbitfield usageFlags)
+{
+    UNIMPLEMENTED();
+}
+
+void Context::texStorageMemFlags3D(TextureType target,
+                                   GLsizei levels,
+                                   GLenum internalFormat,
+                                   GLsizei width,
+                                   GLsizei height,
+                                   GLsizei depth,
+                                   MemoryObjectID memory,
+                                   GLuint64 offset,
+                                   GLbitfield createFlags,
+                                   GLbitfield usageFlags)
+{
+    UNIMPLEMENTED();
+}
+
+void Context::texStorageMemFlags3DMultisample(TextureType target,
+                                              GLsizei samples,
+                                              GLenum internalFormat,
+                                              GLsizei width,
+                                              GLsizei height,
+                                              GLsizei depth,
+                                              GLboolean fixedSampleLocations,
+                                              MemoryObjectID memory,
+                                              GLuint64 offset,
+                                              GLbitfield createFlags,
+                                              GLbitfield usageFlags)
+{
+    UNIMPLEMENTED();
+}
+
 void Context::importMemoryZirconHandle(MemoryObjectID memory,
                                        GLuint64 size,
                                        HandleType handleType,
@@ -7943,6 +8114,11 @@ bool Context::isProgramPipelineGenerated(ProgramPipelineID pipeline) const
 bool Context::usingDisplayTextureShareGroup() const
 {
     return mDisplayTextureShareGroup;
+}
+
+bool Context::usingDisplaySemaphoreShareGroup() const
+{
+    return mDisplaySemaphoreShareGroup;
 }
 
 GLenum Context::getConvertedRenderbufferFormat(GLenum internalformat) const
@@ -8393,6 +8569,7 @@ void StateCache::onProgramExecutableChange(Context *context)
     updateBasicDrawStatesError();
     updateValidDrawModes(context);
     updateActiveShaderStorageBufferIndices(context);
+    updateActiveImageUnitIndices(context);
     updateCanDraw(context);
 }
 
@@ -8654,6 +8831,26 @@ void StateCache::updateActiveShaderStorageBufferIndices(Context *context)
         for (const InterfaceBlock &block : program->getState().getShaderStorageBlocks())
         {
             mCachedActiveShaderStorageBufferIndices.set(block.binding);
+        }
+    }
+}
+
+void StateCache::updateActiveImageUnitIndices(Context *context)
+{
+    mCachedActiveImageUnitIndices.reset();
+    Program *program = context->getState().getProgram();
+    if (program)
+    {
+        for (const ImageBinding &imageBinding : program->getState().getImageBindings())
+        {
+            if (imageBinding.unreferenced)
+            {
+                continue;
+            }
+            for (GLuint binding : imageBinding.boundImageUnits)
+            {
+                mCachedActiveImageUnitIndices.set(binding);
+            }
         }
     }
 }

@@ -344,6 +344,31 @@ struct FeaturesVk : FeatureSetBase
         "enable_command_processing_thread", FeatureCategory::VulkanFeatures,
         "Enable parallel processing and submission of Vulkan commands in worker thread", &members,
         "http://anglebug.com/4324"};
+
+    // Whether the VkDevice supports the VK_KHR_shader_float16_int8 extension and has the
+    // shaderFloat16 feature.
+    Feature supportsShaderFloat16 = {"supports_shader_float16", FeatureCategory::VulkanFeatures,
+                                     "VkDevice supports the VK_KHR_shader_float16_int8 extension "
+                                     "and has the shaderFloat16 feature",
+                                     &members, "http://anglebug.com/4551"};
+
+    // Some devices don't meet the limits required to perform mipmap generation using the built-in
+    // compute shader.  On some other devices, VK_IMAGE_USAGE_STORAGE_BIT is detrimental to
+    // performance, making this solution impractical.
+    Feature allowGenerateMipmapWithCompute = {
+        "allow_generate_mipmap_with_compute", FeatureCategory::VulkanFeatures,
+        "Use the compute path to generate mipmaps on devices that meet the minimum requirements, "
+        "and the performance is better.",
+        &members, "http://anglebug.com/4551"};
+
+    // Force maxUniformBufferSize to 16K on Qualcomm's Adreno 540. Pixel2's Adreno540 reports
+    // maxUniformBufferSize 64k but various tests failed with that size. For that specific
+    // device, we set to 16k for now which is known to pass all tests.
+    // https://issuetracker.google.com/161903006
+    Feature forceMaxUniformBufferSize16KB = {
+        "force_max_uniform_buffer_size_16K", FeatureCategory::VulkanWorkarounds,
+        "Force max uniform buffer size to 16K on some device due to bug", &members,
+        "https://issuetracker.google.com/161903006"};
 };
 
 inline FeaturesVk::FeaturesVk()  = default;

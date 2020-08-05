@@ -258,6 +258,10 @@ class StateCache final : angle::NonCopyable
         return mCachedActiveShaderStorageBufferIndices;
     }
 
+    // Places that can trigger updateActiveImageUnitIndices:
+    // 1. onProgramExecutableChange.
+    ImageUnitMask getActiveImageUnitIndices() const { return mCachedActiveImageUnitIndices; }
+
     // Places that can trigger updateCanDraw:
     // 1. onProgramExecutableChange.
     bool getCanDraw() const { return mCachedCanDraw; }
@@ -295,6 +299,7 @@ class StateCache final : angle::NonCopyable
     void updateTransformFeedbackActiveUnpaused(Context *context);
     void updateVertexAttribTypesValidation(Context *context);
     void updateActiveShaderStorageBufferIndices(Context *context);
+    void updateActiveImageUnitIndices(Context *context);
     void updateCanDraw(Context *context);
 
     void setValidDrawModes(bool pointsOK, bool linesOK, bool trisOK, bool lineAdjOK, bool triAdjOK);
@@ -314,6 +319,7 @@ class StateCache final : angle::NonCopyable
     mutable intptr_t mCachedBasicDrawElementsError;
     bool mCachedTransformFeedbackActiveUnpaused;
     StorageBuffersMask mCachedActiveShaderStorageBufferIndices;
+    ImageUnitMask mCachedActiveImageUnitIndices;
 
     // Reserve an extra slot at the end of these maps for invalid enum.
     angle::PackedEnumMap<PrimitiveMode, bool, angle::EnumSize<PrimitiveMode>() + 1>
@@ -345,6 +351,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
             const egl::Config *config,
             const Context *shareContext,
             TextureManager *shareTextures,
+            SemaphoreManager *shareSemaphores,
             MemoryProgramCache *memoryProgramCache,
             const EGLenum clientType,
             const egl::AttributeMap &attribs,
@@ -569,6 +576,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     bool isQueryGenerated(QueryID query) const;
 
     bool usingDisplayTextureShareGroup() const;
+    bool usingDisplaySemaphoreShareGroup() const;
 
     // Hack for the special WebGL 1 "DEPTH_STENCIL" internal format.
     GLenum getConvertedRenderbufferFormat(GLenum internalformat) const;
@@ -616,6 +624,9 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     bool noopDraw(PrimitiveMode mode, GLsizei count) const;
     bool noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount) const;
+
+    bool isClearBufferMaskedOut(GLenum buffer, GLint drawbuffer) const;
+    bool noopClearBuffer(GLenum buffer, GLint drawbuffer) const;
 
   private:
     void initialize();
@@ -670,6 +681,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     bool mShared;
     bool mSkipValidation;
     bool mDisplayTextureShareGroup;
+    bool mDisplaySemaphoreShareGroup;
 
     // Recorded errors
     ErrorSet mErrors;

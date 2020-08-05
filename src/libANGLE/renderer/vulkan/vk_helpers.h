@@ -43,7 +43,7 @@ using StagingBufferOffsetArray = std::array<VkDeviceSize, 2>;
 struct TextureUnit final
 {
     TextureVk *texture;
-    SamplerVk *sampler;
+    const vk::SamplerHelper *sampler;
 };
 
 // A dynamic buffer is conceptually an infinitely long buffer. Each time you write to the buffer,
@@ -877,12 +877,19 @@ struct CommandBufferHelper : angle::NonCopyable
 
     void executeBarriers(vk::PrimaryCommandBuffer *primary);
 
-    bool empty() const { return (!mCommandBuffer.empty() || mRenderPassStarted) ? false : true; }
     void setHasRenderPass(bool hasRenderPass) { mIsRenderPassCommandBuffer = hasRenderPass; }
     void reset();
     void releaseToContextQueue(ContextVk *contextVk);
 
-    // RenderPass related functions
+    // Returns true if we have no work to execute. For renderpass command buffer, even if the
+    // underlying command buffer is empty, we may still have a renderpass with an empty command
+    // buffer just to do the clear.
+    bool empty() const
+    {
+        return mIsRenderPassCommandBuffer ? !mRenderPassStarted : mCommandBuffer.empty();
+    }
+    // RenderPass related functions. This is equivalent to !empty(), but only when you know this is
+    // a RenderPass command buffer
     bool started() const
     {
         ASSERT(mIsRenderPassCommandBuffer);
@@ -893,8 +900,11 @@ struct CommandBufferHelper : angle::NonCopyable
                          const gl::Rectangle &renderArea,
                          const vk::RenderPassDesc &renderPassDesc,
                          const vk::AttachmentOpsArray &renderPassAttachmentOps,
+                         const uint32_t depthStencilAttachmentIndex,
                          const vk::ClearValuesArray &clearValues,
                          vk::CommandBuffer **commandBufferOut);
+
+    void endRenderPass();
 
     void beginTransformFeedback(size_t validBufferCount,
                                 const VkBuffer *counterBuffers,
@@ -953,6 +963,9 @@ struct CommandBufferHelper : angle::NonCopyable
     // Dumping the command stream is disabled by default.
     static constexpr bool kEnableCommandStreamDiagnostics = false;
 
+    void setDepthTestEnabled() { mDepthTestEverEnabled = true; }
+    void setStencilTestEnabled() { mStencilTestEverEnabled = true; }
+
   private:
     void addCommandDiagnostics(ContextVk *contextVk);
     // Allocator used by this class. Using a pool allocator per CBH to avoid threading issues
@@ -980,7 +993,12 @@ struct CommandBufferHelper : angle::NonCopyable
 
     bool mIsRenderPassCommandBuffer;
     bool mMergeBarriers;
+
+    bool mDepthTestEverEnabled;
+    bool mStencilTestEverEnabled;
+    uint32_t mDepthStencilAttachmentIndex;
 };
+static constexpr uint32_t kInvalidAttachmentIndex = -1;
 
 // Imagine an image going through a few layout transitions:
 //
@@ -1173,8 +1191,6 @@ class ImageHelper final : public Resource, public angle::Subject
                uint32_t layerCount,
                CommandBuffer *commandBuffer);
 
-    void resetSerial() { mSerial = rx::kZeroSerial; }
-
     static void Copy(ImageHelper *srcImage,
                      ImageHelper *dstImage,
                      const gl::Offset &srcOffset,
@@ -1184,6 +1200,7 @@ class ImageHelper final : public Resource, public angle::Subject
                      const VkImageSubresourceLayers &dstSubresources,
                      CommandBuffer *commandBuffer);
 
+    // Generate mipmap from level 0 into the rest of the levels with blit.
     angle::Result generateMipmapsWithBlit(ContextVk *contextVk, GLuint maxLevel);
 
     // Resolve this image into a destination image.  This image should be in the TransferSrc layout.
@@ -1537,7 +1554,6 @@ class ImageHelper final : public Resource, public angle::Subject
     VkExtent3D mExtents;
     const Format *mFormat;
     GLint mSamples;
-    Serial mSerial;
 
     // Current state.
     ImageLayout mCurrentLayout;
@@ -1572,6 +1588,13 @@ using ImageViewVector = std::vector<ImageView>;
 // A vector of vector of image views.  Primary index is layer, secondary index is level.
 using LayerLevelImageViewVector = std::vector<ImageViewVector>;
 
+// Address mode for layers: only possible to access either 1 layer or all layers.
+enum LayerMode
+{
+    Single,
+    All
+};
+
 class ImageViewHelper : angle::NonCopyable
 {
   public:
@@ -1579,41 +1602,97 @@ class ImageViewHelper : angle::NonCopyable
     ImageViewHelper(ImageViewHelper &&other);
     ~ImageViewHelper();
 
+    void init(RendererVk *renderer);
     void release(RendererVk *renderer);
     void destroy(VkDevice device);
 
-    const ImageView &getLinearReadImageView() const { return mLinearReadImageView; }
-    const ImageView &getNonLinearReadImageView() const { return mNonLinearReadImageView; }
-    const ImageView &getLinearFetchImageView() const { return mLinearFetchImageView; }
-    const ImageView &getNonLinearFetchImageView() const { return mNonLinearFetchImageView; }
-    const ImageView &getLinearCopyImageView() const { return mLinearCopyImageView; }
-    const ImageView &getNonLinearCopyImageView() const { return mNonLinearCopyImageView; }
-    const ImageView &getStencilReadImageView() const { return mStencilReadImageView; }
+    const ImageView &getLinearReadImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelLinearReadImageViews);
+    }
+    const ImageView &getNonLinearReadImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelNonLinearReadImageViews);
+    }
+    const ImageView &getLinearFetchImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelLinearFetchImageViews);
+    }
+    const ImageView &getNonLinearFetchImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelNonLinearFetchImageViews);
+    }
+    const ImageView &getLinearCopyImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelLinearCopyImageViews);
+    }
+    const ImageView &getNonLinearCopyImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelNonLinearCopyImageViews);
+    }
+    const ImageView &getStencilReadImageView() const
+    {
+        return getValidReadViewImpl(mPerLevelStencilReadImageViews);
+    }
 
     const ImageView &getReadImageView() const
     {
-        return mLinearColorspace ? mLinearReadImageView : mNonLinearReadImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearReadImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearReadImageViews);
     }
 
     const ImageView &getFetchImageView() const
     {
-        return mLinearColorspace ? mLinearFetchImageView : mNonLinearFetchImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearFetchImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearFetchImageViews);
     }
 
     const ImageView &getCopyImageView() const
     {
-        return mLinearColorspace ? mLinearCopyImageView : mNonLinearCopyImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearCopyImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearCopyImageViews);
     }
 
     // Used when initialized RenderTargets.
-    bool hasStencilReadImageView() const { return mStencilReadImageView.valid(); }
+    bool hasStencilReadImageView() const
+    {
+        return (mCurrentMaxLevel < mPerLevelStencilReadImageViews.size())
+                   ? mPerLevelStencilReadImageViews[mCurrentMaxLevel].valid()
+                   : false;
+    }
 
-    bool hasFetchImageView() const { return getFetchImageView().valid(); }
+    bool hasFetchImageView() const
+    {
+        if ((mLinearColorspace && (mCurrentMaxLevel < mPerLevelLinearFetchImageViews.size())) ||
+            (!mLinearColorspace && (mCurrentMaxLevel < mPerLevelNonLinearFetchImageViews.size())))
+        {
+            return getFetchImageView().valid();
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    bool hasCopyImageView() const
+    {
+        if ((mLinearColorspace && (mCurrentMaxLevel < mPerLevelLinearCopyImageViews.size())) ||
+            (!mLinearColorspace && (mCurrentMaxLevel < mPerLevelNonLinearCopyImageViews.size())))
+        {
+            return getFetchImageView().valid();
+        }
+        else
+        {
+            return false;
+        }
+    }
 
     // Store reference to usage in graph.
     void retain(ResourceUseList *resourceUseList) const { resourceUseList->add(mUse); }
 
-    // Creates views with multiple layers and levels.
+    // For applications that frequently switch a texture's max level, and make no other changes to
+    // the texture, change the currently-used max level, and potentially create new "read views"
+    // for the new max-level
     angle::Result initReadViews(ContextVk *contextVk,
                                 gl::TextureType viewType,
                                 const ImageHelper &image,
@@ -1623,20 +1702,9 @@ class ImageViewHelper : angle::NonCopyable
                                 uint32_t baseLevel,
                                 uint32_t levelCount,
                                 uint32_t baseLayer,
-                                uint32_t layerCount);
-
-    // Create SRGB-reinterpreted read views
-    angle::Result initSRGBReadViews(ContextVk *contextVk,
-                                    gl::TextureType viewType,
-                                    const ImageHelper &image,
-                                    const Format &format,
-                                    const gl::SwizzleState &formatSwizzle,
-                                    const gl::SwizzleState &readSwizzle,
-                                    uint32_t baseLevel,
-                                    uint32_t levelCount,
-                                    uint32_t baseLayer,
-                                    uint32_t layerCount,
-                                    VkImageUsageFlags imageUsageFlags);
+                                uint32_t layerCount,
+                                bool requiresSRGBViews,
+                                VkImageUsageFlags imageUsageFlags);
 
     // Creates a view with all layers of the level.
     angle::Result getLevelDrawImageView(ContextVk *contextVk,
@@ -1655,34 +1723,94 @@ class ImageViewHelper : angle::NonCopyable
                                              uint32_t layer,
                                              const ImageView **imageViewOut);
 
-    // Return unique Serial for this imageView, first assigning it if it hasn't yet been set
-    ImageViewSerial getAssignSerial(ContextVk *contextVk, uint32_t levelGL, uint32_t layer);
+    // Return unique Serial for an imageView.
+    ImageViewSubresourceSerial getSubresourceSerial(uint32_t levelGL,
+                                                    uint32_t levelCount,
+                                                    uint32_t layer,
+                                                    LayerMode layerMode) const;
+
+    uint32_t getCurrentMaxLevel() const { return mCurrentMaxLevel; }
 
   private:
     ImageView &getReadImageView()
     {
-        return mLinearColorspace ? mLinearReadImageView : mNonLinearReadImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearReadImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearReadImageViews);
     }
     ImageView &getFetchImageView()
     {
-        return mLinearColorspace ? mLinearFetchImageView : mNonLinearFetchImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearFetchImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearFetchImageViews);
     }
     ImageView &getCopyImageView()
     {
-        return mLinearColorspace ? mLinearCopyImageView : mNonLinearCopyImageView;
+        return mLinearColorspace ? getReadViewImpl(mPerLevelLinearCopyImageViews)
+                                 : getReadViewImpl(mPerLevelNonLinearCopyImageViews);
     }
+
+    // Used by public get*ImageView() methods to do proper assert based on vector size and validity
+    inline const ImageView &getValidReadViewImpl(const ImageViewVector &imageViewVector) const
+    {
+        ASSERT(mCurrentMaxLevel < imageViewVector.size() &&
+               imageViewVector[mCurrentMaxLevel].valid());
+        return imageViewVector[mCurrentMaxLevel];
+    }
+
+    // Used by public get*ImageView() methods to do proper assert based on vector size
+    inline const ImageView &getReadViewImpl(const ImageViewVector &imageViewVector) const
+    {
+        ASSERT(mCurrentMaxLevel < imageViewVector.size());
+        return imageViewVector[mCurrentMaxLevel];
+    }
+
+    // Used by private get*ImageView() methods to do proper assert based on vector size
+    inline ImageView &getReadViewImpl(ImageViewVector &imageViewVector)
+    {
+        ASSERT(mCurrentMaxLevel < imageViewVector.size());
+        return imageViewVector[mCurrentMaxLevel];
+    }
+
+    // Creates views with multiple layers and levels.
+    angle::Result initReadViewsImpl(ContextVk *contextVk,
+                                    gl::TextureType viewType,
+                                    const ImageHelper &image,
+                                    const Format &format,
+                                    const gl::SwizzleState &formatSwizzle,
+                                    const gl::SwizzleState &readSwizzle,
+                                    uint32_t baseLevel,
+                                    uint32_t levelCount,
+                                    uint32_t baseLayer,
+                                    uint32_t layerCount);
+
+    // Create SRGB-reinterpreted read views
+    angle::Result initSRGBReadViewsImpl(ContextVk *contextVk,
+                                        gl::TextureType viewType,
+                                        const ImageHelper &image,
+                                        const Format &format,
+                                        const gl::SwizzleState &formatSwizzle,
+                                        const gl::SwizzleState &readSwizzle,
+                                        uint32_t baseLevel,
+                                        uint32_t levelCount,
+                                        uint32_t baseLayer,
+                                        uint32_t layerCount,
+                                        VkImageUsageFlags imageUsageFlags);
 
     // Lifetime.
     SharedResourceUse mUse;
 
-    // Read views
-    ImageView mLinearReadImageView;
-    ImageView mNonLinearReadImageView;
-    ImageView mLinearFetchImageView;
-    ImageView mNonLinearFetchImageView;
-    ImageView mLinearCopyImageView;
-    ImageView mNonLinearCopyImageView;
-    ImageView mStencilReadImageView;
+    // For applications that frequently switch a texture's max level, and make no other changes to
+    // the texture, keep track of the currently-used max level, and keep one "read view" per
+    // max-level
+    uint32_t mCurrentMaxLevel;
+
+    // Read views (one per max-level)
+    ImageViewVector mPerLevelLinearReadImageViews;
+    ImageViewVector mPerLevelNonLinearReadImageViews;
+    ImageViewVector mPerLevelLinearFetchImageViews;
+    ImageViewVector mPerLevelNonLinearFetchImageViews;
+    ImageViewVector mPerLevelLinearCopyImageViews;
+    ImageViewVector mPerLevelNonLinearCopyImageViews;
+    ImageViewVector mPerLevelStencilReadImageViews;
 
     bool mLinearColorspace;
 
@@ -1690,28 +1818,8 @@ class ImageViewHelper : angle::NonCopyable
     ImageViewVector mLevelDrawImageViews;
     LayerLevelImageViewVector mLayerLevelDrawImageViews;
 
-    // Store Serials per layer/level of imageView
-    std::unordered_map<LayerLevel, ImageViewSerial> mSerialCache;
-};
-
-// The SamplerHelper allows a Sampler to be coupled with a resource lifetime.
-class SamplerHelper final : angle::NonCopyable
-{
-  public:
-    SamplerHelper();
-    ~SamplerHelper();
-
-    angle::Result init(Context *context, const VkSamplerCreateInfo &createInfo);
-    void release(RendererVk *renderer);
-
-    bool valid() const { return mSampler.valid(); }
-    const Sampler &get() const { return mSampler; }
-
-    void retain(ResourceUseList *resourceUseList) { resourceUseList->add(mUse); }
-
-  private:
-    SharedResourceUse mUse;
-    Sampler mSampler;
+    // Serial for the image view set. getSubresourceSerial combines it with subresource info.
+    ImageViewSerial mImageViewSerial;
 };
 
 class FramebufferHelper : public Resource

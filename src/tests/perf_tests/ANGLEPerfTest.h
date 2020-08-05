@@ -82,11 +82,15 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     // Call if the test step was aborted and the test should stop running.
     void abortTest() { mRunning = false; }
 
-    unsigned int getNumStepsPerformed() const { return mNumStepsPerformed; }
+    int getNumStepsPerformed() const { return mNumStepsPerformed; }
+
+    // Defaults to one step per run loop. Can be changed in any test.
+    void setStepsPerRunLoopStep(int stepsPerRunLoop);
     void doRunLoop(double maxRunTime);
 
     // Overriden in trace perf tests.
     virtual void saveScreenshot(const std::string &screenshotName) {}
+    virtual void computeGPUTime() {}
 
     double printResults();
     void calibrateStepsToRun();
@@ -100,6 +104,7 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     std::unique_ptr<perf_test::PerfResultReporter> mReporter;
     int mStepsToRun;
     int mNumStepsPerformed;
+    int mStepsPerRunLoopStep;
     int mIterationsPerStep;
     bool mRunning;
 };
@@ -172,6 +177,7 @@ class ANGLERenderTest : public ANGLEPerfTest
     void step() override;
     void startTest() override;
     void finishTest() override;
+    void computeGPUTime() override;
 
     bool areExtensionPrerequisitesFulfilled() const;
 
@@ -182,7 +188,14 @@ class ANGLERenderTest : public ANGLEPerfTest
     ConfigParameters mConfigParams;
     bool mSwapEnabled;
 
-    GLuint mTimestampQuery;
+    struct TimestampSample
+    {
+        GLuint beginQuery;
+        GLuint endQuery;
+    };
+
+    GLuint mCurrentTimestampBeginQuery = 0;
+    std::vector<TimestampSample> mTimestampQueries;
 
     // Trace event record that can be output.
     std::vector<TraceEvent> mTraceEventBuffer;

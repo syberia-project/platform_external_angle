@@ -63,8 +63,9 @@ int FindIOSurfaceFormatIndex(GLenum internalFormat, GLenum type)
 
 IOSurfaceSurfaceVkMac::IOSurfaceSurfaceVkMac(const egl::SurfaceState &state,
                                              EGLClientBuffer buffer,
-                                             const egl::AttributeMap &attribs)
-    : OffscreenSurfaceVk(state), mIOSurface(nullptr), mPlane(0), mFormatIndex(-1)
+                                             const egl::AttributeMap &attribs,
+                                             RendererVk *renderer)
+    : OffscreenSurfaceVk(state, renderer), mIOSurface(nullptr), mPlane(0), mFormatIndex(-1)
 {
     // Keep reference to the IOSurface so it doesn't get deleted while the pbuffer exists.
     mIOSurface = reinterpret_cast<IOSurfaceRef>(buffer);
@@ -115,7 +116,8 @@ angle::Result IOSurfaceSurfaceVkMac::initializeImpl(DisplayVk *displayVk)
         displayVk, mWidth, mHeight,
         renderer->getFormat(kIOSurfaceFormats[mFormatIndex].nativeSizedInternalFormat), samples,
         IOSurfaceGetBaseAddressOfPlane(mIOSurface, mPlane)));
-    mColorRenderTarget.init(&mColorAttachment.image, &mColorAttachment.imageViews, 0, 0);
+    mColorRenderTarget.init(&mColorAttachment.image, &mColorAttachment.imageViews, nullptr, nullptr,
+                            0, 0, false);
 
     return angle::Result::Continue;
 }

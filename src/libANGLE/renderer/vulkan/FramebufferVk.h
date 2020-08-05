@@ -152,6 +152,11 @@ class FramebufferVk : public FramebufferImpl
                                           const UtilsVk::BlitResolveParameters &params,
                                           vk::ImageHelper *srcImage);
 
+    // If resolve attachments are used, some use cases require that the multisampled image (whose
+    // data is normally discarded) take its data from the resolve attachment.
+    angle::Result copyResolveToMultisampedAttachment(ContextVk *contextVk,
+                                                     RenderTargetVk *colorRenderTarget);
+
     angle::Result getFramebuffer(ContextVk *contextVk, vk::Framebuffer **framebufferOut);
 
     angle::Result clearImpl(const gl::Context *context,
@@ -184,12 +189,22 @@ class FramebufferVk : public FramebufferImpl
                                bool clearStencil,
                                const VkClearColorValue &clearColorValue,
                                const VkClearDepthStencilValue &clearDepthStencilValue);
+    void clearWithClearAttachment(vk::CommandBuffer *renderPassCommandBuffer,
+                                  const gl::Rectangle &scissoredRenderArea,
+                                  gl::DrawBufferMask clearColorBuffers,
+                                  bool clearDepth,
+                                  bool clearStencil,
+                                  const VkClearColorValue &clearColorValue,
+                                  const VkClearDepthStencilValue &clearDepthStencilValue);
     void updateActiveColorMasks(size_t colorIndex, bool r, bool g, bool b, bool a);
     void updateRenderPassDesc();
     angle::Result updateColorAttachment(const gl::Context *context,
                                         bool deferClears,
                                         uint32_t colorIndex);
-    angle::Result invalidateImpl(ContextVk *contextVk, size_t count, const GLenum *attachments);
+    angle::Result invalidateImpl(ContextVk *contextVk,
+                                 size_t count,
+                                 const GLenum *attachments,
+                                 bool isSubInvalidate);
     // Release all FramebufferVk objects in the cache and clear cache
     void clearCache(ContextVk *contextVk);
     angle::Result updateDepthStencilAttachment(const gl::Context *context, bool deferClears);

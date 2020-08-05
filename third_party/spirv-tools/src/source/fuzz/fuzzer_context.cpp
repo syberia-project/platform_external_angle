@@ -67,6 +67,8 @@ const std::pair<uint32_t, uint32_t> kChanceOfGoingDeeperWhenMakingAccessChain =
     {50, 95};
 const std::pair<uint32_t, uint32_t> kChanceOfInterchangingZeroLikeConstants = {
     10, 90};
+const std::pair<uint32_t, uint32_t>
+    kChanceOfInterchangingSignednessOfIntegerOperands = {10, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfInvertingComparisonOperators = {
     20, 50};
 const std::pair<uint32_t, uint32_t> kChanceOfMakingDonorLivesafe = {40, 60};
@@ -74,14 +76,23 @@ const std::pair<uint32_t, uint32_t> kChanceOfMergingBlocks = {20, 95};
 const std::pair<uint32_t, uint32_t> kChanceOfMovingBlockDown = {20, 50};
 const std::pair<uint32_t, uint32_t> kChanceOfObfuscatingConstant = {10, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfOutliningFunction = {10, 90};
+const std::pair<uint32_t, uint32_t> kChanceOfPermutingInstructions = {20, 70};
 const std::pair<uint32_t, uint32_t> kChanceOfPermutingParameters = {30, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfPermutingPhiOperands = {30, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfPushingIdThroughVariable = {5, 50};
+const std::pair<uint32_t, uint32_t> kChanceOfReplacingCopyMemoryWithLoadStore =
+    {20, 90};
+const std::pair<uint32_t, uint32_t> kChanceOfReplacingCopyObjectWithStoreLoad =
+    {20, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfReplacingIdWithSynonym = {10, 90};
 const std::pair<uint32_t, uint32_t>
     kChanceOfReplacingLinearAlgebraInstructions = {10, 90};
+const std::pair<uint32_t, uint32_t> kChanceOfReplacingLoadStoreWithCopyMemory =
+    {20, 90};
 const std::pair<uint32_t, uint32_t> kChanceOfReplacingParametersWithGlobals = {
     30, 70};
+const std::pair<uint32_t, uint32_t> kChanceOfReplacingParametersWithStruct = {
+    20, 40};
 const std::pair<uint32_t, uint32_t> kChanceOfSplittingBlock = {40, 95};
 const std::pair<uint32_t, uint32_t> kChanceOfSwappingConditionalBranchOperands =
     {10, 70};
@@ -99,6 +110,7 @@ const uint32_t kDefaultMaxNewArraySizeLimit = 100;
 //  think whether there is a better limit on the maximum number of parameters.
 const uint32_t kDefaultMaxNumberOfFunctionParameters = 128;
 const uint32_t kDefaultMaxNumberOfNewParameters = 15;
+const uint32_t kGetDefaultMaxNumberOfParametersReplacedWithStruct = 5;
 
 // Default functions for controlling how deep to go during recursive
 // generation/transformation. Keep them in alphabetical order.
@@ -124,6 +136,8 @@ FuzzerContext::FuzzerContext(RandomGenerator* random_generator,
       max_new_array_size_limit_(kDefaultMaxNewArraySizeLimit),
       max_number_of_function_parameters_(kDefaultMaxNumberOfFunctionParameters),
       max_number_of_new_parameters_(kDefaultMaxNumberOfNewParameters),
+      max_number_of_parameters_replaced_with_struct_(
+          kGetDefaultMaxNumberOfParametersReplacedWithStruct),
       go_deeper_in_constant_obfuscation_(
           kDefaultGoDeeperInConstantObfuscation) {
   chance_of_adding_access_chain_ =
@@ -186,6 +200,8 @@ FuzzerContext::FuzzerContext(RandomGenerator* random_generator,
       ChooseBetweenMinAndMax(kChanceOfDonatingAdditionalModule);
   chance_of_going_deeper_when_making_access_chain_ =
       ChooseBetweenMinAndMax(kChanceOfGoingDeeperWhenMakingAccessChain);
+  chance_of_interchanging_signedness_of_integer_operands_ =
+      ChooseBetweenMinAndMax(kChanceOfInterchangingSignednessOfIntegerOperands);
   chance_of_interchanging_zero_like_constants_ =
       ChooseBetweenMinAndMax(kChanceOfInterchangingZeroLikeConstants);
   chance_of_inverting_comparison_operators_ =
@@ -199,18 +215,28 @@ FuzzerContext::FuzzerContext(RandomGenerator* random_generator,
       ChooseBetweenMinAndMax(kChanceOfObfuscatingConstant);
   chance_of_outlining_function_ =
       ChooseBetweenMinAndMax(kChanceOfOutliningFunction);
+  chance_of_permuting_instructions_ =
+      ChooseBetweenMinAndMax(kChanceOfPermutingInstructions);
   chance_of_permuting_parameters_ =
       ChooseBetweenMinAndMax(kChanceOfPermutingParameters);
   chance_of_permuting_phi_operands_ =
       ChooseBetweenMinAndMax(kChanceOfPermutingPhiOperands);
   chance_of_pushing_id_through_variable_ =
       ChooseBetweenMinAndMax(kChanceOfPushingIdThroughVariable);
+  chance_of_replacing_copy_memory_with_load_store_ =
+      ChooseBetweenMinAndMax(kChanceOfReplacingCopyMemoryWithLoadStore);
+  chance_of_replacing_copyobject_with_store_load_ =
+      ChooseBetweenMinAndMax(kChanceOfReplacingCopyObjectWithStoreLoad);
   chance_of_replacing_id_with_synonym_ =
       ChooseBetweenMinAndMax(kChanceOfReplacingIdWithSynonym);
   chance_of_replacing_linear_algebra_instructions_ =
       ChooseBetweenMinAndMax(kChanceOfReplacingLinearAlgebraInstructions);
+  chance_of_replacing_load_store_with_copy_memory_ =
+      ChooseBetweenMinAndMax(kChanceOfReplacingLoadStoreWithCopyMemory);
   chance_of_replacing_parameters_with_globals_ =
       ChooseBetweenMinAndMax(kChanceOfReplacingParametersWithGlobals);
+  chance_of_replacing_parameters_with_struct_ =
+      ChooseBetweenMinAndMax(kChanceOfReplacingParametersWithStruct);
   chance_of_splitting_block_ = ChooseBetweenMinAndMax(kChanceOfSplittingBlock);
   chance_of_swapping_conditional_branch_operands_ =
       ChooseBetweenMinAndMax(kChanceOfSwappingConditionalBranchOperands);

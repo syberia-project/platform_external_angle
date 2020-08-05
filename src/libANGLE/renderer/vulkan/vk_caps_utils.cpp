@@ -76,17 +76,19 @@ void RendererVk::ensureCapsInitialized() const
 
     // Enable this for simple buffer readback testing, but some functionality is missing.
     // TODO(jmadill): Support full mapBufferRange extension.
-    mNativeExtensions.mapBufferOES           = true;
-    mNativeExtensions.mapBufferRange         = true;
-    mNativeExtensions.textureStorage         = true;
-    mNativeExtensions.drawBuffers            = true;
-    mNativeExtensions.fragDepth              = true;
-    mNativeExtensions.framebufferBlit        = true;
-    mNativeExtensions.framebufferMultisample = true;
-    mNativeExtensions.copyTexture            = true;
-    mNativeExtensions.copyTexture3d          = true;
-    mNativeExtensions.copyCompressedTexture  = true;
-    mNativeExtensions.debugMarker            = true;
+    mNativeExtensions.mapBufferOES                 = true;
+    mNativeExtensions.mapBufferRange               = true;
+    mNativeExtensions.textureStorage               = true;
+    mNativeExtensions.drawBuffers                  = true;
+    mNativeExtensions.fragDepth                    = true;
+    mNativeExtensions.framebufferBlit              = true;
+    mNativeExtensions.framebufferMultisample       = true;
+    mNativeExtensions.multisampledRenderToTexture  = true;
+    mNativeExtensions.multisampledRenderToTexture2 = true;
+    mNativeExtensions.copyTexture                  = true;
+    mNativeExtensions.copyTexture3d                = true;
+    mNativeExtensions.copyCompressedTexture        = true;
+    mNativeExtensions.debugMarker                  = true;
     mNativeExtensions.robustness =
         !IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID) &&
         !IsARM(mPhysicalDeviceProperties.vendorID);
@@ -450,10 +452,13 @@ void RendererVk::ensureCapsInitialized() const
     // There is no additional limit to the combined number of components.  We can have up to a
     // maximum number of uniform buffers, each having the maximum number of components.  Note that
     // this limit includes both components in and out of uniform buffers.
+    //
+    // This value is limited to INT_MAX to avoid overflow when queried from glGetIntegerv().
     const uint64_t maxCombinedUniformComponents =
-        static_cast<uint64_t>(maxPerStageUniformBuffers +
-                              kReservedPerStageDefaultUniformBindingCount) *
-        maxUniformComponents;
+        std::min<uint64_t>(static_cast<uint64_t>(maxPerStageUniformBuffers +
+                                                 kReservedPerStageDefaultUniformBindingCount) *
+                               maxUniformComponents,
+                           std::numeric_limits<GLint>::max());
     for (gl::ShaderType shaderType : gl::AllShaderTypes())
     {
         mNativeCaps.maxCombinedShaderUniformComponents[shaderType] = maxCombinedUniformComponents;

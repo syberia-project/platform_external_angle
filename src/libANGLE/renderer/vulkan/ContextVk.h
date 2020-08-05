@@ -468,10 +468,6 @@ class ContextVk : public ContextImpl, public vk::Context
     // signature for each descriptor set. This allows us to keep a cache of descriptor sets and
     // avoid calling vkAllocateDesctiporSets each texture update.
     const vk::TextureDescriptorDesc &getActiveTexturesDesc() const { return mActiveTexturesDesc; }
-    ImageViewSerial generateAttachmentImageViewSerial();
-    BufferSerial generateBufferSerial();
-    TextureSerial generateTextureSerial();
-    SamplerSerial generateSamplerSerial();
 
     angle::Result updateScissor(const gl::State &glState);
 
@@ -525,10 +521,15 @@ class ContextVk : public ContextImpl, public vk::Context
                                           const gl::Rectangle &renderArea,
                                           const vk::RenderPassDesc &renderPassDesc,
                                           const vk::AttachmentOpsArray &renderPassAttachmentOps,
+                                          const uint32_t depthStencilAttachmentIndex,
                                           const vk::ClearValuesArray &clearValues,
                                           vk::CommandBuffer **commandBufferOut);
 
-    bool hasStartedRenderPass() const { return !mRenderPassCommands->empty(); }
+    bool hasStartedRenderPass() const { return mRenderPassCommands->started(); }
+    bool hasStartedRenderPassWithCommands() const
+    {
+        return mRenderPassCommands->started() && !mRenderPassCommands->getCommandBuffer().empty();
+    }
 
     vk::CommandBufferHelper &getStartedRenderPassCommands()
     {
@@ -573,20 +574,23 @@ class ContextVk : public ContextImpl, public vk::Context
     void recycleCommandBuffer(vk::CommandBufferHelper *commandBuffer);
 
     // DescriptorSet writes
-    VkDescriptorBufferInfo &allocBufferInfo() { return allocBufferInfos(1); }
-    VkDescriptorBufferInfo &allocBufferInfos(size_t count);
-    VkDescriptorImageInfo &allocImageInfo() { return allocImageInfos(1); }
-    VkDescriptorImageInfo &allocImageInfos(size_t count);
-    VkWriteDescriptorSet &allocWriteInfo() { return allocWriteInfos(1); }
-    VkWriteDescriptorSet &allocWriteInfos(size_t count)
-    {
-        size_t oldSize = mWriteInfos.size();
-        size_t newSize = oldSize + count;
-        mWriteInfos.resize(newSize);
-        return mWriteInfos[oldSize];
-    }
+    VkDescriptorBufferInfo *allocDescriptorBufferInfos(size_t count);
+    VkDescriptorImageInfo *allocDescriptorImageInfos(size_t count);
+    VkWriteDescriptorSet *allocWriteDescriptorSets(size_t count);
+
+    VkDescriptorBufferInfo &allocDescriptorBufferInfo() { return *allocDescriptorBufferInfos(1); }
+    VkDescriptorImageInfo &allocDescriptorImageInfo() { return *allocDescriptorImageInfos(1); }
+    VkWriteDescriptorSet &allocWriteDescriptorSet() { return *allocWriteDescriptorSets(1); }
+
+    vk::DynamicBuffer *getDefaultUniformStorage() { return &mDefaultUniformStorage; }
+    // For testing only.
+    void setDefaultUniformBlocksMinSizeForTesting(size_t minSize);
 
     vk::BufferHelper &getEmptyBuffer() { return mEmptyBuffer; }
+    vk::DynamicBuffer *getStagingBufferStorage() { return &mStagingBufferStorage; }
+
+    uint32_t getRenderPassCounter() const { return mRenderPassCounter; }
+    uint32_t getWriteDescriptorSetCounter() const { return mWriteDescriptorSetCounter; }
 
   private:
     // Dirty bits.
@@ -619,6 +623,7 @@ class ContextVk : public ContextImpl, public vk::Context
         uint32_t dynamicOffset;
         vk::BindingPointer<vk::DescriptorSetLayout> descriptorSetLayout;
         vk::RefCountedDescriptorPoolBinding descriptorPoolBinding;
+        std::unordered_map<vk::BufferSerial, VkDescriptorSet> descriptorSetCache;
 
         DriverUniformsDescriptorSet();
         ~DriverUniformsDescriptorSet();
@@ -668,6 +673,8 @@ class ContextVk : public ContextImpl, public vk::Context
         double gpuTimestampS;
         double cpuTimestampS;
     };
+
+    class ScopedDescriptorSetUpdates;
 
     angle::Result setupDraw(const gl::Context *context,
                             gl::PrimitiveMode mode,
@@ -812,11 +819,9 @@ class ContextVk : public ContextImpl, public vk::Context
                                             vk::CommandBuffer *commandBuffer);
     angle::Result allocateDriverUniforms(size_t driverUniformsSize,
                                          DriverUniformsDescriptorSet *driverUniforms,
-                                         VkBuffer *bufferOut,
                                          uint8_t **ptrOut,
                                          bool *newBufferOut);
-    angle::Result updateDriverUniformsDescriptorSet(VkBuffer buffer,
-                                                    bool newBuffer,
+    angle::Result updateDriverUniformsDescriptorSet(bool newBuffer,
                                                     size_t driverUniformsSize,
                                                     DriverUniformsDescriptorSet *driverUniforms);
 
@@ -842,6 +847,7 @@ class ContextVk : public ContextImpl, public vk::Context
     bool hasRecordedCommands();
     void dumpCommandStreamDiagnostics();
     angle::Result flushOutsideRenderPassCommands();
+    void flushDescriptorSetUpdates();
 
     ANGLE_INLINE void onRenderPassFinished()
     {
@@ -869,9 +875,9 @@ class ContextVk : public ContextImpl, public vk::Context
 
     // DescriptorSet writes
     template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-    T &allocInfos(std::vector<T> *mInfos, size_t count);
+    T *allocDescriptorInfos(std::vector<T> *descriptorVector, size_t count);
     template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-    void growCapacity(std::vector<T> *mInfos, size_t newSize);
+    void growDesciptorCapacity(std::vector<T> *descriptorVector, size_t newSize);
 
     std::array<DirtyBitHandler, DIRTY_BIT_MAX> mGraphicsDirtyBitHandlers;
     std::array<DirtyBitHandler, DIRTY_BIT_MAX> mComputeDirtyBitHandlers;
@@ -1036,6 +1042,7 @@ class ContextVk : public ContextImpl, public vk::Context
     // Used to count events for tracing.
     uint32_t mPrimaryBufferCounter;
     uint32_t mRenderPassCounter;
+    uint32_t mWriteDescriptorSetCounter;
 
     gl::State::DirtyBits mPipelineDirtyBitsMask;
 
@@ -1047,18 +1054,9 @@ class ContextVk : public ContextImpl, public vk::Context
     const vk::BufferHelper *mCurrentIndirectBuffer;
 
     // Storage for vkUpdateDescriptorSets
-    std::vector<VkDescriptorBufferInfo> mBufferInfos;
-    std::vector<VkDescriptorImageInfo> mImageInfos;
-    std::vector<VkWriteDescriptorSet> mWriteInfos;
-    class ScopedDescriptorSetUpdates final : angle::NonCopyable
-    {
-      public:
-        ScopedDescriptorSetUpdates(ContextVk *contextVk);
-        ~ScopedDescriptorSetUpdates();
-
-      private:
-        ContextVk *mContextVk;
-    };
+    std::vector<VkDescriptorBufferInfo> mDescriptorBufferInfos;
+    std::vector<VkDescriptorImageInfo> mDescriptorImageInfos;
+    std::vector<VkWriteDescriptorSet> mWriteDescriptorSets;
 
     ShareGroupVk *mShareGroupVk;
 
@@ -1067,6 +1065,12 @@ class ContextVk : public ContextImpl, public vk::Context
     // counter buffer array, or places where there is no vertex buffer since Vulkan does not allow
     // binding a null vertex buffer.
     vk::BufferHelper mEmptyBuffer;
+
+    // Storage for default uniforms of ProgramVks and ProgramPipelineVks.
+    vk::DynamicBuffer mDefaultUniformStorage;
+
+    // All staging buffer support is provided by a DynamicBuffer.
+    vk::DynamicBuffer mStagingBufferStorage;
 
     std::vector<std::string> mCommandBufferDiagnostics;
 };
