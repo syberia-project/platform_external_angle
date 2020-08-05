@@ -190,6 +190,11 @@ angle::Result BufferVk::initializeShadowBuffer(ContextVk *contextVk,
                                                gl::BufferBinding target,
                                                size_t size)
 {
+    if (!contextVk->getRenderer()->getFeatures().shadowBuffers.enabled)
+    {
+        return angle::Result::Continue;
+    }
+
     // For now, enable shadow buffers only for pixel unpack buffers.
     // If usecases present themselves, we can enable them for other buffer types.
     if (target == gl::BufferBinding::PixelUnpack)
@@ -344,6 +349,7 @@ angle::Result BufferVk::mapRange(const gl::Context *context,
                                  GLbitfield access,
                                  void **mapPtr)
 {
+    ANGLE_TRACE_EVENT0("gpu.angle", "BufferVk::mapRange");
     return mapRangeImpl(vk::GetImpl(context), offset, length, access, mapPtr);
 }
 
@@ -424,6 +430,36 @@ angle::Result BufferVk::unmapImpl(ContextVk *contextVk)
 
     markConversionBuffersDirty();
 
+    return angle::Result::Continue;
+}
+
+angle::Result BufferVk::getSubData(const gl::Context *context,
+                                   GLintptr offset,
+                                   GLsizeiptr size,
+                                   void *outData)
+{
+    ASSERT(offset + size <= getSize());
+    if (!mShadowBuffer.valid())
+    {
+        ASSERT(mBuffer && mBuffer->valid());
+        ContextVk *contextVk = vk::GetImpl(context);
+        ANGLE_TRY(mBuffer->waitForIdle(contextVk));
+        if (mBuffer->isMapped())
+        {
+            memcpy(outData, mBuffer->getMappedMemory() + offset, size);
+        }
+        else
+        {
+            uint8_t *mappedPtr = nullptr;
+            ANGLE_TRY(mBuffer->mapWithOffset(contextVk, &mappedPtr, offset));
+            memcpy(outData, mappedPtr, size);
+            mBuffer->unmap(contextVk->getRenderer());
+        }
+    }
+    else
+    {
+        memcpy(outData, mShadowBuffer.getCurrentBuffer() + offset, size);
+    }
     return angle::Result::Continue;
 }
 
