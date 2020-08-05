@@ -31,6 +31,7 @@
 #include "source/fuzz/transformation_add_global_variable.h"
 #include "source/fuzz/transformation_add_image_sample_unused_components.h"
 #include "source/fuzz/transformation_add_local_variable.h"
+#include "source/fuzz/transformation_add_loop_preheader.h"
 #include "source/fuzz/transformation_add_no_contraction_decoration.h"
 #include "source/fuzz/transformation_add_parameter.h"
 #include "source/fuzz/transformation_add_relaxed_decoration.h"
@@ -55,6 +56,7 @@
 #include "source/fuzz/transformation_load.h"
 #include "source/fuzz/transformation_merge_blocks.h"
 #include "source/fuzz/transformation_move_block_down.h"
+#include "source/fuzz/transformation_move_instruction_down.h"
 #include "source/fuzz/transformation_outline_function.h"
 #include "source/fuzz/transformation_permute_function_parameters.h"
 #include "source/fuzz/transformation_permute_phi_operands.h"
@@ -62,9 +64,13 @@
 #include "source/fuzz/transformation_record_synonymous_constants.h"
 #include "source/fuzz/transformation_replace_boolean_constant_with_constant_binary.h"
 #include "source/fuzz/transformation_replace_constant_with_uniform.h"
+#include "source/fuzz/transformation_replace_copy_memory_with_load_store.h"
+#include "source/fuzz/transformation_replace_copy_object_with_store_load.h"
 #include "source/fuzz/transformation_replace_id_with_synonym.h"
 #include "source/fuzz/transformation_replace_linear_algebra_instruction.h"
+#include "source/fuzz/transformation_replace_load_store_with_copy_memory.h"
 #include "source/fuzz/transformation_replace_parameter_with_global.h"
+#include "source/fuzz/transformation_replace_params_with_struct.h"
 #include "source/fuzz/transformation_set_function_control.h"
 #include "source/fuzz/transformation_set_loop_control.h"
 #include "source/fuzz/transformation_set_memory_operands_mask.h"
@@ -123,6 +129,9 @@ std::unique_ptr<Transformation> Transformation::FromMessage(
     case protobufs::Transformation::TransformationCase::kAddLocalVariable:
       return MakeUnique<TransformationAddLocalVariable>(
           message.add_local_variable());
+    case protobufs::Transformation::TransformationCase::kAddLoopPreheader:
+      return MakeUnique<TransformationAddLoopPreheader>(
+          message.add_loop_preheader());
     case protobufs::Transformation::TransformationCase::
         kAddNoContractionDecoration:
       return MakeUnique<TransformationAddNoContractionDecoration>(
@@ -186,6 +195,9 @@ std::unique_ptr<Transformation> Transformation::FromMessage(
       return MakeUnique<TransformationMergeBlocks>(message.merge_blocks());
     case protobufs::Transformation::TransformationCase::kMoveBlockDown:
       return MakeUnique<TransformationMoveBlockDown>(message.move_block_down());
+    case protobufs::Transformation::TransformationCase::kMoveInstructionDown:
+      return MakeUnique<TransformationMoveInstructionDown>(
+          message.move_instruction_down());
     case protobufs::Transformation::TransformationCase::kOutlineFunction:
       return MakeUnique<TransformationOutlineFunction>(
           message.outline_function());
@@ -215,6 +227,14 @@ std::unique_ptr<Transformation> Transformation::FromMessage(
         kReplaceConstantWithUniform:
       return MakeUnique<TransformationReplaceConstantWithUniform>(
           message.replace_constant_with_uniform());
+    case protobufs::Transformation::TransformationCase::
+        kReplaceCopyMemoryWithLoadStore:
+      return MakeUnique<TransformationReplaceCopyMemoryWithLoadStore>(
+          message.replace_copy_memory_with_load_store());
+    case protobufs::Transformation::TransformationCase::
+        kReplaceCopyObjectWithStoreLoad:
+      return MakeUnique<TransformationReplaceCopyObjectWithStoreLoad>(
+          message.replace_copy_object_with_store_load());
     case protobufs::Transformation::TransformationCase::kReplaceIdWithSynonym:
       return MakeUnique<TransformationReplaceIdWithSynonym>(
           message.replace_id_with_synonym());
@@ -222,6 +242,14 @@ std::unique_ptr<Transformation> Transformation::FromMessage(
         kReplaceLinearAlgebraInstruction:
       return MakeUnique<TransformationReplaceLinearAlgebraInstruction>(
           message.replace_linear_algebra_instruction());
+    case protobufs::Transformation::TransformationCase::
+        kReplaceLoadStoreWithCopyMemory:
+      return MakeUnique<TransformationReplaceLoadStoreWithCopyMemory>(
+          message.replace_load_store_with_copy_memory());
+    case protobufs::Transformation::TransformationCase::
+        kReplaceParamsWithStruct:
+      return MakeUnique<TransformationReplaceParamsWithStruct>(
+          message.replace_params_with_struct());
     case protobufs::Transformation::TransformationCase::kSetFunctionControl:
       return MakeUnique<TransformationSetFunctionControl>(
           message.set_function_control());

@@ -47,6 +47,14 @@ namespace rx
 
 namespace
 {
+constexpr uint32_t kMinDefaultUniformBufferSize = 16 * 1024u;
+// This size is picked based on experience. Majority of devices support 64K
+// maxUniformBufferSize. Since this is per context buffer, a bigger buffer size reduces the
+// number of descriptor set allocations, so we picked the maxUniformBufferSize that most
+// devices supports. It may needs further tuning based on specific device needs and balance
+// between performance and memory usage.
+constexpr uint32_t kPreferredDefaultUniformBufferSize = 64 * 1024u;
+
 // Update the pipeline cache every this many swaps.
 constexpr uint32_t kPipelineCacheVkUpdatePeriod = 60;
 // Per the Vulkan specification, as long as Vulkan 1.1+ is returned by vkEnumerateInstanceVersion,
@@ -113,6 +121,8 @@ VkResult VerifyExtensionsPresent(const RendererVk::ExtensionNameList &haystack,
 constexpr const char *kSkippedMessages[] = {
     // http://anglebug.com/2866
     "UNASSIGNED-CoreValidation-Shader-OutputNotConsumed",
+    // http://anglebug.com/4883
+    "UNASSIGNED-CoreValidation-Shader-InputNotProduced",
     // http://anglebug.com/2796
     "UNASSIGNED-CoreValidation-Shader-PointSizeMissing",
     // http://anglebug.com/3832
@@ -128,6 +138,18 @@ constexpr const char *kSkippedMessages[] = {
     // https://issuetracker.google.com/issues/159493191
     "VUID-vkCmdDraw-None-02690",
     "VUID-vkCmdDrawIndexed-None-02690",
+    // Best Practices Skips issuetracker.google.com/156661359
+    "UNASSIGNED-BestPractices-vkCreateCommandPool-command-buffer-reset",
+    "UNASSIGNED-BestPractices-pipeline-stage-flags",
+    "UNASSIGNED-BestPractices-Error-Result",
+    "UNASSIGNED-BestPractices-vkAllocateMemory-small-allocation",
+    "UNASSIGNED-BestPractices-vkBindMemory-small-dedicated-allocation",
+    "UNASSIGNED-BestPractices-vkAllocateMemory-too-many-objects",
+    "UNASSIGNED-BestPractices-vkCreateDevice-deprecated-extension",
+    "UNASSIGNED-BestPractices-vkCreateRenderPass-image-requires-memory",
+    "UNASSIGNED-BestPractices-vkCreateGraphicsPipelines-too-many-instanced-vertex-buffers",
+    "UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw",
+    "UNASSIGNED-BestPractices-vkCmdClearAttachments-clear-after-load",
 };
 
 // Suppress validation errors that are known
@@ -431,6 +453,7 @@ RendererVk::RendererVk()
       mMaxVertexAttribDivisor(1),
       mMaxVertexAttribStride(0),
       mMinImportedHostPointerAlignment(1),
+      mDefaultUniformBufferSize(kPreferredDefaultUniformBufferSize),
       mDevice(VK_NULL_HANDLE),
       mLastCompletedQueueSerial(mQueueSerialFactory.generate()),
       mCurrentQueueSerial(mQueueSerialFactory.generate()),
@@ -697,6 +720,20 @@ angle::Result RendererVk::initialize(DisplayVk *displayVk,
         enabledInstanceExtensions.empty() ? nullptr : enabledInstanceExtensions.data();
     instanceInfo.enabledLayerCount   = static_cast<uint32_t>(enabledInstanceLayerNames.size());
     instanceInfo.ppEnabledLayerNames = enabledInstanceLayerNames.data();
+
+    VkValidationFeatureEnableEXT enabledFeatures[] = {
+        VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
+    VkValidationFeaturesEXT validationFeatures       = {};
+    validationFeatures.sType                         = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    validationFeatures.enabledValidationFeatureCount = 1;
+    validationFeatures.pEnabledValidationFeatures    = enabledFeatures;
+
+    if (mEnableValidationLayers)
+    {
+        // Enable best practices output which includes perfdoc layer
+        vk::AddToPNextChain(&instanceInfo, &validationFeatures);
+    }
+
     ANGLE_VK_TRY(displayVk, vkCreateInstance(&instanceInfo, nullptr, &mInstance));
 #if defined(ANGLE_SHARED_LIBVULKAN)
     // Load volk if we are linking dynamically
@@ -870,6 +907,10 @@ void RendererVk::queryDeviceExtensionFeatures(const ExtensionNameList &deviceExt
     mExternalMemoryHostProperties.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT;
 
+    mShaderFloat16Int8Features = {};
+    mShaderFloat16Int8Features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+
     mExternalFenceProperties       = {};
     mExternalFenceProperties.sType = VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES;
 
@@ -935,6 +976,12 @@ void RendererVk::queryDeviceExtensionFeatures(const ExtensionNameList &deviceExt
         vk::AddToPNextChain(&deviceFeatures, &mSamplerYcbcrConversionFeatures);
     }
 
+    // Query float16/int8 features
+    if (ExtensionFound(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME, deviceExtensionNames))
+    {
+        vk::AddToPNextChain(&deviceFeatures, &mShaderFloat16Int8Features);
+    }
+
     // Query subgroup properties
     vk::AddToPNextChain(&deviceProperties, &mSubgroupProperties);
 
@@ -979,6 +1026,7 @@ void RendererVk::queryDeviceExtensionFeatures(const ExtensionNameList &deviceExt
     mTransformFeedbackFeatures.pNext        = nullptr;
     mIndexTypeUint8Features.pNext           = nullptr;
     mSamplerYcbcrConversionFeatures.pNext   = nullptr;
+    mShaderFloat16Int8Features.pNext        = nullptr;
 }
 
 angle::Result RendererVk::initializeDevice(DisplayVk *displayVk, uint32_t queueFamilyIndex)
@@ -1078,6 +1126,12 @@ angle::Result RendererVk::initializeDevice(DisplayVk *displayVk, uint32_t queueF
 
     // Initialize features and workarounds.
     initFeatures(displayVk, deviceExtensionNames);
+
+    // Enable VK_KHR_get_memory_requirements2, if supported
+    if (ExtensionFound(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, deviceExtensionNames))
+    {
+        enabledDeviceExtensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+    }
 
     // Selectively enable KHR_MAINTENANCE1 to support viewport flipping.
     if ((getFeatures().flipViewportY.enabled) &&
@@ -1289,6 +1343,12 @@ angle::Result RendererVk::initializeDevice(DisplayVk *displayVk, uint32_t queueF
         vk::AddToPNextChain(&createInfo, &mSamplerYcbcrConversionFeatures);
     }
 
+    if (getFeatures().supportsShaderFloat16.enabled)
+    {
+        enabledDeviceExtensions.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+        vk::AddToPNextChain(&createInfo, &mShaderFloat16Int8Features);
+    }
+
     createInfo.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.flags                 = 0;
     createInfo.queueCreateInfoCount  = 1;
@@ -1345,6 +1405,14 @@ angle::Result RendererVk::initializeDevice(DisplayVk *displayVk, uint32_t queueF
         InitSamplerYcbcrKHRFunctions(mDevice);
     }
 #endif  // !defined(ANGLE_SHARED_LIBVULKAN)
+
+    if (getFeatures().forceMaxUniformBufferSize16KB.enabled)
+    {
+        mDefaultUniformBufferSize = kMinDefaultUniformBufferSize;
+    }
+    // Cap it with the driver limit
+    mDefaultUniformBufferSize = std::min(
+        mDefaultUniformBufferSize, getPhysicalDeviceProperties().limits.maxUniformBufferRange);
 
     // Initialize the vulkan pipeline cache.
     bool success = false;
@@ -1751,6 +1819,29 @@ void RendererVk::initFeatures(DisplayVk *displayVk, const ExtensionNameList &dev
 
     ANGLE_FEATURE_CONDITION(&mFeatures, supportsYUVSamplerConversion,
                             mSamplerYcbcrConversionFeatures.samplerYcbcrConversion != VK_FALSE);
+
+    ANGLE_FEATURE_CONDITION(&mFeatures, supportsShaderFloat16,
+                            mShaderFloat16Int8Features.shaderFloat16 == VK_TRUE);
+
+    // The compute shader used to generate mipmaps uses a 256-wide workgroup.  This path is only
+    // enabled on devices that meet this minimum requirement.  Furthermore,
+    // VK_IMAGE_USAGE_STORAGE_BIT is detrimental to performance on many platforms, on which this
+    // path is not enabled.  Platforms that are known to have better performance with this path are:
+    //
+    // - Nvidia
+    // - AMD
+    //
+    // Additionally, this path is disabled on buggy drivers:
+    //
+    // - AMD/Windows: Unfortunately the trybots use ancient AMD cards and drivers.
+    const uint32_t maxComputeWorkGroupInvocations =
+        mPhysicalDeviceProperties.limits.maxComputeWorkGroupInvocations;
+    ANGLE_FEATURE_CONDITION(
+        &mFeatures, allowGenerateMipmapWithCompute,
+        maxComputeWorkGroupInvocations >= 256 && (isNvidia || (isAMD && !IsWindows())));
+
+    bool isAdreno540 = mPhysicalDeviceProperties.deviceID == angle::kDeviceID_Adreno540;
+    ANGLE_FEATURE_CONDITION(&mFeatures, forceMaxUniformBufferSize16KB, isQualcomm && isAdreno540);
 
     angle::PlatformMethods *platform = ANGLEPlatformCurrent();
     platform->overrideFeaturesVk(platform, &mFeatures);

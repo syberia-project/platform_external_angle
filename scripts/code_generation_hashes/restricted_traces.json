@@ -4,21 +4,25 @@
   "src/tests/perf_tests/restricted_traces/candy_crush_500.tar.gz.sha1":
     "ef00d8872fe818250df07f761d440bfb",
   "src/tests/perf_tests/restricted_traces/egypt_1500.tar.gz.sha1":
-    "e675648c5b16fc52077998621e6300ba",
+    "1d80caa37b937f83c95cd053b1bdd4ac",
   "src/tests/perf_tests/restricted_traces/gen_restricted_traces.py":
-    "aa5043eaa7ba7d620ff2a3b40d67bae2",
+    "79d6e6bcdcea1bf7236091183d34dd9e",
   "src/tests/perf_tests/restricted_traces/manhattan_10.tar.gz.sha1":
-    "7f5e3e8b4d7ec07232c54d41964006ea",
+    "752781119592a190cc02b773adf38fc3",
+  "src/tests/perf_tests/restricted_traces/nba2k20_800.tar.gz.sha1":
+    "8116f333229108515aa4824d1c922d0b",
   "src/tests/perf_tests/restricted_traces/restricted_traces.json":
-    "de1d1c2086bd4f5249f5bdbdf0d2a854",
+    "aefeb34167e491c2b869b7fe8c51e3ca",
+  "src/tests/perf_tests/restricted_traces/restricted_traces_autogen.cpp":
+    "f2f54a682b7d793e0d3a380a00d278e2",
   "src/tests/perf_tests/restricted_traces/restricted_traces_autogen.gni":
-    "25de059705d29d797e246aae027498ec",
+    "7edfef5f418500f6092127065e3e894f",
   "src/tests/perf_tests/restricted_traces/restricted_traces_autogen.h":
-    "68a11667d674549018cf06e1a759c383",
+    "961c4192564a6198c8114969baa32bb7",
   "src/tests/perf_tests/restricted_traces/subway_surfer_500.tar.gz.sha1":
     "a47a797dd227f5025439b47cee80dbc9",
   "src/tests/perf_tests/restricted_traces/temple_run_300.tar.gz.sha1":
     "e912c0a0e93efe73088211d63b4a30af",
   "src/tests/perf_tests/restricted_traces/trex_200.tar.gz.sha1":
-    "b4357f6a2205ada41597437a4fa9bbab"
+    "ca2d91a527f4a4317f944afc96c35268"
 }

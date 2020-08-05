@@ -147,7 +147,8 @@ constexpr size_t kMaxConfigNameLen = 100;
 std::array<char, kMaxConfigNameLen> gSelectedConfig;
 }  // namespace
 
-bool gSeparateProcessPerConfig = false;
+bool gSeparateProcessPerConfig       = false;
+bool gEnableANGLEPerTestCaptureLabel = false;
 
 bool IsConfigSelected()
 {
@@ -409,10 +410,8 @@ bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters 
                 }
                 return true;
             case EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE:
-                if (!IsMetalRendererAvailable() || IsIntel(vendorID))
+                if (!IsMetalRendererAvailable())
                 {
-                    // TODO(hqle): Intel metal tests seem to have problems. Disable for now.
-                    // http://anglebug.com/4133
                     return false;
                 }
                 return true;

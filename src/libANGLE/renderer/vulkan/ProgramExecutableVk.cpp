@@ -188,8 +188,11 @@ void ProgramExecutableVk::reset(ContextVk *contextVk)
     }
 
     mTextureDescriptorsCache.clear();
-    mDescriptorBuffersCache.clear();
     mUniformsAndXfbDescriptorSetCache.clear();
+
+    // Initialize with a unique BufferSerial
+    vk::ResourceSerialFactory &factory = contextVk->getRenderer()->getResourceSerialFactory();
+    mCurrentDefaultUniformBufferSerial = factory.generateBufferSerial();
 
     for (ProgramInfo &programInfo : mGraphicsProgramInfos)
     {
@@ -338,6 +341,8 @@ angle::Result ProgramExecutableVk::allocUniformAndXfbDescriptorSet(
     const vk::UniformsAndXfbDesc &xfbBufferDesc,
     bool *newDescriptorSetAllocated)
 {
+    mCurrentDefaultUniformBufferSerial = xfbBufferDesc.getDefaultUniformBufferSerial();
+
     // Look up in the cache first
     auto iter = mUniformsAndXfbDescriptorSetCache.find(xfbBufferDesc);
     if (iter != mUniformsAndXfbDescriptorSetCache.end())
@@ -534,7 +539,7 @@ void ProgramExecutableVk::addTextureDescriptorSetDesc(
                 // Always take the texture's sampler, that's only way to get to yuv conversion for
                 // externalFormat
                 const vk::Sampler &immutableSampler =
-                    (*activeTextures)[textureUnit].texture->getSampler();
+                    (*activeTextures)[textureUnit].texture->getSampler().get();
                 descOut->update(info.binding, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, arraySize,
                                 activeStages, &immutableSampler);
             }
@@ -875,20 +880,18 @@ void ProgramExecutableVk::updateDefaultUniformsDescriptorSet(
         return;
     }
 
-    VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteInfo();
-    VkDescriptorBufferInfo &bufferInfo = contextVk->allocBufferInfo();
+    VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteDescriptorSet();
+    VkDescriptorBufferInfo &bufferInfo = contextVk->allocDescriptorBufferInfo();
 
     if (!defaultUniformBlock.uniformData.empty())
     {
         bufferInfo.buffer = defaultUniformBuffer->getBuffer().getHandle();
-        mDescriptorBuffersCache.emplace_back(defaultUniformBuffer);
     }
     else
     {
         vk::BufferHelper &emptyBuffer = contextVk->getEmptyBuffer();
         emptyBuffer.retain(&contextVk->getResourceUseList());
         bufferInfo.buffer = emptyBuffer.getBuffer().getHandle();
-        mDescriptorBuffersCache.emplace_back(&emptyBuffer);
     }
 
     bufferInfo.offset = 0;
@@ -967,8 +970,8 @@ void ProgramExecutableVk::updateBuffersDescriptorSet(ContextVk *contextVk,
                       "VkDeviceSize too small");
         ASSERT(bufferBinding.getSize() >= 0);
 
-        VkDescriptorBufferInfo &bufferInfo = contextVk->allocBufferInfo();
-        VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteInfo();
+        VkDescriptorBufferInfo &bufferInfo = contextVk->allocDescriptorBufferInfo();
+        VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteDescriptorSet();
 
         BufferVk *bufferVk             = vk::GetImpl(bufferBinding.get());
         vk::BufferHelper &bufferHelper = bufferVk->getBuffer();
@@ -1037,8 +1040,8 @@ void ProgramExecutableVk::updateAtomicCounterBuffersDescriptorSet(
             continue;
         }
 
-        VkDescriptorBufferInfo &bufferInfo = contextVk->allocBufferInfo();
-        VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteInfo();
+        VkDescriptorBufferInfo &bufferInfo = contextVk->allocDescriptorBufferInfo();
+        VkWriteDescriptorSet &writeInfo    = contextVk->allocWriteDescriptorSet();
 
         BufferVk *bufferVk             = vk::GetImpl(bufferBinding.get());
         vk::BufferHelper &bufferHelper = bufferVk->getBuffer();
@@ -1061,8 +1064,8 @@ void ProgramExecutableVk::updateAtomicCounterBuffersDescriptorSet(
     vk::BufferHelper &emptyBuffer = contextVk->getEmptyBuffer();
     emptyBuffer.retain(&contextVk->getResourceUseList());
     size_t count                        = (~writtenBindings).count();
-    VkDescriptorBufferInfo *bufferInfos = &contextVk->allocBufferInfos(count);
-    VkWriteDescriptorSet *writeInfos    = &contextVk->allocWriteInfos(count);
+    VkDescriptorBufferInfo *bufferInfos = contextVk->allocDescriptorBufferInfos(count);
+    VkWriteDescriptorSet *writeInfos    = contextVk->allocWriteDescriptorSets(count);
     size_t writeCount                   = 0;
     for (size_t binding : ~writtenBindings)
     {
@@ -1137,8 +1140,8 @@ angle::Result ProgramExecutableVk::updateImagesDescriptorSet(
             // TODO(syoussefi): Support image data reinterpretation by using binding.format.
             // http://anglebug.com/3563
 
-            VkDescriptorImageInfo &imageInfo = contextVk->allocImageInfo();
-            VkWriteDescriptorSet &writeInfo  = contextVk->allocWriteInfo();
+            VkDescriptorImageInfo &imageInfo = contextVk->allocDescriptorImageInfo();
+            VkWriteDescriptorSet &writeInfo  = contextVk->allocWriteDescriptorSet();
 
             imageInfo.sampler     = VK_NULL_HANDLE;
             imageInfo.imageView   = imageView->getHandle();
@@ -1212,7 +1215,6 @@ angle::Result ProgramExecutableVk::updateTransformFeedbackDescriptorSet(
 
     if (newDescriptorSetAllocated)
     {
-        mDescriptorBuffersCache.clear();
         for (const gl::ShaderType shaderType : executable.getLinkedShaderStages())
         {
             updateDefaultUniformsDescriptorSet(shaderType, defaultUniformBlocks[shaderType],
@@ -1329,21 +1331,17 @@ angle::Result ProgramExecutableVk::updateTexturesDescriptorSet(ContextVk *contex
                 mappedSamplerNameToArrayOffset[mappedSamplerName] += arraySize;
             }
 
-            VkDescriptorImageInfo *imageInfos = &contextVk->allocImageInfos(arraySize);
-            VkWriteDescriptorSet *writeInfos  = &contextVk->allocWriteInfos(arraySize);
+            VkDescriptorImageInfo *imageInfos = contextVk->allocDescriptorImageInfos(arraySize);
+            VkWriteDescriptorSet *writeInfos  = contextVk->allocWriteDescriptorSets(arraySize);
             for (uint32_t arrayElement = 0; arrayElement < arraySize; ++arrayElement)
             {
-                GLuint textureUnit   = samplerBinding.boundTextureUnits[arrayElement];
-                TextureVk *textureVk = activeTextures[textureUnit].texture;
-                SamplerVk *samplerVk = activeTextures[textureUnit].sampler;
+                GLuint textureUnit                 = samplerBinding.boundTextureUnits[arrayElement];
+                TextureVk *textureVk               = activeTextures[textureUnit].texture;
+                const vk::SamplerHelper &samplerVk = *activeTextures[textureUnit].sampler;
 
                 vk::ImageHelper &image = textureVk->getImage();
 
-                // Use bound sampler object if one present, otherwise use texture's sampler
-                const vk::Sampler &sampler =
-                    (samplerVk != nullptr) ? samplerVk->getSampler() : textureVk->getSampler();
-
-                imageInfos[arrayElement].sampler     = sampler.getHandle();
+                imageInfos[arrayElement].sampler     = samplerVk.get().getHandle();
                 imageInfos[arrayElement].imageLayout = image.getCurrentLayout();
 
                 if (emulateSeamfulCubeMapSampling)
@@ -1362,7 +1360,7 @@ angle::Result ProgramExecutableVk::updateTexturesDescriptorSet(ContextVk *contex
 
                 if (textureVk->getImage().hasImmutableSampler())
                 {
-                    imageInfos[arrayElement].sampler = textureVk->getSampler().getHandle();
+                    imageInfos[arrayElement].sampler = textureVk->getSampler().get().getHandle();
                 }
                 ShaderInterfaceVariableInfoMap &variableInfoMap = mVariableInfoMap[shaderType];
                 const std::string samplerName =
@@ -1454,11 +1452,6 @@ angle::Result ProgramExecutableVk::updateDescriptorSets(ContextVk *contextVk,
         commandBuffer->bindDescriptorSets(getPipelineLayout(), pipelineBindPoint,
                                           descriptorSetIndex, 1, &descSet, uniformBlockOffsetCount,
                                           mDynamicBufferOffsets.data());
-    }
-
-    for (vk::BufferHelper *buffer : mDescriptorBuffersCache)
-    {
-        buffer->retain(&contextVk->getResourceUseList());
     }
 
     return angle::Result::Continue;

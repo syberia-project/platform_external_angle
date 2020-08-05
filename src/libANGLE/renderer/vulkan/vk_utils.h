@@ -292,6 +292,7 @@ class MemoryProperties final : angle::NonCopyable
     MemoryProperties();
 
     void init(VkPhysicalDevice physicalDevice);
+    bool hasLazilyAllocatedMemory() const;
     angle::Result findCompatibleMemoryIndex(Context *context,
                                             const VkMemoryRequirements &memoryRequirements,
                                             VkMemoryPropertyFlags requestedMemoryPropertyFlags,
@@ -690,6 +691,59 @@ class ClearValuesArray final
     gl::AttachmentArray<VkClearValue> mValues;
     gl::AttachmentsMask mEnabled;
 };
+
+// Defines Serials for Vulkan objects.
+#define ANGLE_VK_SERIAL_OP(X) \
+    X(Buffer)                 \
+    X(ImageView)              \
+    X(Sampler)
+
+#define ANGLE_DEFINE_VK_SERIAL_TYPE(Type)                                     \
+    class Type##Serial                                                        \
+    {                                                                         \
+      public:                                                                 \
+        constexpr Type##Serial() : mSerial(kInvalid) {}                       \
+        constexpr explicit Type##Serial(uint32_t serial) : mSerial(serial) {} \
+                                                                              \
+        constexpr bool operator==(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial == other.mSerial;                                  \
+        }                                                                     \
+        constexpr bool operator!=(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial != other.mSerial;                                  \
+        }                                                                     \
+        constexpr uint32_t getValue() const { return mSerial; }               \
+        constexpr bool valid() const { return mSerial != kInvalid; }          \
+                                                                              \
+      private:                                                                \
+        uint32_t mSerial;                                                     \
+        static constexpr uint32_t kInvalid = 0;                               \
+    };                                                                        \
+    static constexpr Type##Serial kInvalid##Type##Serial = Type##Serial();
+
+ANGLE_VK_SERIAL_OP(ANGLE_DEFINE_VK_SERIAL_TYPE)
+
+#define ANGLE_DECLARE_GEN_VK_SERIAL(Type) Type##Serial generate##Type##Serial();
+
+class ResourceSerialFactory final : angle::NonCopyable
+{
+  public:
+    ResourceSerialFactory();
+    ~ResourceSerialFactory();
+
+    ANGLE_VK_SERIAL_OP(ANGLE_DECLARE_GEN_VK_SERIAL)
+
+  private:
+    uint32_t issueSerial();
+
+    // Kept atomic so it can be accessed from multiple Context threads at once.
+    std::atomic<uint32_t> mCurrentUniqueSerial;
+};
 }  // namespace vk
 
 #if !defined(ANGLE_SHARED_LIBVULKAN)
@@ -731,6 +785,8 @@ void InitExternalFenceFdFunctions(VkInstance instance);
 void InitExternalSemaphoreCapabilitiesFunctions(VkInstance instance);
 
 #endif  // !defined(ANGLE_SHARED_LIBVULKAN)
+
+GLenum CalculateGenerateMipmapFilter(ContextVk *contextVk, const vk::Format &format);
 
 namespace gl_vk
 {

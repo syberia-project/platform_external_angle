@@ -285,6 +285,33 @@ EventName GetTraceEventName(const char *title, uint32_t counter)
 }
 }  // anonymous namespace
 
+ANGLE_INLINE void ContextVk::flushDescriptorSetUpdates()
+{
+    if (mWriteDescriptorSets.empty())
+    {
+        ASSERT(mDescriptorBufferInfos.empty());
+        ASSERT(mDescriptorImageInfos.empty());
+        return;
+    }
+
+    vkUpdateDescriptorSets(getDevice(), static_cast<uint32_t>(mWriteDescriptorSets.size()),
+                           mWriteDescriptorSets.data(), 0, nullptr);
+    mWriteDescriptorSets.clear();
+    mDescriptorBufferInfos.clear();
+    mDescriptorImageInfos.clear();
+}
+
+// ContextVk::ScopedDescriptorSetUpdates implementation.
+class ContextVk::ScopedDescriptorSetUpdates final : angle::NonCopyable
+{
+  public:
+    ANGLE_INLINE ScopedDescriptorSetUpdates(ContextVk *contextVk) : mContextVk(contextVk) {}
+    ANGLE_INLINE ~ScopedDescriptorSetUpdates() { mContextVk->flushDescriptorSetUpdates(); }
+
+  private:
+    ContextVk *mContextVk;
+};
+
 ContextVk::DriverUniformsDescriptorSet::DriverUniformsDescriptorSet()
     : descriptorSet(VK_NULL_HANDLE), dynamicOffset(0)
 {}
@@ -297,6 +324,7 @@ void ContextVk::DriverUniformsDescriptorSet::init(RendererVk *rendererVk)
         rendererVk->getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment);
     dynamicBuffer.init(rendererVk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, minAlignment,
                        kDriverUniformsAllocatorPageSize, true);
+    descriptorSetCache.clear();
 }
 
 void ContextVk::DriverUniformsDescriptorSet::destroy(RendererVk *renderer)
@@ -304,6 +332,7 @@ void ContextVk::DriverUniformsDescriptorSet::destroy(RendererVk *renderer)
     descriptorSetLayout.reset();
     descriptorPoolBinding.reset();
     dynamicBuffer.destroy(renderer);
+    descriptorSetCache.clear();
 }
 
 // CommandBatch implementation.
@@ -628,11 +657,9 @@ ContextVk::ContextVk(const gl::State &state, gl::ErrorSet *errorSet, RendererVk 
       mGpuEventTimestampOrigin(0),
       mPrimaryBufferCounter(0),
       mRenderPassCounter(0),
+      mWriteDescriptorSetCounter(0),
       mContextPriority(renderer->getDriverPriority(GetContextPriority(state))),
       mCurrentIndirectBuffer(nullptr),
-      mBufferInfos(),
-      mImageInfos(),
-      mWriteInfos(),
       mShareGroupVk(vk::GetImpl(state.getShareGroup()))
 {
     ANGLE_TRACE_EVENT0("gpu.angle", "ContextVk::ContextVk");
@@ -724,9 +751,9 @@ ContextVk::ContextVk(const gl::State &state, gl::ErrorSet *errorSet, RendererVk 
     mPipelineDirtyBitsMask.reset(gl::State::DIRTY_BIT_TEXTURE_BINDINGS);
 
     // Reserve reasonable amount of spaces so that for majority of apps we don't need to grow at all
-    mBufferInfos.reserve(kDescriptorBufferInfosInitialSize);
-    mImageInfos.reserve(kDescriptorImageInfosInitialSize);
-    mWriteInfos.reserve(kDescriptorWriteInfosInitialSize);
+    mDescriptorBufferInfos.reserve(kDescriptorBufferInfosInitialSize);
+    mDescriptorImageInfos.reserve(kDescriptorImageInfosInitialSize);
+    mWriteDescriptorSets.reserve(kDescriptorWriteInfosInitialSize);
 }
 
 ContextVk::~ContextVk() = default;
@@ -748,7 +775,9 @@ void ContextVk::onDestroy(const gl::Context *context)
 
     mDriverUniformsDescriptorPool.destroy(device);
 
+    mDefaultUniformStorage.release(mRenderer);
     mEmptyBuffer.release(mRenderer);
+    mStagingBufferStorage.release(mRenderer);
 
     for (vk::DynamicBuffer &defaultBuffer : mDefaultAttribBuffers)
     {
@@ -766,7 +795,7 @@ void ContextVk::onDestroy(const gl::Context *context)
 
     mResourceUseList.releaseResourceUses();
 
-    mUtils.destroy(device);
+    mUtils.destroy(mRenderer);
 
     mRenderPassCache.destroy(device);
     mSubmitFence.reset(device);
@@ -882,6 +911,11 @@ angle::Result ContextVk::initialize()
                                 TRACE_EVENT_PHASE_BEGIN, eventName));
     }
 
+    size_t minAlignment = static_cast<size_t>(
+        mRenderer->getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment);
+    mDefaultUniformStorage.init(mRenderer, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, minAlignment,
+                                mRenderer->getDefaultUniformBufferSize(), true);
+
     // Initialize an "empty" buffer for use with default uniform blocks where there are no uniforms,
     // or atomic counter buffer array indices that are unused.
     constexpr VkBufferUsageFlags kEmptyBufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -897,6 +931,13 @@ angle::Result ContextVk::initialize()
     emptyBufferInfo.pQueueFamilyIndices         = nullptr;
     constexpr VkMemoryPropertyFlags kMemoryType = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     ANGLE_TRY(mEmptyBuffer.init(this, emptyBufferInfo, kMemoryType));
+
+    constexpr VkImageUsageFlags kStagingBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    size_t stagingBufferAlignment =
+        static_cast<size_t>(mRenderer->getPhysicalDeviceProperties().limits.minMemoryMapAlignment);
+    constexpr size_t kStagingBufferSize = 1024u * 1024u;  // 1M
+    mStagingBufferStorage.init(mRenderer, kStagingBufferUsageFlags, stagingBufferAlignment,
+                               kStagingBufferSize, true);
 
     return angle::Result::Continue;
 }
@@ -1486,10 +1527,10 @@ angle::Result ContextVk::handleDirtyGraphicsTransformFeedbackBuffersEmulation(
     }
 
     // TODO(http://anglebug.com/3570): Need to update to handle Program Pipelines
-    vk::BufferHelper *uniformBuffer      = mProgram->getDefaultUniformBuffer();
+    vk::BufferHelper *uniformBuffer      = mDefaultUniformStorage.getCurrentBuffer();
     vk::UniformsAndXfbDesc xfbBufferDesc = transformFeedbackVk->getTransformFeedbackDesc();
     xfbBufferDesc.updateDefaultUniformBuffer(uniformBuffer ? uniformBuffer->getBufferSerial()
-                                                           : kInvalidBufferSerial);
+                                                           : vk::kInvalidBufferSerial);
     return mProgram->getExecutable().updateTransformFeedbackDescriptorSet(
         mProgram->getState(), mProgram->getDefaultUniformBlocks(), uniformBuffer, this,
         xfbBufferDesc);
@@ -1580,10 +1621,21 @@ angle::Result ContextVk::handleDirtyDescriptorSets(const gl::Context *context,
 void ContextVk::updateOverlayOnPresent()
 {
     // Update overlay if active.
-    gl::RunningGraphWidget *renderPassCount =
-        mState.getOverlay()->getRunningGraphWidget(gl::WidgetId::VulkanRenderPassCount);
-    renderPassCount->add(mRenderPassCommands->getAndResetCounter());
-    renderPassCount->next();
+    {
+        gl::RunningGraphWidget *renderPassCount =
+            mState.getOverlay()->getRunningGraphWidget(gl::WidgetId::VulkanRenderPassCount);
+        renderPassCount->add(mRenderPassCommands->getAndResetCounter());
+        renderPassCount->next();
+    }
+
+    {
+        gl::RunningGraphWidget *writeDescriptorSetCount =
+            mState.getOverlay()->getRunningGraphWidget(gl::WidgetId::VulkanWriteDescriptorSetCount);
+        writeDescriptorSetCount->add(mWriteDescriptorSetCounter);
+        writeDescriptorSetCount->next();
+
+        mWriteDescriptorSetCounter = 0;
+    }
 }
 
 angle::Result ContextVk::submitFrame(const VkSubmitInfo &submitInfo,
@@ -1689,7 +1741,7 @@ angle::Result ContextVk::synchronizeCpuGpuTime()
     // Make sure nothing is running
     ASSERT(!hasRecordedCommands());
 
-    ANGLE_TRACE_EVENT0("gpu.angle", "RendererVk::synchronizeCpuGpuTime");
+    ANGLE_TRACE_EVENT0("gpu.angle", "ContextVk::synchronizeCpuGpuTime");
 
     // Create a query used to receive the GPU timestamp
     vk::QueryHelper timestampQuery;
@@ -2393,12 +2445,15 @@ void ContextVk::optimizeRenderPassForPresent(VkFramebuffer framebufferHandle)
         mRenderPassCommands->invalidateRenderPassStencilAttachment(depthStencilAttachmentIndexVk);
         mRenderPassCommands->invalidateRenderPassDepthAttachment(depthStencilAttachmentIndexVk);
         // Mark content as invalid so that we will not load them in next renderpass
-        depthStencilRenderTarget->invalidateContent();
+        depthStencilRenderTarget->invalidateEntireContent();
     }
 
     // Use finalLayout instead of extra barrier for layout change to present
     vk::ImageHelper &image = color0RenderTarget->getImageForWrite();
     image.setCurrentImageLayout(vk::ImageLayout::Present);
+    // TODO(syoussefi):  We currently don't store the layout of the resolve attachments, so once
+    // multisampled backbuffers are optimized to use resolve attachments, this information needs to
+    // be stored somewhere.  http://anglebug.com/4836
     mRenderPassCommands->updateRenderPassAttachmentFinalLayout(0, image.getCurrentImageLayout());
 }
 
@@ -2652,7 +2707,7 @@ angle::Result ContextVk::updateScissor(const gl::State &glState)
     // a render pass, the scissor is disabled and a draw call is issued to affect the whole
     // framebuffer.
     gl::Rectangle scissoredRenderArea = framebufferVk->getRotatedScissoredRenderArea(this);
-    if (!mRenderPassCommands->empty())
+    if (mRenderPassCommands->started())
     {
         if (!mRenderPassCommands->getRenderArea().encloses(scissoredRenderArea))
         {
@@ -2683,6 +2738,15 @@ void ContextVk::invalidateProgramBindingHelper(const gl::State &glState)
             // A bound program always overrides a program pipeline
             mExecutable = &mProgramPipeline->getExecutable();
         }
+    }
+
+    if (mProgram)
+    {
+        mProgram->onProgramBind();
+    }
+    else if (mProgramPipeline)
+    {
+        mProgramPipeline->onProgramBind(this);
     }
 }
 
@@ -2786,6 +2850,10 @@ angle::Result ContextVk::syncState(const gl::Context *context,
                 mGraphicsPipelineDesc->updateDepthTestEnabled(&mGraphicsPipelineTransition,
                                                               glState.getDepthStencilState(),
                                                               glState.getDrawFramebuffer());
+                if (mState.isDepthTestEnabled() && mRenderPassCommands->started())
+                {
+                    mRenderPassCommands->setDepthTestEnabled();
+                }
                 break;
             case gl::State::DIRTY_BIT_DEPTH_FUNC:
                 mGraphicsPipelineDesc->updateDepthFunc(&mGraphicsPipelineTransition,
@@ -2800,6 +2868,10 @@ angle::Result ContextVk::syncState(const gl::Context *context,
                 mGraphicsPipelineDesc->updateStencilTestEnabled(&mGraphicsPipelineTransition,
                                                                 glState.getDepthStencilState(),
                                                                 glState.getDrawFramebuffer());
+                if (mState.isStencilTestEnabled() && mRenderPassCommands->started())
+                {
+                    mRenderPassCommands->setStencilTestEnabled();
+                }
                 break;
             case gl::State::DIRTY_BIT_STENCIL_FUNCS_FRONT:
                 mGraphicsPipelineDesc->updateStencilFrontFuncs(&mGraphicsPipelineTransition,
@@ -3535,11 +3607,9 @@ angle::Result ContextVk::handleDirtyGraphicsDriverUniforms(const gl::Context *co
 {
     // Allocate a new region in the dynamic buffer.
     uint8_t *ptr;
-    VkBuffer buffer;
     bool newBuffer;
     ANGLE_TRY(allocateDriverUniforms(sizeof(GraphicsDriverUniforms),
-                                     &mDriverUniforms[PipelineType::Graphics], &buffer, &ptr,
-                                     &newBuffer));
+                                     &mDriverUniforms[PipelineType::Graphics], &ptr, &newBuffer));
 
     gl::Rectangle glViewport = mState.getViewport();
     float halfRenderAreaWidth =
@@ -3627,7 +3697,7 @@ angle::Result ContextVk::handleDirtyGraphicsDriverUniforms(const gl::Context *co
     writeAtomicCounterBufferDriverUniformOffsets(driverUniforms->acbBufferOffsets.data(),
                                                  driverUniforms->acbBufferOffsets.size());
 
-    return updateDriverUniformsDescriptorSet(buffer, newBuffer, sizeof(GraphicsDriverUniforms),
+    return updateDriverUniformsDescriptorSet(newBuffer, sizeof(GraphicsDriverUniforms),
                                              &mDriverUniforms[PipelineType::Graphics]);
 }
 
@@ -3636,11 +3706,9 @@ angle::Result ContextVk::handleDirtyComputeDriverUniforms(const gl::Context *con
 {
     // Allocate a new region in the dynamic buffer.
     uint8_t *ptr;
-    VkBuffer buffer;
     bool newBuffer;
     ANGLE_TRY(allocateDriverUniforms(sizeof(ComputeDriverUniforms),
-                                     &mDriverUniforms[PipelineType::Compute], &buffer, &ptr,
-                                     &newBuffer));
+                                     &mDriverUniforms[PipelineType::Compute], &ptr, &newBuffer));
 
     // Copy and flush to the device.
     ComputeDriverUniforms *driverUniforms = reinterpret_cast<ComputeDriverUniforms *>(ptr);
@@ -3649,7 +3717,7 @@ angle::Result ContextVk::handleDirtyComputeDriverUniforms(const gl::Context *con
     writeAtomicCounterBufferDriverUniformOffsets(driverUniforms->acbBufferOffsets.data(),
                                                  driverUniforms->acbBufferOffsets.size());
 
-    return updateDriverUniformsDescriptorSet(buffer, newBuffer, sizeof(ComputeDriverUniforms),
+    return updateDriverUniformsDescriptorSet(newBuffer, sizeof(ComputeDriverUniforms),
                                              &mDriverUniforms[PipelineType::Compute]);
 }
 
@@ -3683,7 +3751,6 @@ angle::Result ContextVk::handleDirtyComputeDriverUniformsBinding(const gl::Conte
 
 angle::Result ContextVk::allocateDriverUniforms(size_t driverUniformsSize,
                                                 DriverUniformsDescriptorSet *driverUniforms,
-                                                VkBuffer *bufferOut,
                                                 uint8_t **ptrOut,
                                                 bool *newBufferOut)
 {
@@ -3692,7 +3759,7 @@ angle::Result ContextVk::allocateDriverUniforms(size_t driverUniformsSize,
     // into context's mResourceUseList which will ensure they get tagged with queue serial number
     // before moving them into the free list.
     VkDeviceSize offset;
-    ANGLE_TRY(driverUniforms->dynamicBuffer.allocate(this, driverUniformsSize, ptrOut, bufferOut,
+    ANGLE_TRY(driverUniforms->dynamicBuffer.allocate(this, driverUniformsSize, ptrOut, nullptr,
                                                      &offset, newBufferOut));
 
     driverUniforms->dynamicOffset = static_cast<uint32_t>(offset);
@@ -3701,7 +3768,6 @@ angle::Result ContextVk::allocateDriverUniforms(size_t driverUniformsSize,
 }
 
 angle::Result ContextVk::updateDriverUniformsDescriptorSet(
-    VkBuffer buffer,
     bool newBuffer,
     size_t driverUniformsSize,
     DriverUniformsDescriptorSet *driverUniforms)
@@ -3713,18 +3779,28 @@ angle::Result ContextVk::updateDriverUniformsDescriptorSet(
         return angle::Result::Continue;
     }
 
+    const vk::BufferHelper *buffer = driverUniforms->dynamicBuffer.getCurrentBuffer();
+    vk::BufferSerial bufferSerial  = buffer->getBufferSerial();
+    // Look up in the cache first
+    auto iter = driverUniforms->descriptorSetCache.find(bufferSerial);
+    if (iter != driverUniforms->descriptorSetCache.end())
+    {
+        driverUniforms->descriptorSet = iter->second;
+        return angle::Result::Continue;
+    }
+
     // Allocate a new descriptor set.
     ANGLE_TRY(mDriverUniformsDescriptorPool.allocateSets(
         this, driverUniforms->descriptorSetLayout.get().ptr(), 1,
         &driverUniforms->descriptorPoolBinding, &driverUniforms->descriptorSet));
 
     // Update the driver uniform descriptor set.
-    VkDescriptorBufferInfo &bufferInfo = allocBufferInfo();
-    bufferInfo.buffer                  = buffer;
+    VkDescriptorBufferInfo &bufferInfo = allocDescriptorBufferInfo();
+    bufferInfo.buffer                  = buffer->getBuffer().getHandle();
     bufferInfo.offset                  = 0;
     bufferInfo.range                   = driverUniformsSize;
 
-    VkWriteDescriptorSet &writeInfo = allocWriteInfo();
+    VkWriteDescriptorSet &writeInfo = allocWriteDescriptorSet();
     writeInfo.sType                 = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writeInfo.dstSet                = driverUniforms->descriptorSet;
     writeInfo.dstBinding            = 0;
@@ -3734,6 +3810,9 @@ angle::Result ContextVk::updateDriverUniformsDescriptorSet(
     writeInfo.pImageInfo            = nullptr;
     writeInfo.pTexelBufferView      = nullptr;
     writeInfo.pBufferInfo           = &bufferInfo;
+
+    // Add into descriptor set cache
+    driverUniforms->descriptorSetCache.emplace(bufferSerial, driverUniforms->descriptorSet);
 
     return angle::Result::Continue;
 }
@@ -3789,30 +3868,21 @@ angle::Result ContextVk::updateActiveTextures(const gl::Context *context)
         }
 
         TextureVk *textureVk = vk::GetImpl(texture);
+        ASSERT(textureVk != nullptr);
 
-        SamplerVk *samplerVk;
-        SamplerSerial samplerSerial;
-        if (sampler == nullptr)
-        {
-            samplerVk     = nullptr;
-            samplerSerial = rx::kInvalidSamplerSerial;
-        }
-        else
-        {
-            samplerVk     = vk::GetImpl(sampler);
-            samplerSerial = samplerVk->getSerial();
-        }
+        const vk::SamplerHelper &samplerVk =
+            sampler ? vk::GetImpl(sampler)->getSampler() : textureVk->getSampler();
+
+        mActiveTextures[textureUnit].texture = textureVk;
+        mActiveTextures[textureUnit].sampler = &samplerVk;
+
+        vk::ImageViewSubresourceSerial imageViewSerial = textureVk->getImageViewSubresourceSerial();
+        mActiveTexturesDesc.update(textureUnit, imageViewSerial, samplerVk.getSamplerSerial());
 
         if (textureVk->getImage().hasImmutableSampler())
         {
             haveImmutableSampler = true;
         }
-
-        mActiveTextures[textureUnit].texture = textureVk;
-        mActiveTextures[textureUnit].sampler = samplerVk;
-        // Cache serials from sampler and texture, but re-use texture if no sampler bound
-        ASSERT(textureVk != nullptr);
-        mActiveTexturesDesc.update(textureUnit, textureVk->getSerial(), samplerSerial);
     }
 
     if (haveImmutableSampler)
@@ -3899,7 +3969,7 @@ angle::Result ContextVk::updateActiveImages(const gl::Context *context,
 bool ContextVk::hasRecordedCommands()
 {
     ASSERT(mOutsideRenderPassCommands && mRenderPassCommands);
-    return !mOutsideRenderPassCommands->empty() || !mRenderPassCommands->empty() ||
+    return !mOutsideRenderPassCommands->empty() || mRenderPassCommands->started() ||
            mHasPrimaryCommands;
 }
 
@@ -3947,6 +4017,8 @@ angle::Result ContextVk::flushImpl(const vk::Semaphore *signalSemaphore)
     {
         driverUniform.dynamicBuffer.releaseInFlightBuffersToResourceUseList(this);
     }
+    mDefaultUniformStorage.releaseInFlightBuffersToResourceUseList(this);
+    mStagingBufferStorage.releaseInFlightBuffersToResourceUseList(this);
 
     if (mRenderer->getFeatures().enableCommandProcessingThread.enabled)
     {
@@ -3970,7 +4042,9 @@ angle::Result ContextVk::flushImpl(const vk::Semaphore *signalSemaphore)
 
     ANGLE_TRY(startPrimaryCommandBuffer());
 
-    mRenderPassCounter = 0;
+    mRenderPassCounter         = 0;
+    mWriteDescriptorSetCounter = 0;
+
     mWaitSemaphores.clear();
     mWaitSemaphoreStageMasks.clear();
 
@@ -4283,8 +4357,6 @@ angle::Result ContextVk::onImageRead(VkImageAspectFlags aspectFlags,
 {
     ASSERT(!image->isReleasedToExternal());
 
-    ANGLE_TRY(endRenderPass());
-
     if (image->isLayoutChangeNecessary(imageLayout))
     {
         vk::CommandBuffer *commandBuffer;
@@ -4300,8 +4372,6 @@ angle::Result ContextVk::onImageWrite(VkImageAspectFlags aspectFlags,
                                       vk::ImageHelper *image)
 {
     ASSERT(!image->isReleasedToExternal());
-
-    ANGLE_TRY(endRenderPass());
 
     // Barriers are always required for image writes.
     ASSERT(image->isLayoutChangeNecessary(imageLayout));
@@ -4321,6 +4391,7 @@ angle::Result ContextVk::flushAndBeginRenderPass(
     const gl::Rectangle &renderArea,
     const vk::RenderPassDesc &renderPassDesc,
     const vk::AttachmentOpsArray &renderPassAttachmentOps,
+    const uint32_t depthStencilAttachmentIndex,
     const vk::ClearValuesArray &clearValues,
     vk::CommandBuffer **commandBufferOut)
 {
@@ -4331,7 +4402,8 @@ angle::Result ContextVk::flushAndBeginRenderPass(
     ANGLE_TRY(endRenderPassAndGetCommandBuffer(&outsideRenderPassCommandBuffer));
 
     mRenderPassCommands->beginRenderPass(framebuffer, renderArea, renderPassDesc,
-                                         renderPassAttachmentOps, clearValues, commandBufferOut);
+                                         renderPassAttachmentOps, depthStencilAttachmentIndex,
+                                         clearValues, commandBufferOut);
     mRenderPassFramebuffer = framebuffer.getHandle();
     return angle::Result::Continue;
 }
@@ -4352,6 +4424,15 @@ angle::Result ContextVk::startRenderPass(gl::Rectangle renderArea,
             this, mRenderPassCommandBuffer);
     }
 
+    if (mState.isDepthTestEnabled())
+    {
+        mRenderPassCommands->setDepthTestEnabled();
+    }
+    if (mState.isStencilTestEnabled())
+    {
+        mRenderPassCommands->setStencilTestEnabled();
+    }
+
     if (commandBufferOut)
     {
         *commandBufferOut = mRenderPassCommandBuffer;
@@ -4362,7 +4443,7 @@ angle::Result ContextVk::startRenderPass(gl::Rectangle renderArea,
 
 angle::Result ContextVk::endRenderPass()
 {
-    if (mRenderPassCommands->empty())
+    if (!mRenderPassCommands->started())
     {
         onRenderPassFinished();
         return angle::Result::Continue;
@@ -4399,21 +4480,22 @@ angle::Result ContextVk::endRenderPass()
 
     onRenderPassFinished();
 
+    mRenderPassCounter++;
+
     if (mGpuEventsEnabled)
     {
-        mRenderPassCounter++;
-
         EventName eventName = GetTraceEventName("RP", mRenderPassCounter);
         ANGLE_TRY(traceGpuEvent(&mOutsideRenderPassCommands->getCommandBuffer(),
                                 TRACE_EVENT_PHASE_BEGIN, eventName));
         ANGLE_TRY(flushOutsideRenderPassCommands());
     }
 
-    mRenderPassCommands->pauseTransformFeedbackIfStarted();
+    mRenderPassCommands->endRenderPass();
 
     if (mRenderer->getFeatures().enableCommandProcessingThread.enabled)
     {
         vk::CommandProcessorTask task = {this, &mPrimaryCommands, mRenderPassCommands};
+        ANGLE_TRACE_EVENT0("gpu.angle", "ContextVk::flushInsideRenderPassCommands");
         queueCommandsToWorker(task);
         getNextAvailableCommandBuffer(&mRenderPassCommands, true);
     }
@@ -4459,7 +4541,7 @@ void ContextVk::getNextAvailableCommandBuffer(vk::CommandBufferHelper **commandB
 
 void ContextVk::recycleCommandBuffer(vk::CommandBufferHelper *commandBuffer)
 {
-    ANGLE_TRACE_EVENT0("gpu.angle", "RendererVk::waitForWorkerThreadIdle");
+    ANGLE_TRACE_EVENT0("gpu.angle", "ContextVk::recycleCommandBuffer");
     std::lock_guard<std::mutex> queueLock(mCommandBufferQueueMutex);
     ASSERT(commandBuffer->empty());
     mAvailableCommandBuffers.push(commandBuffer);
@@ -4551,6 +4633,7 @@ angle::Result ContextVk::flushOutsideRenderPassCommands()
         if (mRenderer->getFeatures().enableCommandProcessingThread.enabled)
         {
             vk::CommandProcessorTask task = {this, &mPrimaryCommands, mOutsideRenderPassCommands};
+            ANGLE_TRACE_EVENT0("gpu.angle", "ContextVk::flushOutsideRenderPassCommands");
             queueCommandsToWorker(task);
             getNextAvailableCommandBuffer(&mOutsideRenderPassCommands, false);
         }
@@ -4614,91 +4697,67 @@ bool ContextVk::isRobustResourceInitEnabled() const
     return mState.isRobustResourceInitEnabled();
 }
 
-VkDescriptorBufferInfo &ContextVk::allocBufferInfos(size_t count)
-{
-    return allocInfos<VkDescriptorBufferInfo, &VkWriteDescriptorSet::pBufferInfo>(&mBufferInfos,
-                                                                                  count);
-}
-
-VkDescriptorImageInfo &ContextVk::allocImageInfos(size_t count)
-{
-    return allocInfos<VkDescriptorImageInfo, &VkWriteDescriptorSet::pImageInfo>(&mImageInfos,
-                                                                                count);
-}
-
 template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-T &ContextVk::allocInfos(std::vector<T> *mInfos, size_t count)
+void ContextVk::growDesciptorCapacity(std::vector<T> *descriptorVector, size_t newSize)
 {
-    size_t oldSize = mInfos->size();
-    size_t newSize = oldSize + count;
-    if (newSize > mInfos->capacity())
-    {
-        // If we have reached capacity, grow the storage and patch the descriptor set with new
-        // buffer info pointer
-        growCapacity<T, pInfo>(mInfos, newSize);
-    }
-    mInfos->resize(newSize);
-    return (*mInfos)[oldSize];
-}
-
-template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-void ContextVk::growCapacity(std::vector<T> *mInfos, size_t newSize)
-{
-    const T *const oldInfoStart = mInfos->empty() ? nullptr : &(*mInfos)[0];
-    size_t newCapacity          = std::max(mInfos->capacity() << 1, newSize);
-    mInfos->reserve(newCapacity);
+    const T *const oldInfoStart = descriptorVector->empty() ? nullptr : &(*descriptorVector)[0];
+    size_t newCapacity          = std::max(descriptorVector->capacity() << 1, newSize);
+    descriptorVector->reserve(newCapacity);
 
     if (oldInfoStart)
     {
         // patch mWriteInfo with new BufferInfo/ImageInfo pointers
-        for (VkWriteDescriptorSet &set : mWriteInfos)
+        for (VkWriteDescriptorSet &set : mWriteDescriptorSets)
         {
             if (set.*pInfo)
             {
                 size_t index = set.*pInfo - oldInfoStart;
-                set.*pInfo   = &(*mInfos)[index];
+                set.*pInfo   = &(*descriptorVector)[index];
             }
         }
     }
 }
 
-// ScopedDescriptorSetUpdates
-ANGLE_INLINE ContextVk::ScopedDescriptorSetUpdates::ScopedDescriptorSetUpdates(ContextVk *contextVk)
-    : mContextVk(contextVk)
-{}
-
-ANGLE_INLINE ContextVk::ScopedDescriptorSetUpdates::~ScopedDescriptorSetUpdates()
+template <typename T, const T *VkWriteDescriptorSet::*pInfo>
+T *ContextVk::allocDescriptorInfos(std::vector<T> *descriptorVector, size_t count)
 {
-    if (mContextVk->mWriteInfos.empty())
+    size_t oldSize = descriptorVector->size();
+    size_t newSize = oldSize + count;
+    if (newSize > descriptorVector->capacity())
     {
-        ASSERT(mContextVk->mBufferInfos.empty());
-        ASSERT(mContextVk->mImageInfos.empty());
-        return;
+        // If we have reached capacity, grow the storage and patch the descriptor set with new
+        // buffer info pointer
+        growDesciptorCapacity<T, pInfo>(descriptorVector, newSize);
     }
-
-    vkUpdateDescriptorSets(mContextVk->getDevice(),
-                           static_cast<uint32_t>(mContextVk->mWriteInfos.size()),
-                           mContextVk->mWriteInfos.data(), 0, nullptr);
-    mContextVk->mWriteInfos.clear();
-    mContextVk->mBufferInfos.clear();
-    mContextVk->mImageInfos.clear();
+    descriptorVector->resize(newSize);
+    return &(*descriptorVector)[oldSize];
 }
 
-BufferSerial ContextVk::generateBufferSerial()
+VkDescriptorBufferInfo *ContextVk::allocDescriptorBufferInfos(size_t count)
 {
-    return mShareGroupVk->generateBufferSerial();
+    return allocDescriptorInfos<VkDescriptorBufferInfo, &VkWriteDescriptorSet::pBufferInfo>(
+        &mDescriptorBufferInfos, count);
 }
-TextureSerial ContextVk::generateTextureSerial()
+
+VkDescriptorImageInfo *ContextVk::allocDescriptorImageInfos(size_t count)
 {
-    return mShareGroupVk->generateTextureSerial();
+    return allocDescriptorInfos<VkDescriptorImageInfo, &VkWriteDescriptorSet::pImageInfo>(
+        &mDescriptorImageInfos, count);
 }
-SamplerSerial ContextVk::generateSamplerSerial()
+
+VkWriteDescriptorSet *ContextVk::allocWriteDescriptorSets(size_t count)
 {
-    return mShareGroupVk->generateSamplerSerial();
+    mWriteDescriptorSetCounter += count;
+
+    size_t oldSize = mWriteDescriptorSets.size();
+    size_t newSize = oldSize + count;
+    mWriteDescriptorSets.resize(newSize);
+    return &mWriteDescriptorSets[oldSize];
 }
-ImageViewSerial ContextVk::generateAttachmentImageViewSerial()
+
+void ContextVk::setDefaultUniformBlocksMinSizeForTesting(size_t minSize)
 {
-    return mShareGroupVk->generateImageViewSerial();
+    mDefaultUniformStorage.setMinimumSizeForTesting(minSize);
 }
 
 }  // namespace rx

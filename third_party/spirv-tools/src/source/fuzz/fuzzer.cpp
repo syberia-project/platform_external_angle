@@ -46,6 +46,7 @@
 #include "source/fuzz/fuzzer_pass_construct_composites.h"
 #include "source/fuzz/fuzzer_pass_copy_objects.h"
 #include "source/fuzz/fuzzer_pass_donate_modules.h"
+#include "source/fuzz/fuzzer_pass_interchange_signedness_of_integer_operands.h"
 #include "source/fuzz/fuzzer_pass_interchange_zero_like_constants.h"
 #include "source/fuzz/fuzzer_pass_invert_comparison_operators.h"
 #include "source/fuzz/fuzzer_pass_merge_blocks.h"
@@ -53,10 +54,12 @@
 #include "source/fuzz/fuzzer_pass_outline_functions.h"
 #include "source/fuzz/fuzzer_pass_permute_blocks.h"
 #include "source/fuzz/fuzzer_pass_permute_function_parameters.h"
+#include "source/fuzz/fuzzer_pass_permute_instructions.h"
 #include "source/fuzz/fuzzer_pass_permute_phi_operands.h"
 #include "source/fuzz/fuzzer_pass_push_ids_through_variables.h"
 #include "source/fuzz/fuzzer_pass_replace_linear_algebra_instructions.h"
 #include "source/fuzz/fuzzer_pass_replace_parameter_with_global.h"
+#include "source/fuzz/fuzzer_pass_replace_params_with_struct.h"
 #include "source/fuzz/fuzzer_pass_split_blocks.h"
 #include "source/fuzz/fuzzer_pass_swap_commutable_operands.h"
 #include "source/fuzz/fuzzer_pass_swap_conditional_branch_operands.h"
@@ -279,6 +282,9 @@ Fuzzer::FuzzerResultStatus Fuzzer::Run(
     MaybeAddPass<FuzzerPassPermuteFunctionParameters>(
         &passes, ir_context.get(), &transformation_context, &fuzzer_context,
         transformation_sequence_out);
+    MaybeAddPass<FuzzerPassPermuteInstructions>(
+        &passes, ir_context.get(), &transformation_context, &fuzzer_context,
+        transformation_sequence_out);
     MaybeAddPass<FuzzerPassPushIdsThroughVariables>(
         &passes, ir_context.get(), &transformation_context, &fuzzer_context,
         transformation_sequence_out);
@@ -286,6 +292,9 @@ Fuzzer::FuzzerResultStatus Fuzzer::Run(
         &passes, ir_context.get(), &transformation_context, &fuzzer_context,
         transformation_sequence_out);
     MaybeAddPass<FuzzerPassReplaceLinearAlgebraInstructions>(
+        &passes, ir_context.get(), &transformation_context, &fuzzer_context,
+        transformation_sequence_out);
+    MaybeAddPass<FuzzerPassReplaceParamsWithStruct>(
         &passes, ir_context.get(), &transformation_context, &fuzzer_context,
         transformation_sequence_out);
     MaybeAddPass<FuzzerPassSplitBlocks>(
@@ -329,6 +338,9 @@ Fuzzer::FuzzerResultStatus Fuzzer::Run(
       &final_passes, ir_context.get(), &transformation_context, &fuzzer_context,
       transformation_sequence_out);
   MaybeAddPass<FuzzerPassAddNoContractionDecorations>(
+      &final_passes, ir_context.get(), &transformation_context, &fuzzer_context,
+      transformation_sequence_out);
+  MaybeAddPass<FuzzerPassInterchangeSignednessOfIntegerOperands>(
       &final_passes, ir_context.get(), &transformation_context, &fuzzer_context,
       transformation_sequence_out);
   MaybeAddPass<FuzzerPassInterchangeZeroLikeConstants>(

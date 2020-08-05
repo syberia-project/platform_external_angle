@@ -158,6 +158,7 @@ class RendererVk : angle::NonCopyable
     {
         return mMinImportedHostPointerAlignment;
     }
+    uint32_t getDefaultUniformBufferSize() const { return mDefaultUniformBufferSize; }
 
     bool isMockICDEnabled() const { return mEnabledICD == angle::vk::ICD::Mock; }
 
@@ -259,6 +260,8 @@ class RendererVk : angle::NonCopyable
 
     bool getEnableValidationLayers() const { return mEnableValidationLayers; }
 
+    vk::ResourceSerialFactory &getResourceSerialFactory() { return mResourceSerialFactory; }
+
   private:
     angle::Result initializeDevice(DisplayVk *displayVk, uint32_t queueFamilyIndex);
     void ensureCapsInitialized() const;
@@ -306,6 +309,7 @@ class RendererVk : angle::NonCopyable
     VkPhysicalDeviceIndexTypeUint8FeaturesEXT mIndexTypeUint8Features;
     VkPhysicalDeviceSubgroupProperties mSubgroupProperties;
     VkPhysicalDeviceExternalMemoryHostPropertiesEXT mExternalMemoryHostProperties;
+    VkPhysicalDeviceShaderFloat16Int8FeaturesKHR mShaderFloat16Int8Features;
     VkExternalFenceProperties mExternalFenceProperties;
     VkExternalSemaphoreProperties mExternalSemaphoreProperties;
     VkPhysicalDeviceSamplerYcbcrConversionFeatures mSamplerYcbcrConversionFeatures;
@@ -317,6 +321,7 @@ class RendererVk : angle::NonCopyable
     uint32_t mMaxVertexAttribDivisor;
     VkDeviceSize mMaxVertexAttribStride;
     VkDeviceSize mMinImportedHostPointerAlignment;
+    uint32_t mDefaultUniformBufferSize;
     VkDevice mDevice;
     AtomicSerialFactory mQueueSerialFactory;
     AtomicSerialFactory mShaderSerialFactory;
@@ -384,6 +389,9 @@ class RendererVk : angle::NonCopyable
     SamplerCache mSamplerCache;
     SamplerYcbcrConversionCache mYuvConversionCache;
     vk::ActiveHandleCounter mActiveHandleCounts;
+
+    // Tracks resource serials.
+    vk::ResourceSerialFactory mResourceSerialFactory;
 };
 
 }  // namespace rx

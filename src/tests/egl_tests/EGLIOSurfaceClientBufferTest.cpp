@@ -211,6 +211,10 @@ class IOSurfaceClientBufferTest : public ANGLETest
         EXPECT_EGL_TRUE(result);
         EXPECT_EGL_SUCCESS();
 
+        // IOSurface client buffer's rendering doesn't automatically finish after
+        // eglReleaseTexImage(). Need to explicitly call glFinish().
+        glFinish();
+
         IOSurfaceLock(ioSurface.get(), kIOSurfaceLockReadOnly, nullptr);
         std::array<T, dataSize> iosurfaceData;
         memcpy(iosurfaceData.data(), IOSurfaceGetBaseAddress(ioSurface.get()),
@@ -243,9 +247,13 @@ class IOSurfaceClientBufferTest : public ANGLETest
         memcpy(IOSurfaceGetBaseAddress(ioSurface.get()), data, dataSize);
         IOSurfaceUnlock(ioSurface.get(), 0, nullptr);
 
+        GLTexture texture;
+        glBindTexture(getGLTextureTarget(), texture);
+        glTexParameteri(getGLTextureTarget(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(getGLTextureTarget(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
         // Bind the IOSurface to a texture and clear it.
         EGLSurface pbuffer;
-        GLTexture texture;
         bindIOSurfaceToTexture(ioSurface, 1, 1, 0, internalFormat, type, &pbuffer, &texture);
 
         constexpr char kVS[] =
@@ -290,6 +298,11 @@ class IOSurfaceClientBufferTest : public ANGLETest
 
     void doBlitTest(bool ioSurfaceIsSource, int width, int height)
     {
+        if (!hasBlitExt())
+        {
+            return;
+        }
+
         // Create IOSurface and bind it to a texture.
         ScopedIOSurfaceRef ioSurface = CreateSinglePlaneIOSurface(width, height, 'BGRA', 4);
         EGLSurface pbuffer;
@@ -357,6 +370,10 @@ class IOSurfaceClientBufferTest : public ANGLETest
     }
 
     bool hasIOSurfaceExt() const { return IsEGLDisplayExtensionEnabled(mDisplay, kIOSurfaceExt); }
+    bool hasBlitExt() const
+    {
+        return IsEGLDisplayExtensionEnabled(mDisplay, "ANGLE_framebuffer_blit");
+    }
 
     EGLConfig mConfig;
     EGLDisplay mDisplay;
@@ -461,8 +478,9 @@ TEST_P(IOSurfaceClientBufferTest, RenderToR16IOSurface)
 {
     ANGLE_SKIP_TEST_IF(!hasIOSurfaceExt());
 
-    // This test only works on ES3.
+    // This test only works on ES3 since it requires an integer texture.
     ANGLE_SKIP_TEST_IF(getClientMajorVersion() < 3);
+
     // TODO(http://anglebug.com/4369)
     ANGLE_SKIP_TEST_IF(isSwiftshader());
 
@@ -481,8 +499,6 @@ TEST_P(IOSurfaceClientBufferTest, RenderToBGRA1010102IOSurface)
 {
     ANGLE_SKIP_TEST_IF(!hasIOSurfaceExt());
 
-    // This test only works on ES3.
-    ANGLE_SKIP_TEST_IF(getClientMajorVersion() < 3);
     // TODO(http://anglebug.com/4369)
     ANGLE_SKIP_TEST_IF(isSwiftshader());
 
@@ -497,14 +513,44 @@ TEST_P(IOSurfaceClientBufferTest, ReadFromBGRA1010102IOSurface)
 {
     ANGLE_SKIP_TEST_IF(!hasIOSurfaceExt());
 
-    // This test only works on ES3.
-    ANGLE_SKIP_TEST_IF(getClientMajorVersion() < 3);
-
     ScopedIOSurfaceRef ioSurface = CreateSinglePlaneIOSurface(1, 1, 'l10r', 4);
 
     uint32_t color = (3 << 30) | (1 << 22) | (2 << 12) | (3 << 2);
     doSampleTest(ioSurface, GL_RGB10_A2, GL_UNSIGNED_INT_2_10_10_10_REV, &color, sizeof(color),
                  R | G | B);  // Don't test alpha, unorm '4' can't be represented with 2 bits.
+}
+
+// Test using RGBA_16F IOSurfaces for rendering
+TEST_P(IOSurfaceClientBufferTest, RenderToRGBA16FIOSurface)
+{
+    ANGLE_SKIP_TEST_IF(!hasIOSurfaceExt());
+
+    // TODO(http://anglebug.com/4369)
+    ANGLE_SKIP_TEST_IF(isSwiftshader());
+
+    ScopedIOSurfaceRef ioSurface = CreateSinglePlaneIOSurface(1, 1, 'RGhA', 8);
+
+    std::array<GLushort, 4> color{
+        gl::float32ToFloat16(1.0f / 255.0f), gl::float32ToFloat16(2.0f / 255.0f),
+        gl::float32ToFloat16(3.0f / 255.0f), gl::float32ToFloat16(4.0f / 255.0f)};
+    doClearTest(ioSurface, GL_RGBA, GL_HALF_FLOAT, color);
+}
+
+// Test reading from RGBA_16F IOSurfaces
+TEST_P(IOSurfaceClientBufferTest, ReadFromToRGBA16FIOSurfaceIOSurface)
+{
+    ANGLE_SKIP_TEST_IF(!hasIOSurfaceExt());
+
+    // TODO(http://anglebug.com/4369)
+    ANGLE_SKIP_TEST_IF(isSwiftshader());
+
+    ScopedIOSurfaceRef ioSurface = CreateSinglePlaneIOSurface(1, 1, 'RGhA', 8);
+
+    std::array<GLushort, 4> color{
+        gl::float32ToFloat16(1.0f / 255.0f), gl::float32ToFloat16(2.0f / 255.0f),
+        gl::float32ToFloat16(3.0f / 255.0f), gl::float32ToFloat16(4.0f / 255.0f)};
+    doSampleTest(ioSurface, GL_RGBA, GL_HALF_FLOAT, color.data(), sizeof(GLushort) * 4,
+                 R | G | B | A);
 }
 
 // TODO(cwallez@chromium.org): Test using RGBA half float IOSurfaces ('RGhA')
@@ -960,4 +1006,5 @@ ANGLE_INSTANTIATE_TEST(IOSurfaceClientBufferTest,
                        ES2_OPENGL(),
                        ES3_OPENGL(),
                        ES2_VULKAN_SWIFTSHADER(),
-                       ES3_VULKAN_SWIFTSHADER());
+                       ES3_VULKAN_SWIFTSHADER(),
+                       ES2_METAL());

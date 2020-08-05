@@ -38,6 +38,10 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %10 = OpTypeVector %8 2
          %11 = OpTypePointer Private %10
          %12 = OpTypeBool
+         %71 = OpTypeFunction %2 %6
+         %83 = OpTypeFunction %2 %6 %12
+         %93 = OpTypeFunction %2 %10
+         %94 = OpTypeFunction %2 %8 %10
          %40 = OpTypePointer Function %12
          %13 = OpTypeStruct %6 %8
          %14 = OpTypePointer Private %13
@@ -53,6 +57,8 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %33 = OpFunctionCall %2 %20 %22 %23 %26 %28 %41 %27
                OpReturn
                OpFunctionEnd
+
+         ; adjust type of the function in-place
          %20 = OpFunction %2 None %15
          %16 = OpFunctionParameter %6
          %17 = OpFunctionParameter %8
@@ -61,6 +67,45 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %42 = OpFunctionParameter %40
          %43 = OpFunctionParameter %12
          %21 = OpLabel
+               OpReturn
+               OpFunctionEnd
+
+         ; reuse an existing function type
+         %70 = OpFunction %2 None %71
+         %72 = OpFunctionParameter %6
+         %73 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %74 = OpFunction %2 None %71
+         %75 = OpFunctionParameter %6
+         %76 = OpLabel
+               OpReturn
+               OpFunctionEnd
+
+         ; create a new function type
+         %77 = OpFunction %2 None %83
+         %78 = OpFunctionParameter %6
+         %84 = OpFunctionParameter %12
+         %79 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %80 = OpFunction %2 None %83
+         %81 = OpFunctionParameter %6
+         %85 = OpFunctionParameter %12
+         %82 = OpLabel
+               OpReturn
+               OpFunctionEnd
+
+         ; don't adjust the type of the function if it creates a duplicate
+         %86 = OpFunction %2 None %93
+         %87 = OpFunctionParameter %10
+         %89 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %90 = OpFunction %2 None %94
+         %91 = OpFunctionParameter %8
+         %95 = OpFunctionParameter %10
+         %92 = OpLabel
                OpReturn
                OpFunctionEnd
   )";
@@ -131,6 +176,26 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
         transformation.IsApplicable(context.get(), transformation_context));
     transformation.Apply(context.get(), &transformation_context);
   }
+  {
+    TransformationReplaceParameterWithGlobal transformation(58, 75, 59);
+    ASSERT_TRUE(
+        transformation.IsApplicable(context.get(), transformation_context));
+    transformation.Apply(context.get(), &transformation_context);
+  }
+  {
+    TransformationReplaceParameterWithGlobal transformation(60, 81, 61);
+    ASSERT_TRUE(
+        transformation.IsApplicable(context.get(), transformation_context));
+    transformation.Apply(context.get(), &transformation_context);
+  }
+  {
+    TransformationReplaceParameterWithGlobal transformation(62, 91, 63);
+    ASSERT_TRUE(
+        transformation.IsApplicable(context.get(), transformation_context));
+    transformation.Apply(context.get(), &transformation_context);
+  }
+
+  ASSERT_TRUE(IsValid(env, context.get()));
 
   std::string expected_shader = R"(
                OpCapability Shader
@@ -150,10 +215,12 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %10 = OpTypeVector %8 2
          %11 = OpTypePointer Private %10
          %12 = OpTypeBool
+         %71 = OpTypeFunction %2 %6
+         %83 = OpTypeFunction %2 %6 %12
+         %93 = OpTypeFunction %2 %10
          %40 = OpTypePointer Function %12
          %13 = OpTypeStruct %6 %8
          %14 = OpTypePointer Private %13
-         %15 = OpTypeFunction %2 %40 %12
          %22 = OpConstant %6 0
          %23 = OpConstant %8 0
          %26 = OpConstantComposite %10 %23 %23
@@ -163,6 +230,11 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %53 = OpVariable %9 Private %23
          %55 = OpVariable %11 Private %26
          %57 = OpVariable %14 Private %28
+         %15 = OpTypeFunction %2 %40 %12
+         %59 = OpVariable %7 Private %22
+         %61 = OpVariable %7 Private %22
+         %60 = OpTypeFunction %2 %12
+         %63 = OpVariable %9 Private %23
           %4 = OpFunction %2 None %3
           %5 = OpLabel
          %41 = OpVariable %40 Function %27
@@ -183,9 +255,97 @@ TEST(TransformationReplaceParameterWithGlobalTest, BasicTest) {
          %16 = OpLoad %6 %51
                OpReturn
                OpFunctionEnd
+         %70 = OpFunction %2 None %71
+         %72 = OpFunctionParameter %6
+         %73 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %74 = OpFunction %2 None %3
+         %76 = OpLabel
+         %75 = OpLoad %6 %59
+               OpReturn
+               OpFunctionEnd
+         %77 = OpFunction %2 None %83
+         %78 = OpFunctionParameter %6
+         %84 = OpFunctionParameter %12
+         %79 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %80 = OpFunction %2 None %60
+         %85 = OpFunctionParameter %12
+         %82 = OpLabel
+         %81 = OpLoad %6 %61
+               OpReturn
+               OpFunctionEnd
+         %86 = OpFunction %2 None %93
+         %87 = OpFunctionParameter %10
+         %89 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %90 = OpFunction %2 None %93
+         %95 = OpFunctionParameter %10
+         %92 = OpLabel
+         %91 = OpLoad %8 %63
+               OpReturn
+               OpFunctionEnd
   )";
 
   ASSERT_TRUE(IsEqual(env, expected_shader, context.get()));
+}
+
+TEST(TransformationReplaceParameterWithGlobalTest,
+     HandlesIrrelevantParameters) {
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %9 = OpTypeInt 32 1
+          %3 = OpTypeFunction %2
+          %7 = OpTypeFunction %2 %9 %9
+         %12 = OpTypePointer Private %9
+         %13 = OpConstant %9 0
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+               OpReturn
+               OpFunctionEnd
+          %6 = OpFunction %2 None %7
+         %10 = OpFunctionParameter %9
+         %11 = OpFunctionParameter %9
+          %8 = OpLabel
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+  spvtools::ValidatorOptions validator_options;
+  TransformationContext transformation_context(&fact_manager,
+                                               validator_options);
+
+  fact_manager.AddFactIdIsIrrelevant(10);
+
+  {
+    TransformationReplaceParameterWithGlobal transformation(20, 10, 21);
+    ASSERT_TRUE(
+        transformation.IsApplicable(context.get(), transformation_context));
+    transformation.Apply(context.get(), &transformation_context);
+    ASSERT_TRUE(fact_manager.PointeeValueIsIrrelevant(21));
+  }
+  {
+    TransformationReplaceParameterWithGlobal transformation(22, 11, 23);
+    ASSERT_TRUE(
+        transformation.IsApplicable(context.get(), transformation_context));
+    transformation.Apply(context.get(), &transformation_context);
+    ASSERT_FALSE(fact_manager.PointeeValueIsIrrelevant(23));
+  }
 }
 
 }  // namespace

@@ -14,6 +14,7 @@
 // limitations under the License.
 
 #include "source/fuzz/fuzzer_pass_interchange_zero_like_constants.h"
+
 #include "source/fuzz/fuzzer_util.h"
 #include "source/fuzz/id_use_descriptor.h"
 #include "source/fuzz/transformation_record_synonymous_constants.h"
@@ -49,29 +50,11 @@ uint32_t FuzzerPassInterchangeZeroLikeConstants::FindOrCreateToggledConstant(
     if (kind == opt::analysis::Type::kBool ||
         kind == opt::analysis::Type::kInteger ||
         kind == opt::analysis::Type::kFloat) {
-      return FindOrCreateZeroConstant(declaration->type_id());
+      return FindOrCreateZeroConstant(declaration->type_id(), false);
     }
   }
 
   return 0;
-}
-
-void FuzzerPassInterchangeZeroLikeConstants::MaybeAddUseToReplace(
-    opt::Instruction* use_inst, uint32_t use_index, uint32_t replacement_id,
-    std::vector<std::pair<protobufs::IdUseDescriptor, uint32_t>>*
-        uses_to_replace) {
-  // Only consider this use if it is in a block
-  if (!GetIRContext()->get_instr_block(use_inst)) {
-    return;
-  }
-
-  // Get the index of the operand restricted to input operands.
-  uint32_t in_operand_index =
-      fuzzerutil::InOperandIndexFromOperandIndex(*use_inst, use_index);
-  auto id_use_descriptor =
-      MakeIdUseDescriptorFromUse(GetIRContext(), use_inst, in_operand_index);
-  uses_to_replace->emplace_back(
-      std::make_pair(id_use_descriptor, replacement_id));
 }
 
 void FuzzerPassInterchangeZeroLikeConstants::Apply() {
@@ -83,12 +66,20 @@ void FuzzerPassInterchangeZeroLikeConstants::Apply() {
 
   for (auto constant : GetIRContext()->GetConstants()) {
     uint32_t constant_id = constant->result_id();
-    uint32_t toggled_id = FindOrCreateToggledConstant(constant);
+    if (GetTransformationContext()->GetFactManager()->IdIsIrrelevant(
+            constant_id)) {
+      continue;
+    }
 
+    uint32_t toggled_id = FindOrCreateToggledConstant(constant);
     if (!toggled_id) {
       // Not a zero-like constant
       continue;
     }
+
+    assert(!GetTransformationContext()->GetFactManager()->IdIsIrrelevant(
+               toggled_id) &&
+           "FindOrCreateToggledConstant can't produce an irrelevant id");
 
     // Record synonymous constants
     ApplyTransformation(
@@ -109,7 +100,7 @@ void FuzzerPassInterchangeZeroLikeConstants::Apply() {
         });
   }
 
-  // Replace the ids
+  // Replace the ids if it is allowed.
   for (auto use_to_replace : uses_to_replace) {
     MaybeApplyTransformation(TransformationReplaceIdWithSynonym(
         use_to_replace.first, use_to_replace.second));
