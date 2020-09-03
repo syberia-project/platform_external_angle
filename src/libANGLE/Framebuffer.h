@@ -49,15 +49,6 @@ class State;
 class Texture;
 class TextureCapsMap;
 
-enum class AttachmentSampleType
-{
-    // The sample count of the actual resource
-    Resource,
-    // If render_to_texture is used, this is the sample count of the multisampled
-    // texture that is created behind the scenes.
-    Emulated
-};
-
 class FramebufferState final : angle::NonCopyable
 {
   public:
@@ -65,7 +56,7 @@ class FramebufferState final : angle::NonCopyable
     FramebufferState(const Caps &caps, FramebufferID id, ContextID owningContextID);
     ~FramebufferState();
 
-    const std::string &getLabel();
+    const std::string &getLabel() const;
     size_t getReadIndex() const;
 
     const FramebufferAttachment *getAttachment(const Context *context, GLenum attachment) const;
@@ -248,6 +239,8 @@ class Framebuffer final : public angle::ObserverInterface,
         return mState.mColorAttachments;
     }
 
+    const FramebufferState &getState() const { return mState; }
+
     const FramebufferAttachment *getAttachment(const Context *context, GLenum attachment) const;
     bool isMultiview() const;
     bool readDisallowedByMultiview() const;
@@ -276,7 +269,7 @@ class Framebuffer final : public angle::ObserverInterface,
 
     // This method calls checkStatus.
     int getSamples(const Context *context) const;
-    int getResourceSamples(const Context *context) const;
+    int getReadBufferResourceSamples(const Context *context) const;
 
     angle::Result getSamplePosition(const Context *context, size_t index, GLfloat *xy) const;
 
@@ -306,9 +299,6 @@ class Framebuffer final : public angle::ObserverInterface,
 
         return checkStatusImpl(context);
     }
-
-    // For when we don't want to check completeness in getSamples().
-    int getCachedSamples(const Context *context, AttachmentSampleType sampleType) const;
 
     // Helper for checkStatus == GL_FRAMEBUFFER_COMPLETE.
     ANGLE_INLINE bool isComplete(const Context *context) const
@@ -356,6 +346,8 @@ class Framebuffer final : public angle::ObserverInterface,
                              const Rectangle &area,
                              GLenum format,
                              GLenum type,
+                             const PixelPackState &pack,
+                             Buffer *packBuffer,
                              void *pixels);
 
     angle::Result blit(const Context *context,

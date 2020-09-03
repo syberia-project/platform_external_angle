@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "platform/Platform.h"
+#include "platform/PlatformMethods.h"
 #include "test_utils/angle_test_configs.h"
 #include "test_utils/angle_test_instantiate.h"
 #include "test_utils/angle_test_platform.h"
@@ -82,11 +82,18 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     // Call if the test step was aborted and the test should stop running.
     void abortTest() { mRunning = false; }
 
-    unsigned int getNumStepsPerformed() const { return mNumStepsPerformed; }
+    int getNumStepsPerformed() const { return mNumStepsPerformed; }
+
+    // Defaults to one step per run loop. Can be changed in any test.
+    void setStepsPerRunLoopStep(int stepsPerRunLoop);
     void doRunLoop(double maxRunTime);
 
     // Overriden in trace perf tests.
     virtual void saveScreenshot(const std::string &screenshotName) {}
+    virtual void computeGPUTime() {}
+
+    double printResults();
+    void calibrateStepsToRun();
 
     std::string mName;
     std::string mBackend;
@@ -95,14 +102,17 @@ class ANGLEPerfTest : public testing::Test, angle::NonCopyable
     uint64_t mGPUTimeNs;
     bool mSkipTest;
     std::unique_ptr<perf_test::PerfResultReporter> mReporter;
-
-  private:
-    double printResults();
-
-    unsigned int mStepsToRun;
-    unsigned int mNumStepsPerformed;
-    unsigned int mIterationsPerStep;
+    int mStepsToRun;
+    int mNumStepsPerformed;
+    int mStepsPerRunLoopStep;
+    int mIterationsPerStep;
     bool mRunning;
+};
+
+enum class SurfaceType
+{
+    Window,
+    Offscreen,
 };
 
 struct RenderTestParams : public angle::PlatformParameters
@@ -117,6 +127,7 @@ struct RenderTestParams : public angle::PlatformParameters
     EGLint windowHeight            = 64;
     unsigned int iterationsPerStep = 0;
     bool trackGpuTime              = false;
+    SurfaceType surfaceType        = SurfaceType::Window;
 };
 
 class ANGLERenderTest : public ANGLEPerfTest
@@ -166,6 +177,7 @@ class ANGLERenderTest : public ANGLEPerfTest
     void step() override;
     void startTest() override;
     void finishTest() override;
+    void computeGPUTime() override;
 
     bool areExtensionPrerequisitesFulfilled() const;
 
@@ -176,7 +188,14 @@ class ANGLERenderTest : public ANGLEPerfTest
     ConfigParameters mConfigParams;
     bool mSwapEnabled;
 
-    GLuint mTimestampQuery;
+    struct TimestampSample
+    {
+        GLuint beginQuery;
+        GLuint endQuery;
+    };
+
+    GLuint mCurrentTimestampBeginQuery = 0;
+    std::vector<TimestampSample> mTimestampQueries;
 
     // Trace event record that can be output.
     std::vector<TraceEvent> mTraceEventBuffer;
@@ -191,8 +210,8 @@ namespace params
 template <typename ParamsT>
 ParamsT Offscreen(const ParamsT &input)
 {
-    ParamsT output   = input;
-    output.offscreen = true;
+    ParamsT output     = input;
+    output.surfaceType = SurfaceType::Offscreen;
     return output;
 }
 

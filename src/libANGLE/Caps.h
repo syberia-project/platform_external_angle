@@ -351,6 +351,9 @@ struct Extensions
     // GL_EXT_multisampled_render_to_texture
     bool multisampledRenderToTexture = false;
 
+    // GL_EXT_multisampled_render_to_texture2
+    bool multisampledRenderToTexture2 = false;
+
     // GL_ANGLE_instanced_arrays
     bool instancedArraysANGLE = false;
     // GL_EXT_instanced_arrays
@@ -996,6 +999,9 @@ struct DisplayExtensions
     // EGL_ANGLE_display_texture_share_group
     bool displayTextureShareGroup = false;
 
+    // EGL_ANGLE_display_semaphore_share_group
+    bool displaySemaphoreShareGroup = false;
+
     // EGL_ANGLE_create_context_client_arrays
     bool createContextClientArrays = false;
 
@@ -1082,6 +1088,9 @@ struct DisplayExtensions
 
     // EGL_EXT_image_dma_buf_import_modifiers
     bool imageDmaBufImportModifiersEXT = false;
+
+    // EGL_NOK_texture_from_pixmap
+    bool textureFromPixmapNOK = false;
 };
 
 struct DeviceExtensions

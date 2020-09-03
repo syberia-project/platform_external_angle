@@ -16,7 +16,7 @@
 #include <queue>
 #include <thread>
 
-#include "libANGLE/renderer/vulkan/vk_headers.h"
+#include "common/vulkan/vk_headers.h"
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 
 namespace rx
@@ -48,7 +48,7 @@ class CommandProcessor : angle::NonCopyable
 
     // Main worker loop that should be launched in its own thread. The
     //  loop waits for work to be submitted from a separate thread.
-    angle::Result processCommandProcessorTasks();
+    void processCommandProcessorTasks();
     // Called asynchronously from workLoop() thread to queue work that is
     //  then processed by the workLoop() thread
     void queueCommands(const vk::CommandProcessorTask &commands);

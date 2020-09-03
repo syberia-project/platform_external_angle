@@ -246,6 +246,11 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   // Clear line-related debug instructions attached to this instruction.
   void clear_dbg_line_insts() { dbg_line_insts_.clear(); }
 
+  // Set line-related debug instructions.
+  void set_dbg_line_insts(const std::vector<Instruction>& lines) {
+    dbg_line_insts_ = lines;
+  }
+
   // Same semantics as in the base class except the list the InstructionList
   // containing |pos| will now assume ownership of |this|.
   // inline void MoveBefore(Instruction* pos);
@@ -301,10 +306,14 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
     return dbg_scope_.GetInlinedAt();
   }
   // Updates OpLine and DebugScope based on the information of |from|.
-  inline void UpdateDebugInfo(const Instruction* from);
+  inline void UpdateDebugInfoFrom(const Instruction* from);
   // Remove the |index|-th operand
   void RemoveOperand(uint32_t index) {
     operands_.erase(operands_.begin() + index);
+  }
+  // Insert an operand before the |index|-th operand
+  void InsertOperand(uint32_t index, Operand&& operand) {
+    operands_.insert(operands_.begin() + index, operand);
   }
 
   // The following methods are similar to the above, but are for in operands.
@@ -535,6 +544,11 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   // OpenCLDebugInfo100InstructionsMax.
   OpenCLDebugInfo100Instructions GetOpenCL100DebugOpcode() const;
 
+  // Returns true if it is an OpenCL.DebugInfo.100 instruction.
+  bool IsOpenCL100DebugInstr() const {
+    return GetOpenCL100DebugOpcode() != OpenCLDebugInfo100InstructionsMax;
+  }
+
   // Dump this instruction on stderr.  Useful when running interactive
   // debuggers.
   void Dump() const;
@@ -658,7 +672,7 @@ inline void Instruction::UpdateDebugInlinedAt(uint32_t new_inlined_at) {
   }
 }
 
-inline void Instruction::UpdateDebugInfo(const Instruction* from) {
+inline void Instruction::UpdateDebugInfoFrom(const Instruction* from) {
   if (from == nullptr) return;
   clear_dbg_line_insts();
   if (!from->dbg_line_insts().empty())

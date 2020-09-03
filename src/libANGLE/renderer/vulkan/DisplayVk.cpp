@@ -125,7 +125,7 @@ SurfaceImpl *DisplayVk::createPbufferSurface(const egl::SurfaceState &state,
     }
 
     ASSERT(mRenderer);
-    return new OffscreenSurfaceVk(state);
+    return new OffscreenSurfaceVk(state, mRenderer);
 }
 
 SurfaceImpl *DisplayVk::createPbufferFromClientBuffer(const egl::SurfaceState &state,
@@ -153,11 +153,16 @@ ImageImpl *DisplayVk::createImage(const egl::ImageState &state,
     return new ImageVk(state, context);
 }
 
-rx::ContextImpl *DisplayVk::createContext(const gl::State &state,
-                                          gl::ErrorSet *errorSet,
-                                          const egl::Config *configuration,
-                                          const gl::Context *shareContext,
-                                          const egl::AttributeMap &attribs)
+ShareGroupImpl *DisplayVk::createShareGroup()
+{
+    return new ShareGroupVk();
+}
+
+ContextImpl *DisplayVk::createContext(const gl::State &state,
+                                      gl::ErrorSet *errorSet,
+                                      const egl::Config *configuration,
+                                      const gl::Context *shareContext,
+                                      const egl::AttributeMap &attribs)
 {
     return new ContextVk(state, errorSet, mRenderer);
 }
@@ -190,6 +195,7 @@ void DisplayVk::generateExtensions(egl::DisplayExtensions *outExtensions) const
     outExtensions->createContextRobustness      = getRenderer()->getNativeExtensions().robustness;
     outExtensions->surfaceOrientation           = true;
     outExtensions->displayTextureShareGroup     = true;
+    outExtensions->displaySemaphoreShareGroup   = true;
     outExtensions->robustResourceInitialization = true;
 
     // The Vulkan implementation will always say that EGL_KHR_swap_buffers_with_damage is supported.
@@ -228,7 +234,7 @@ void DisplayVk::generateExtensions(egl::DisplayExtensions *outExtensions) const
 
 #if defined(ANGLE_PLATFORM_GGP)
     outExtensions->ggpStreamDescriptor = true;
-    outExtensions->swapWithFrameToken  = true;
+    outExtensions->swapWithFrameToken  = getRenderer()->getFeatures().supportsGGPFrameToken.enabled;
 #endif  // defined(ANGLE_PLATFORM_GGP)
 }
 

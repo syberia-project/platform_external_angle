@@ -56,6 +56,7 @@
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE 0x3209
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE 0x320A
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_NULL_ANGLE 0x345E
+#define EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE 0x348F
 #endif /* EGL_ANGLE_platform_angle */
 
 #ifndef EGL_ANGLE_platform_angle_d3d
@@ -253,6 +254,14 @@ EGLAPI EGLBoolean EGLAPIENTRY eglGetMscRateANGLE(EGLDisplay dpy,
 #define EGL_POWER_PREFERENCE_ANGLE 0x3482
 #define EGL_LOW_POWER_ANGLE 0x0001
 #define EGL_HIGH_POWER_ANGLE 0x0002
+typedef void(EGLAPIENTRYP PFNEGLRELEASEHIGHPOWERGPUANGLEPROC) (EGLDisplay dpy, EGLContext ctx);
+typedef void(EGLAPIENTRYP PFNEGLREACQUIREHIGHPOWERGPUANGLEPROC) (EGLDisplay dpy, EGLContext ctx);
+typedef void(EGLAPIENTRYP PFNEGLHANDLEGPUSWITCHANGLEPROC) (EGLDisplay dpy);
+#ifdef EGL_EGLEXT_PROTOTYPES
+EGLAPI void EGLAPIENTRY eglReleaseHighPowerGPUANGLE(EGLDisplay dpy, EGLContext ctx);
+EGLAPI void EGLAPIENTRY eglReacquireHighPowerGPUANGLE(EGLDisplay dpy, EGLContext ctx);
+EGLAPI void EGLAPIENTRY eglHandleGPUSwitchANGLE(EGLDisplay dpy);
+#endif
 #endif /* EGL_ANGLE_power_preference */
 
 #ifndef EGL_ANGLE_feature_control
@@ -309,6 +318,11 @@ EGLAPI EGLBoolean EGLAPIENTRY eglSwapBuffersWithFrameTokenANGLE(EGLDisplay dpy, 
 #define EGL_ANGLE_device_eagl 1
 #define EGL_EAGL_CONTEXT_ANGLE 0x348C
 #endif
+
+#ifndef EGL_ANGLE_display_semaphore_share_group
+#define EGL_ANGLE_display_semaphore_share_group 1
+#define EGL_DISPLAY_SEMAPHORE_SHARE_GROUP_ANGLE 0x348D
+#endif /* EGL_ANGLE_display_semaphore_share_group */
 
 // clang-format on
 

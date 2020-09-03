@@ -1,30 +1,38 @@
 {
   "scripts/egl.xml":
-    "842e24514c4cfe09fba703c17a0fd292",
+    "4e5911cfe91274cc5112ff2f70092376",
   "scripts/egl_angle_ext.xml":
-    "854e99785af19f8f4eea4f73005a0451",
+    "087d6a3996a91fbb0b664cac57c50c4c",
   "scripts/generate_loader.py":
-    "c6c02d859fabc61410470f50198a5a80",
+    "92c731390cf5c0305ea57a3661a01240",
   "scripts/gl.xml":
     "e74a595068cbdd6064300be1e71b7cc9",
   "scripts/gl_angle_ext.xml":
-    "079cc4829de7ce638faf7bbf66e141ad",
+    "5b91263f1099308e4e75f89d85be564e",
   "scripts/registry_xml.py":
-    "7e38cd315a93dce57645283ab2ee80d5",
+    "40961fa253854a2e9644c0c5d78daae9",
   "scripts/wgl.xml":
     "aa96419c582af2f6673430e2847693f4",
   "src/libEGL/egl_loader_autogen.cpp":
-    "acf3ea19b84b12bfd1197fed020440b3",
+    "394c31d7e61b285be5bc6a2cb8325a8d",
   "src/libEGL/egl_loader_autogen.h":
-    "5f1507c78b970f6898d1e90da20e425d",
+    "343b43d7318884204c0699cfaa8ef2dc",
+  "src/tests/perf_tests/restricted_traces/trace_egl_loader_autogen.cpp":
+    "fa2cce11eef7e995c62c31da0658a5da",
+  "src/tests/perf_tests/restricted_traces/trace_egl_loader_autogen.h":
+    "389cf2453f8359538c391e58cd6a84d2",
+  "src/tests/perf_tests/restricted_traces/trace_gles_loader_autogen.cpp":
+    "f989f0d3e94d1ae985cfc9514cea8d48",
+  "src/tests/perf_tests/restricted_traces/trace_gles_loader_autogen.h":
+    "90da6d113a8248e148bf3a3853192292",
   "util/egl_loader_autogen.cpp":
-    "c2a5f6cb5e3531de16860ffc4f9df6d5",
+    "6eb720862e78992d0ed3abfe50bfa0ff",
   "util/egl_loader_autogen.h":
-    "3b5804374e184203cd3f89cee12a0e57",
+    "591c6d6b1ae0a90758204993ca2638a0",
   "util/gles_loader_autogen.cpp":
-    "e4d3034c13ac10c76b854c2749379939",
+    "4fb108c57db72c07d72883ec7c9e2286",
   "util/gles_loader_autogen.h":
-    "74dae22b00bdb4653c3295619f3676a1",
+    "cbe9fd9955c93090ffe584aab4f95639",
   "util/windows/wgl_loader_autogen.cpp":
     "60a40fba3ffddd40063fe6131bc67ba5",
   "util/windows/wgl_loader_autogen.h":

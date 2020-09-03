@@ -46,6 +46,7 @@ namespace egl
 {
 class Display;
 class Image;
+class ShareGroup;
 }  // namespace egl
 
 namespace gl
@@ -67,12 +68,12 @@ ANGLE_GL_OBJECTS_X(ANGLE_PRE_DECLARE_OBJECT)
 
 namespace rx
 {
-class CommandGraphResource;
 class DisplayVk;
 class ImageVk;
 class RenderTargetVk;
 class RendererVk;
 class RenderPassCache;
+class ShareGroupVk;
 }  // namespace rx
 
 namespace angle
@@ -182,6 +183,12 @@ struct ImplTypeHelper<egl::Image>
     using ImplType = ImageVk;
 };
 
+template <>
+struct ImplTypeHelper<egl::ShareGroup>
+{
+    using ImplType = ShareGroupVk;
+};
+
 template <typename T>
 using GetImplType = typename ImplTypeHelper<T>::ImplType;
 
@@ -285,12 +292,19 @@ class MemoryProperties final : angle::NonCopyable
     MemoryProperties();
 
     void init(VkPhysicalDevice physicalDevice);
+    bool hasLazilyAllocatedMemory() const;
     angle::Result findCompatibleMemoryIndex(Context *context,
                                             const VkMemoryRequirements &memoryRequirements,
                                             VkMemoryPropertyFlags requestedMemoryPropertyFlags,
                                             VkMemoryPropertyFlags *memoryPropertyFlagsOut,
                                             uint32_t *indexOut) const;
     void destroy();
+
+    VkDeviceSize getHeapSizeForMemoryType(uint32_t memoryType) const
+    {
+        uint32_t heapIndex = mMemoryProperties.memoryTypes[memoryType].heapIndex;
+        return mMemoryProperties.memoryHeaps[heapIndex].size;
+    }
 
   private:
     VkPhysicalDeviceMemoryProperties mMemoryProperties;
@@ -317,13 +331,14 @@ class StagingBuffer final : angle::NonCopyable
     size_t mSize;
 };
 
-angle::Result InitMappableAllocation(VmaAllocator allocator,
-                                     Allocation *allcation,
+angle::Result InitMappableAllocation(Context *context,
+                                     const vk::Allocator &allocator,
+                                     Allocation *allocation,
                                      VkDeviceSize size,
                                      int value,
                                      VkMemoryPropertyFlags memoryPropertyFlags);
 
-angle::Result InitMappableDeviceMemory(vk::Context *context,
+angle::Result InitMappableDeviceMemory(Context *context,
                                        vk::DeviceMemory *deviceMemory,
                                        VkDeviceSize size,
                                        int value,
@@ -339,6 +354,7 @@ angle::Result AllocateBufferMemory(Context *context,
 
 angle::Result AllocateImageMemory(Context *context,
                                   VkMemoryPropertyFlags memoryPropertyFlags,
+                                  VkMemoryPropertyFlags *memoryPropertyFlagsOut,
                                   const void *extraAllocationInfo,
                                   Image *image,
                                   DeviceMemory *deviceMemoryOut,
@@ -473,6 +489,12 @@ class BindingPointer final : angle::NonCopyable
     BindingPointer() : mRefCounted(nullptr) {}
 
     ~BindingPointer() { reset(); }
+
+    BindingPointer(BindingPointer &&other)
+    {
+        set(other.mRefCounted);
+        other.reset();
+    }
 
     void set(RefCounted<T> *refCounted)
     {
@@ -669,6 +691,59 @@ class ClearValuesArray final
     gl::AttachmentArray<VkClearValue> mValues;
     gl::AttachmentsMask mEnabled;
 };
+
+// Defines Serials for Vulkan objects.
+#define ANGLE_VK_SERIAL_OP(X) \
+    X(Buffer)                 \
+    X(ImageView)              \
+    X(Sampler)
+
+#define ANGLE_DEFINE_VK_SERIAL_TYPE(Type)                                     \
+    class Type##Serial                                                        \
+    {                                                                         \
+      public:                                                                 \
+        constexpr Type##Serial() : mSerial(kInvalid) {}                       \
+        constexpr explicit Type##Serial(uint32_t serial) : mSerial(serial) {} \
+                                                                              \
+        constexpr bool operator==(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial == other.mSerial;                                  \
+        }                                                                     \
+        constexpr bool operator!=(const Type##Serial &other) const            \
+        {                                                                     \
+            ASSERT(mSerial != kInvalid);                                      \
+            ASSERT(other.mSerial != kInvalid);                                \
+            return mSerial != other.mSerial;                                  \
+        }                                                                     \
+        constexpr uint32_t getValue() const { return mSerial; }               \
+        constexpr bool valid() const { return mSerial != kInvalid; }          \
+                                                                              \
+      private:                                                                \
+        uint32_t mSerial;                                                     \
+        static constexpr uint32_t kInvalid = 0;                               \
+    };                                                                        \
+    static constexpr Type##Serial kInvalid##Type##Serial = Type##Serial();
+
+ANGLE_VK_SERIAL_OP(ANGLE_DEFINE_VK_SERIAL_TYPE)
+
+#define ANGLE_DECLARE_GEN_VK_SERIAL(Type) Type##Serial generate##Type##Serial();
+
+class ResourceSerialFactory final : angle::NonCopyable
+{
+  public:
+    ResourceSerialFactory();
+    ~ResourceSerialFactory();
+
+    ANGLE_VK_SERIAL_OP(ANGLE_DECLARE_GEN_VK_SERIAL)
+
+  private:
+    uint32_t issueSerial();
+
+    // Kept atomic so it can be accessed from multiple Context threads at once.
+    std::atomic<uint32_t> mCurrentUniqueSerial;
+};
 }  // namespace vk
 
 #if !defined(ANGLE_SHARED_LIBVULKAN)
@@ -677,6 +752,7 @@ void InitDebugUtilsEXTFunctions(VkInstance instance);
 void InitDebugReportEXTFunctions(VkInstance instance);
 void InitGetPhysicalDeviceProperties2KHRFunctions(VkInstance instance);
 void InitTransformFeedbackEXTFunctions(VkDevice device);
+void InitSamplerYcbcrKHRFunctions(VkDevice device);
 
 #    if defined(ANGLE_PLATFORM_FUCHSIA)
 // VK_FUCHSIA_imagepipe_surface
@@ -709,6 +785,8 @@ void InitExternalFenceFdFunctions(VkInstance instance);
 void InitExternalSemaphoreCapabilitiesFunctions(VkInstance instance);
 
 #endif  // !defined(ANGLE_SHARED_LIBVULKAN)
+
+GLenum CalculateGenerateMipmapFilter(ContextVk *contextVk, const vk::Format &format);
 
 namespace gl_vk
 {

@@ -36,6 +36,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
+
 #ifndef _VERSIONS_INCLUDED_
 #define _VERSIONS_INCLUDED_
 
@@ -296,6 +297,8 @@ const char* const E_GL_EXT_shader_subgroup_extended_types_int8    = "GL_EXT_shad
 const char* const E_GL_EXT_shader_subgroup_extended_types_int16   = "GL_EXT_shader_subgroup_extended_types_int16";
 const char* const E_GL_EXT_shader_subgroup_extended_types_int64   = "GL_EXT_shader_subgroup_extended_types_int64";
 const char* const E_GL_EXT_shader_subgroup_extended_types_float16 = "GL_EXT_shader_subgroup_extended_types_float16";
+
+const char* const E_GL_EXT_shader_atomic_float = "GL_EXT_shader_atomic_float";
 
 // Arrays of extensions for the above AEP duplications
 

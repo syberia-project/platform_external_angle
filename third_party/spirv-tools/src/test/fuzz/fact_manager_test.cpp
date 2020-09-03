@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "source/fuzz/fact_manager.h"
+
 #include <limits>
 
-#include "source/fuzz/fact_manager.h"
 #include "source/fuzz/uniform_buffer_element_descriptor.h"
 #include "test/fuzz/fuzz_test_util.h"
 
@@ -782,6 +783,94 @@ TEST(FactManagerTest, RecursiveAdditionOfFacts) {
                                         MakeDataDescriptor(11, {2, 3})));
 }
 
+TEST(FactManagerTest, CorollaryConversionFacts) {
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %12 "main"
+               OpExecutionMode %12 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeInt 32 1
+          %7 = OpTypeInt 32 0
+          %8 = OpTypeVector %6 2
+          %9 = OpTypeVector %7 2
+         %10 = OpTypeFloat 32
+         %11 = OpTypeVector %10 2
+         %15 = OpConstant %6 24 ; synonym of %16
+         %16 = OpConstant %6 24
+         %17 = OpConstant %7 24 ; synonym of %18
+         %18 = OpConstant %7 24
+         %19 = OpConstantComposite %8 %15 %15 ; synonym of %20
+         %20 = OpConstantComposite %8 %16 %16
+         %21 = OpConstantComposite %9 %17 %17 ; synonym of %22
+         %22 = OpConstantComposite %9 %18 %18
+         %23 = OpConstantComposite %8 %15 %15 ; not a synonym of %19
+         %12 = OpFunction %2 None %3
+         %13 = OpLabel
+         %24 = OpConvertSToF %10 %15 ; synonym of %25
+         %25 = OpConvertSToF %10 %16
+         %26 = OpConvertUToF %10 %17 ; not a synonym of %27 (different opcode)
+         %27 = OpConvertSToF %10 %18
+         %28 = OpConvertUToF %11 %19 ; synonym of %29
+         %29 = OpConvertUToF %11 %20
+         %30 = OpConvertSToF %11 %21 ; not a synonym of %31 (different opcode)
+         %31 = OpConvertUToF %11 %22
+         %32 = OpConvertUToF %11 %23 ; not a synonym of %28 (operand is not synonymous)
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+
+  // Add equation facts
+  fact_manager.AddFactIdEquation(24, SpvOpConvertSToF, {15}, context.get());
+  fact_manager.AddFactIdEquation(25, SpvOpConvertSToF, {16}, context.get());
+  fact_manager.AddFactIdEquation(26, SpvOpConvertUToF, {17}, context.get());
+  fact_manager.AddFactIdEquation(27, SpvOpConvertSToF, {18}, context.get());
+  fact_manager.AddFactIdEquation(28, SpvOpConvertUToF, {19}, context.get());
+  fact_manager.AddFactIdEquation(29, SpvOpConvertUToF, {20}, context.get());
+  fact_manager.AddFactIdEquation(30, SpvOpConvertSToF, {21}, context.get());
+  fact_manager.AddFactIdEquation(31, SpvOpConvertUToF, {22}, context.get());
+  fact_manager.AddFactIdEquation(32, SpvOpConvertUToF, {23}, context.get());
+
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(15, {}),
+                                  MakeDataDescriptor(16, {}), context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(24, {}),
+                                        MakeDataDescriptor(25, {})));
+
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(17, {}),
+                                  MakeDataDescriptor(18, {}), context.get());
+  ASSERT_FALSE(fact_manager.IsSynonymous(MakeDataDescriptor(26, {}),
+                                         MakeDataDescriptor(27, {})));
+
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(19, {}),
+                                  MakeDataDescriptor(20, {}), context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(28, {}),
+                                        MakeDataDescriptor(29, {})));
+
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(21, {}),
+                                  MakeDataDescriptor(22, {}), context.get());
+  ASSERT_FALSE(fact_manager.IsSynonymous(MakeDataDescriptor(30, {}),
+                                         MakeDataDescriptor(31, {})));
+
+  ASSERT_FALSE(fact_manager.IsSynonymous(MakeDataDescriptor(32, {}),
+                                         MakeDataDescriptor(28, {})));
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(23, {}),
+                                  MakeDataDescriptor(19, {}), context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(32, {}),
+                                        MakeDataDescriptor(28, {})));
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(32, {}),
+                                        MakeDataDescriptor(29, {})));
+}
+
 TEST(FactManagerTest, LogicalNotEquationFacts) {
   std::string shader = R"(
                OpCapability Shader
@@ -982,6 +1071,148 @@ TEST(FactManagerTest, AddSubNegateFacts2) {
                                         MakeDataDescriptor(16, {})));
 }
 
+TEST(FactManagerTest, ConversionEquations) {
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %12 "main"
+               OpExecutionMode %12 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %4 = OpTypeInt 32 1
+          %5 = OpTypeInt 32 0
+          %6 = OpTypeFloat 32
+         %14 = OpTypeVector %4 2
+         %15 = OpTypeVector %5 2
+         %24 = OpTypeVector %6 2
+         %16 = OpConstant %4 32 ; synonym of %17
+         %17 = OpConstant %4 32
+         %18 = OpConstant %5 32 ; synonym of %19
+         %19 = OpConstant %5 32
+         %20 = OpConstantComposite %14 %16 %16 ; synonym of %21
+         %21 = OpConstantComposite %14 %17 %17
+         %22 = OpConstantComposite %15 %18 %18 ; synonym of %23
+         %23 = OpConstantComposite %15 %19 %19
+         %12 = OpFunction %2 None %3
+         %13 = OpLabel
+         %25 = OpConvertUToF %6 %16 ; synonym of %26
+         %26 = OpConvertUToF %6 %17
+         %27 = OpConvertSToF %24 %20 ; not a synonym of %28 (wrong opcode)
+         %28 = OpConvertUToF %24 %21
+         %29 = OpConvertSToF %6 %18 ; not a synonym of %30 (wrong opcode)
+         %30 = OpConvertUToF %6 %19
+         %31 = OpConvertSToF %24 %22 ; synonym of %32
+         %32 = OpConvertSToF %24 %23
+         %33 = OpConvertUToF %6 %17 ; synonym of %26
+         %34 = OpConvertSToF %24 %23 ; synonym of %32
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(16, {}),
+                                  MakeDataDescriptor(17, {}), context.get());
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(18, {}),
+                                  MakeDataDescriptor(19, {}), context.get());
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(20, {}),
+                                  MakeDataDescriptor(21, {}), context.get());
+  fact_manager.AddFactDataSynonym(MakeDataDescriptor(22, {}),
+                                  MakeDataDescriptor(23, {}), context.get());
+
+  fact_manager.AddFactIdEquation(25, SpvOpConvertUToF, {16}, context.get());
+  fact_manager.AddFactIdEquation(26, SpvOpConvertUToF, {17}, context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(25, {}),
+                                        MakeDataDescriptor(26, {})));
+
+  fact_manager.AddFactIdEquation(27, SpvOpConvertSToF, {20}, context.get());
+  fact_manager.AddFactIdEquation(28, SpvOpConvertUToF, {21}, context.get());
+  ASSERT_FALSE(fact_manager.IsSynonymous(MakeDataDescriptor(27, {}),
+                                         MakeDataDescriptor(28, {})));
+
+  fact_manager.AddFactIdEquation(29, SpvOpConvertSToF, {18}, context.get());
+  fact_manager.AddFactIdEquation(30, SpvOpConvertUToF, {19}, context.get());
+  ASSERT_FALSE(fact_manager.IsSynonymous(MakeDataDescriptor(29, {}),
+                                         MakeDataDescriptor(30, {})));
+
+  fact_manager.AddFactIdEquation(31, SpvOpConvertSToF, {22}, context.get());
+  fact_manager.AddFactIdEquation(32, SpvOpConvertSToF, {23}, context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(31, {}),
+                                        MakeDataDescriptor(32, {})));
+
+  fact_manager.AddFactIdEquation(33, SpvOpConvertUToF, {17}, context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(33, {}),
+                                        MakeDataDescriptor(26, {})));
+
+  fact_manager.AddFactIdEquation(34, SpvOpConvertSToF, {23}, context.get());
+  ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(32, {}),
+                                        MakeDataDescriptor(34, {})));
+}
+
+TEST(FactManagerTest, BitcastEquationFacts) {
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %12 "main"
+               OpExecutionMode %12 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %4 = OpTypeInt 32 1
+          %5 = OpTypeInt 32 0
+          %8 = OpTypeFloat 32
+          %9 = OpTypeVector %4 2
+         %10 = OpTypeVector %5 2
+         %11 = OpTypeVector %8 2
+          %6 = OpConstant %4 23
+          %7 = OpConstant %5 23
+         %19 = OpConstant %8 23
+         %20 = OpConstantComposite %9 %6 %6
+         %21 = OpConstantComposite %10 %7 %7
+         %22 = OpConstantComposite %11 %19 %19
+         %12 = OpFunction %2 None %3
+         %13 = OpLabel
+         %30 = OpBitcast %8 %6
+         %31 = OpBitcast %5 %6
+         %32 = OpBitcast %8 %7
+         %33 = OpBitcast %4 %7
+         %34 = OpBitcast %4 %19
+         %35 = OpBitcast %5 %19
+         %36 = OpBitcast %10 %20
+         %37 = OpBitcast %11 %20
+         %38 = OpBitcast %9 %21
+         %39 = OpBitcast %11 %21
+         %40 = OpBitcast %9 %22
+         %41 = OpBitcast %10 %22
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+
+  uint32_t lhs_id = 30;
+  for (uint32_t rhs_id : {6, 6, 7, 7, 19, 19, 20, 20, 21, 21, 22, 22}) {
+    fact_manager.AddFactIdEquation(lhs_id, SpvOpBitcast, {rhs_id},
+                                   context.get());
+    ASSERT_TRUE(fact_manager.IsSynonymous(MakeDataDescriptor(lhs_id, {}),
+                                          MakeDataDescriptor(rhs_id, {})));
+    ++lhs_id;
+  }
+}
+
 TEST(FactManagerTest, EquationAndEquivalenceFacts) {
   std::string shader = R"(
                OpCapability Shader
@@ -1108,6 +1339,41 @@ TEST(FactManagerTest, CheckingFactsDoesNotAddConstants) {
   ASSERT_EQ(0, available_constants.size());
   ASSERT_TRUE(IsEqual(env, shader, context.get()));
   ASSERT_FALSE(context->get_constant_mgr()->FindConstant(&constant_one));
+}
+
+TEST(FactManagerTest, IdIsIrrelevant) {
+  std::string shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource ESSL 320
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeInt 32 1
+         %12 = OpConstant %6 0
+         %13 = OpConstant %6 1
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_3;
+  const auto consumer = nullptr;
+  const auto context = BuildModule(env, consumer, shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, context.get()));
+
+  FactManager fact_manager;
+
+  ASSERT_FALSE(fact_manager.IdIsIrrelevant(12));
+  ASSERT_FALSE(fact_manager.IdIsIrrelevant(13));
+
+  fact_manager.AddFactIdIsIrrelevant(12);
+
+  ASSERT_TRUE(fact_manager.IdIsIrrelevant(12));
+  ASSERT_FALSE(fact_manager.IdIsIrrelevant(13));
 }
 
 }  // namespace

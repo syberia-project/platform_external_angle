@@ -30,6 +30,11 @@
 #include "libANGLE/VertexArray.h"
 #include "libANGLE/angletypes.h"
 
+namespace egl
+{
+class ShareGroup;
+}  // namespace egl
+
 namespace gl
 {
 class BufferManager;
@@ -63,6 +68,7 @@ using SamplerBindingVector = std::vector<BindingPointer<Sampler>>;
 using TextureBindingVector = std::vector<BindingPointer<Texture>>;
 using TextureBindingMap    = angle::PackedEnumMap<TextureType, TextureBindingVector>;
 using ActiveQueryMap       = angle::PackedEnumMap<QueryType, BindingPointer<Query>>;
+using BufferVector         = std::vector<OffsetBindingPointer<Buffer>>;
 
 class ActiveTexturesCache final : angle::NonCopyable
 {
@@ -85,7 +91,9 @@ class State : angle::NonCopyable
 {
   public:
     State(const State *shareContextState,
+          egl::ShareGroup *shareGroup,
           TextureManager *shareTextures,
+          SemaphoreManager *shareSemaphores,
           const OverlayType *overlay,
           const EGLenum clientType,
           const Version &clientVersion,
@@ -111,6 +119,7 @@ class State : angle::NonCopyable
     const TextureCapsMap &getTextureCaps() const { return mTextureCaps; }
     const Extensions &getExtensions() const { return mExtensions; }
     const Limitations &getLimitations() const { return mLimitations; }
+    egl::ShareGroup *getShareGroup() const { return mShareGroup; }
 
     bool isWebGL() const { return mExtensions.webglCompatibility; }
 
@@ -125,8 +134,8 @@ class State : angle::NonCopyable
     bool allActiveDrawBufferChannelsMasked() const;
     bool anyActiveDrawBufferChannelMasked() const;
     const RasterizerState &getRasterizerState() const;
-    const BlendState &getBlendState() const { return mBlendState; }
-    const BlendStateExt &getBlendStateExt() const { return mBlendStateExt; }
+    const BlendState &getBlendState() const { return mBlendStateArray[0]; }
+    const BlendStateArray &getBlendStateArray() const { return mBlendStateArray; }
     const DepthStencilState &getDepthStencilState() const;
 
     // Clear behavior setters & state parameter block generation function
@@ -166,11 +175,11 @@ class State : angle::NonCopyable
     float getFarPlane() const { return mFarZ; }
 
     // Blend state manipulation
-    bool isBlendEnabled() const { return mBlendStateExt.mEnabledMask.test(0); }
+    bool isBlendEnabled() const { return mBlendStateArray[0].blend; }
     bool isBlendEnabledIndexed(GLuint index) const
     {
-        ASSERT(static_cast<size_t>(index) < mBlendStateExt.mMaxDrawBuffers);
-        return mBlendStateExt.mEnabledMask.test(index);
+        ASSERT(index < mBlendStateArray.size());
+        return mBlendStateArray[index].blend;
     }
     DrawBufferMask getBlendEnabledDrawBufferMask() const { return mBlendStateExt.mEnabledMask; }
     void setBlend(bool enabled);
@@ -225,6 +234,10 @@ class State : angle::NonCopyable
         ASSERT(maskNumber < mMaxSampleMaskWords);
         return mSampleMaskValues[maskNumber];
     }
+    std::array<GLbitfield, MAX_SAMPLE_MASK_WORDS> getSampleMaskValues() const
+    {
+        return mSampleMaskValues;
+    }
     GLuint getMaxSampleMaskWords() const { return mMaxSampleMaskWords; }
 
     // Multisampling/alpha to one manipulation.
@@ -255,8 +268,10 @@ class State : angle::NonCopyable
 
     // Hint setters
     void setGenerateMipmapHint(GLenum hint);
+    GLenum getGenerateMipmapHint() const;
     void setTextureFilteringHint(GLenum hint);
     GLenum getTextureFilteringHint() const;
+    GLenum getFragmentShaderDerivativeHint() const { return mFragmentShaderDerivativeHint; }
     void setFragmentShaderDerivativeHint(GLenum hint);
 
     // GL_CHROMIUM_bind_generates_resource
@@ -677,6 +692,11 @@ class State : angle::NonCopyable
         mDirtyObjects.set(DIRTY_OBJECT_DRAW_ATTACHMENTS);
     }
 
+    ANGLE_INLINE void setProgramPipelineDirty()
+    {
+        mDirtyObjects.set(DIRTY_OBJECT_PROGRAM_PIPELINE);
+    }
+
     // This actually clears the current value dirty bits.
     // TODO(jmadill): Pass mutable dirty bits into Impl.
     AttributesMask getAndResetDirtyCurrentValues() const;
@@ -783,6 +803,41 @@ class State : angle::NonCopyable
 
     bool isEarlyFragmentTestsOptimizationAllowed() const { return isSampleCoverageEnabled(); }
 
+    const BufferVector &getOffsetBindingPointerUniformBuffers() const { return mUniformBuffers; }
+
+    const BufferVector &getOffsetBindingPointerAtomicCounterBuffers() const
+    {
+        return mAtomicCounterBuffers;
+    }
+
+    const BufferVector &getOffsetBindingPointerShaderStorageBuffers() const
+    {
+        return mShaderStorageBuffers;
+    }
+
+    ActiveTextureMask getTexturesIncompatibleWithSamplers() const
+    {
+        return mTexturesIncompatibleWithSamplers;
+    }
+
+    bool isProgramBinaryCacheEnabled() const { return mProgramBinaryCacheEnabled; }
+
+    bool isTextureRectangleEnabled() const { return mTextureRectangleEnabled; }
+
+    DrawBufferMask getBlendFuncConstantAlphaDrawBuffers() const
+    {
+        return mBlendFuncConstantAlphaDrawBuffers;
+    }
+
+    DrawBufferMask getBlendFuncConstantColorDrawBuffers() const
+    {
+        return mBlendFuncConstantColorDrawBuffers;
+    }
+
+    const std::vector<ImageUnit> getImageUnits() const { return mImageUnits; }
+
+    const BlendStateExt &getBlendStateExt() const { return mBlendStateExt; }
+
   private:
     friend class Context;
 
@@ -853,6 +908,8 @@ class State : angle::NonCopyable
     Extensions mExtensions;
     Limitations mLimitations;
 
+    egl::ShareGroup *mShareGroup;
+
     // Resource managers.
     BufferManager *mBufferManager;
     ShaderProgramManager *mShaderProgramManager;
@@ -877,7 +934,7 @@ class State : angle::NonCopyable
     bool mScissorTest;
     Rectangle mScissor;
 
-    BlendState mBlendState;  // Buffer zero blend state legacy struct
+    BlendStateArray mBlendStateArray;
     BlendStateExt mBlendStateExt;
     ColorF mBlendColor;
     bool mSampleAlphaToCoverage;
@@ -956,7 +1013,6 @@ class State : angle::NonCopyable
     // vertex array object.
     BoundBufferMap mBoundBuffers;
 
-    using BufferVector = std::vector<OffsetBindingPointer<Buffer>>;
     BufferVector mUniformBuffers;
     BufferVector mAtomicCounterBuffers;
     BufferVector mShaderStorageBuffers;

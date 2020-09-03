@@ -14,6 +14,8 @@
 
 #include "common/MemoryBuffer.h"
 #include "libANGLE/renderer/metal/ContextMtl.h"
+#include "libANGLE/renderer/metal/DisplayMtl.h"
+#include "libANGLE/renderer/metal/mtl_render_utils.h"
 
 namespace rx
 {
@@ -73,6 +75,47 @@ angle::Result InitializeTextureContents(const gl::Context *context,
                                index.hasLayer() ? index.cubeMapFaceIndex() : 0,
                                conversionRow.data(), dstRowPitch);
     }
+
+    return angle::Result::Continue;
+}
+
+angle::Result InitializeTextureContentsGPU(const gl::Context *context,
+                                           const TextureRef &texture,
+                                           const gl::ImageIndex &index,
+                                           MTLColorWriteMask channelsToInit)
+{
+    ContextMtl *contextMtl = mtl::GetImpl(context);
+    // Use clear render command
+
+    // temporarily enable color channels requested via channelsToInit. Some emulated format has some
+    // channels write mask disabled when the texture is created.
+    MTLColorWriteMask oldMask = texture->getColorWritableMask();
+    texture->setColorWritableMask(channelsToInit);
+
+    RenderCommandEncoder *encoder;
+    if (channelsToInit == MTLColorWriteMaskAll)
+    {
+        // If all channels will be initialized, use clear loadOp.
+        Optional<MTLClearColor> blackColor = MTLClearColorMake(0, 0, 0, 1);
+        encoder = contextMtl->getRenderCommandEncoder(texture, index, blackColor);
+    }
+    else
+    {
+        // If there are some channels don't need to be initialized, we must use clearWithDraw.
+        encoder = contextMtl->getRenderCommandEncoder(texture, index);
+
+        ClearRectParams clearParams;
+        clearParams.clearColor = {.alpha = 1};
+        clearParams.clearArea  = gl::Rectangle(0, 0, texture->width(), texture->height());
+
+        ANGLE_TRY(
+            contextMtl->getDisplay()->getUtils().clearWithDraw(context, encoder, clearParams));
+    }
+    ANGLE_UNUSED_VARIABLE(encoder);
+    contextMtl->endEncoding(true);
+
+    // Restore texture's intended write mask
+    texture->setColorWritableMask(oldMask);
 
     return angle::Result::Continue;
 }
@@ -431,6 +474,59 @@ MTLIndexType GetIndexType(gl::DrawElementsType type)
         default:
             return MTLIndexTypeInvalid;
     }
+}
+
+MTLColorWriteMask GetEmulatedColorWriteMask(const mtl::Format &mtlFormat, bool *isEmulatedOut)
+{
+    const angle::Format &intendedFormat = mtlFormat.intendedAngleFormat();
+    const angle::Format &actualFormat   = mtlFormat.actualAngleFormat();
+    bool isFormatEmulated               = false;
+    MTLColorWriteMask colorWritableMask = MTLColorWriteMaskAll;
+    if (intendedFormat.alphaBits == 0 && actualFormat.alphaBits)
+    {
+        isFormatEmulated = true;
+        // Disable alpha write to this texture
+        colorWritableMask = colorWritableMask & (~MTLColorWriteMaskAlpha);
+    }
+    if (intendedFormat.luminanceBits == 0)
+    {
+        if (intendedFormat.redBits == 0 && actualFormat.redBits)
+        {
+            isFormatEmulated = true;
+            // Disable red write to this texture
+            colorWritableMask = colorWritableMask & (~MTLColorWriteMaskRed);
+        }
+        if (intendedFormat.greenBits == 0 && actualFormat.greenBits)
+        {
+            isFormatEmulated = true;
+            // Disable green write to this texture
+            colorWritableMask = colorWritableMask & (~MTLColorWriteMaskGreen);
+        }
+        if (intendedFormat.blueBits == 0 && actualFormat.blueBits)
+        {
+            isFormatEmulated = true;
+            // Disable blue write to this texture
+            colorWritableMask = colorWritableMask & (~MTLColorWriteMaskBlue);
+        }
+    }
+
+    *isEmulatedOut = isFormatEmulated;
+
+    return colorWritableMask;
+}
+
+MTLColorWriteMask GetEmulatedColorWriteMask(const mtl::Format &mtlFormat)
+{
+    // Ignore isFormatEmulated boolean value
+    bool isFormatEmulated;
+    return GetEmulatedColorWriteMask(mtlFormat, &isFormatEmulated);
+}
+
+bool IsFormatEmulated(const mtl::Format &mtlFormat)
+{
+    bool isFormatEmulated;
+    (void)GetEmulatedColorWriteMask(mtlFormat, &isFormatEmulated);
+    return isFormatEmulated;
 }
 
 MTLClearColor EmulatedAlphaClearColor(MTLClearColor color, MTLColorWriteMask colorMask)

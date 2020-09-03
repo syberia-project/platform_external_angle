@@ -26,14 +26,18 @@ enum class ImageLayout;
 using RenderPassAndSerial = ObjectAndSerial<RenderPass>;
 using PipelineAndSerial   = ObjectAndSerial<Pipeline>;
 
-using RefCountedDescriptorSetLayout = RefCounted<DescriptorSetLayout>;
-using RefCountedPipelineLayout      = RefCounted<PipelineLayout>;
-using RefCountedSampler             = RefCounted<Sampler>;
+using RefCountedDescriptorSetLayout    = RefCounted<DescriptorSetLayout>;
+using RefCountedPipelineLayout         = RefCounted<PipelineLayout>;
+using RefCountedSamplerYcbcrConversion = RefCounted<SamplerYcbcrConversion>;
 
 // Helper macro that casts to a bitfield type then verifies no bits were dropped.
-#define SetBitField(lhs, rhs)                                         \
-    lhs = static_cast<typename std::decay<decltype(lhs)>::type>(rhs); \
-    ASSERT(static_cast<decltype(rhs)>(lhs) == (rhs))
+#define SetBitField(lhs, rhs)                                                         \
+    do                                                                                \
+    {                                                                                 \
+        auto ANGLE_LOCAL_VAR = rhs;                                                   \
+        lhs = static_cast<typename std::decay<decltype(lhs)>::type>(ANGLE_LOCAL_VAR); \
+        ASSERT(static_cast<decltype(ANGLE_LOCAL_VAR)>(lhs) == ANGLE_LOCAL_VAR);       \
+    } while (0)
 
 // Packed Vk resource descriptions.
 // Most Vk types use many more bits than required to represent the underlying data.
@@ -70,6 +74,8 @@ class alignas(4) RenderPassDesc final
     // The caller must pack the depth/stencil attachment last, which is packed right after the color
     // attachments (including gaps), i.e. with an index starting from |colorAttachmentRange()|.
     void packDepthStencilAttachment(angle::FormatID angleFormatID);
+    // Indicate that a color attachment should have a corresponding resolve attachment.
+    void packColorResolveAttachment(size_t colorIndexGL);
 
     size_t hash() const;
 
@@ -79,6 +85,10 @@ class alignas(4) RenderPassDesc final
 
     bool isColorAttachmentEnabled(size_t colorIndexGL) const;
     bool hasDepthStencilAttachment() const { return mHasDepthStencilAttachment; }
+    bool hasColorResolveAttachment(size_t colorIndexGL) const
+    {
+        return mColorResolveAttachmentMask.test(colorIndexGL);
+    }
 
     // Get the number of attachments in the Vulkan render pass, i.e. after removing disabled
     // color attachments.
@@ -86,7 +96,7 @@ class alignas(4) RenderPassDesc final
 
     void setSamples(GLint samples);
 
-    uint8_t samples() const { return mSamples; }
+    uint8_t samples() const { return 1u << mLogSamples; }
 
     angle::FormatID operator[](size_t index) const
     {
@@ -95,9 +105,19 @@ class alignas(4) RenderPassDesc final
     }
 
   private:
-    uint8_t mSamples;
-    uint8_t mColorAttachmentRange : 7;
+    // Store log(samples), to be able to store it in 3 bits.
+    uint8_t mLogSamples : 3;
+    uint8_t mColorAttachmentRange : 4;
     uint8_t mHasDepthStencilAttachment : 1;
+    // Whether each color attachment has a corresponding resolve attachment.  Color resolve
+    // attachments can be used to optimize resolve through glBlitFramebuffer() as well as support
+    // GL_EXT_multisampled_render_to_texture and GL_EXT_multisampled_render_to_texture2.
+    //
+    // Note that depth/stencil resolve attachments require VK_KHR_depth_stencil_resolve which is
+    // currently not well supported, so ANGLE always takes a fallback path for them.  When a resolve
+    // path is implemented for depth/stencil attachments, another bit must be made free
+    // (mAttachmentFormats is one element too large, so there are 8 bits there to take).
+    angle::BitSet8<gl::IMPLEMENTATION_MAX_DRAW_BUFFERS> mColorResolveAttachmentMask;
     // Color attachment formats are stored with their GL attachment indices.  The depth/stencil
     // attachment formats follow the last enabled color attachment.  When creating a render pass,
     // the disabled attachments are removed and the resulting attachments are packed.
@@ -118,6 +138,8 @@ class alignas(4) RenderPassDesc final
     //  - Subpass attachment 2 -> VK_ATTACHMENT_UNUSED
     //  - Subpass attachment 3 -> Renderpass attachment 1
     //
+    // The resolve attachments are packed after the non-resolve attachments.  They use the same
+    // formats, so they are not specified in this array.
     gl::AttachmentArray<uint8_t> mAttachmentFormats;
 };
 
@@ -525,19 +547,27 @@ class DescriptorSetLayoutDesc final
     void update(uint32_t bindingIndex,
                 VkDescriptorType type,
                 uint32_t count,
-                VkShaderStageFlags stages);
+                VkShaderStageFlags stages,
+                const vk::Sampler *immutableSampler);
 
-    void unpackBindings(DescriptorSetLayoutBindingVector *bindings) const;
+    void unpackBindings(DescriptorSetLayoutBindingVector *bindings,
+                        std::vector<VkSampler> *immutableSamplers) const;
 
   private:
+    // There is a small risk of an issue if the sampler cache is evicted but not the descriptor
+    // cache we would have an invalid handle here. Thus propose follow-up work:
+    // TODO: https://issuetracker.google.com/issues/159156775: Have immutable sampler use serial
     struct PackedDescriptorSetBinding
     {
         uint8_t type;    // Stores a packed VkDescriptorType descriptorType.
         uint8_t stages;  // Stores a packed VkShaderStageFlags.
         uint16_t count;  // Stores a packed uint32_t descriptorCount.
+        uint32_t pad;
+        VkSampler immutableSampler;
     };
 
-    static_assert(sizeof(PackedDescriptorSetBinding) == sizeof(uint32_t), "Unexpected size");
+    // 4x 32bit
+    static_assert(sizeof(PackedDescriptorSetBinding) == 16, "Unexpected size");
 
     // This is a compact representation of a descriptor set layout.
     std::array<PackedDescriptorSetBinding, kMaxDescriptorSetLayoutBindings>
@@ -601,13 +631,13 @@ class SamplerDesc final
 {
   public:
     SamplerDesc();
-    explicit SamplerDesc(const gl::SamplerState &samplerState, bool stencilMode);
+    SamplerDesc(const gl::SamplerState &samplerState, bool stencilMode, uint64_t externalFormat);
     ~SamplerDesc();
 
     SamplerDesc(const SamplerDesc &other);
     SamplerDesc &operator=(const SamplerDesc &rhs);
 
-    void update(const gl::SamplerState &samplerState, bool stencilMode);
+    void update(const gl::SamplerState &samplerState, bool stencilMode, uint64_t externalFormat);
     void reset();
     angle::Result init(ContextVk *contextVk, vk::Sampler *sampler) const;
 
@@ -621,6 +651,14 @@ class SamplerDesc final
     float mMaxAnisotropy;
     float mMinLod;
     float mMaxLod;
+
+    // If the sampler needs to convert the image content (e.g. from YUV to RGB) then mExternalFormat
+    // will be non-zero and match the external format as returned from
+    // vkGetAndroidHardwareBufferPropertiesANDROID.
+    // The externalFormat is guaranteed to be unique and any image with the same externalFormat can
+    // use the same conversion sampler. Thus externalFormat works as a Serial() used elsewhere in
+    // ANGLE.
+    uint64_t mExternalFormat;
 
     // 16 bits for modes + states.
     // 1 bit per filter (only 2 possible values in GL: linear/nearest)
@@ -641,12 +679,11 @@ class SamplerDesc final
 
     // Border color and unnormalized coordinates implicitly set to contants.
 
-    // 16 extra bits reserved for future use.
-    uint16_t mReserved;
+    // 48 extra bits reserved for future use.
+    uint16_t mReserved[3];
 };
 
-// Total size: 160 bits == 20 bytes.
-static_assert(sizeof(SamplerDesc) == 20, "Unexpected SamplerDesc size");
+static_assert(sizeof(SamplerDesc) == 32, "Unexpected SamplerDesc size");
 
 // Disable warnings about struct padding.
 ANGLE_DISABLE_STRUCT_PADDING_WARNINGS
@@ -749,6 +786,20 @@ class PipelineHelper final : angle::NonCopyable
 
 ANGLE_INLINE PipelineHelper::PipelineHelper(Pipeline &&pipeline) : mPipeline(std::move(pipeline)) {}
 
+struct ImageViewSubresourceSerial
+{
+    ImageViewSerial imageViewSerial;
+    uint16_t level : 10;       // GL max is 1000 (fits in 10 bits).
+    uint16_t levelCount : 6;   // Max 63 levels (2 ** 6 - 1). If we need more, take from layer.
+    uint16_t layer : 15;       // Implementation max is 2048 (11 bits).
+    uint16_t singleLayer : 1;  // true/false only. Not possible to use sub-slices of levels.
+};
+
+static_assert(sizeof(ImageViewSubresourceSerial) == sizeof(uint64_t), "Size mismatch");
+
+constexpr ImageViewSubresourceSerial kInvalidImageViewSubresourceSerial = {kInvalidImageViewSerial,
+                                                                           0, 0, 0, 0};
+
 class TextureDescriptorDesc
 {
   public:
@@ -758,7 +809,9 @@ class TextureDescriptorDesc
     TextureDescriptorDesc(const TextureDescriptorDesc &other);
     TextureDescriptorDesc &operator=(const TextureDescriptorDesc &other);
 
-    void update(size_t index, Serial textureSerial, Serial samplerSerial);
+    void update(size_t index,
+                ImageViewSubresourceSerial imageViewSerial,
+                SamplerSerial samplerSerial);
     size_t hash() const;
     void reset();
 
@@ -769,28 +822,60 @@ class TextureDescriptorDesc
 
   private:
     uint32_t mMaxIndex;
+
+    ANGLE_ENABLE_STRUCT_PADDING_WARNINGS
     struct TexUnitSerials
     {
-        uint32_t texture;
-        uint32_t sampler;
+        ImageViewSubresourceSerial imageView;
+        SamplerSerial sampler;
     };
     gl::ActiveTextureArray<TexUnitSerials> mSerials;
+    ANGLE_DISABLE_STRUCT_PADDING_WARNINGS
 };
 
-// This is IMPLEMENTATION_MAX_DRAW_BUFFERS + 1 for DS attachment
-constexpr size_t kMaxFramebufferAttachments = gl::IMPLEMENTATION_MAX_FRAMEBUFFER_ATTACHMENTS;
-// Color serials are at index [0:gl::IMPLEMENTATION_MAX_DRAW_BUFFERS-1]
-// Depth/stencil index is at gl::IMPLEMENTATION_MAX_DRAW_BUFFERS
-constexpr size_t kFramebufferDescDepthStencilIndex = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS;
-// Struct for AttachmentSerial cache signatures. Includes level/layer for imageView as
-//  well as a unique Serial value for the underlying image
-struct AttachmentSerial
+class UniformsAndXfbDesc
 {
-    uint16_t level;
-    uint16_t layer;
-    uint32_t imageSerial;
+  public:
+    UniformsAndXfbDesc();
+    ~UniformsAndXfbDesc();
+
+    UniformsAndXfbDesc(const UniformsAndXfbDesc &other);
+    UniformsAndXfbDesc &operator=(const UniformsAndXfbDesc &other);
+
+    BufferSerial getDefaultUniformBufferSerial() const
+    {
+        return mBufferSerials[kDefaultUniformBufferIndex];
+    }
+    void updateDefaultUniformBuffer(BufferSerial bufferSerial)
+    {
+        mBufferSerials[kDefaultUniformBufferIndex] = bufferSerial;
+        mBufferCount = std::max(mBufferCount, static_cast<uint32_t>(1));
+    }
+    void updateTransformFeedbackBuffer(size_t xfbIndex, BufferSerial bufferSerial)
+    {
+        uint32_t bufferIndex        = static_cast<uint32_t>(xfbIndex) + 1;
+        mBufferSerials[bufferIndex] = bufferSerial;
+        mBufferCount                = std::max(mBufferCount, (bufferIndex + 1));
+    }
+    size_t hash() const;
+    void reset();
+
+    bool operator==(const UniformsAndXfbDesc &other) const;
+
+  private:
+    uint32_t mBufferCount;
+    // The array index 0 is used for default uniform buffer
+    static constexpr size_t kDefaultUniformBufferIndex = 0;
+    static constexpr size_t kMaxBufferCount = 1 + gl::IMPLEMENTATION_MAX_TRANSFORM_FEEDBACK_BUFFERS;
+    std::array<BufferSerial, kMaxBufferCount> mBufferSerials;
 };
-constexpr AttachmentSerial kZeroAttachmentSerial = {0, 0, 0};
+
+// There can be a maximum of IMPLEMENTATION_MAX_DRAW_BUFFERS color and resolve attachments, plus one
+// depth/stencil attachment.
+constexpr size_t kMaxFramebufferAttachments = gl::IMPLEMENTATION_MAX_DRAW_BUFFERS * 2 + 1;
+template <typename T>
+using FramebufferAttachmentArray = std::array<T, kMaxFramebufferAttachments>;
+
 class FramebufferDesc
 {
   public:
@@ -800,7 +885,9 @@ class FramebufferDesc
     FramebufferDesc(const FramebufferDesc &other);
     FramebufferDesc &operator=(const FramebufferDesc &other);
 
-    void update(uint32_t index, AttachmentSerial serial);
+    void updateColor(uint32_t index, ImageViewSubresourceSerial serial);
+    void updateColorResolve(uint32_t index, ImageViewSubresourceSerial serial);
+    void updateDepthStencil(ImageViewSubresourceSerial serial);
     size_t hash() const;
     void reset();
 
@@ -809,12 +896,40 @@ class FramebufferDesc
     uint32_t attachmentCount() const;
 
   private:
-    gl::AttachmentArray<AttachmentSerial> mSerials;
+    void update(uint32_t index, ImageViewSubresourceSerial serial);
+
+    // Note: this is an exclusive index. If there is one index it will be "1".
+    uint32_t mMaxIndex;
+    FramebufferAttachmentArray<ImageViewSubresourceSerial> mSerials;
 };
+
+// The SamplerHelper allows a Sampler to be coupled with a serial.
+// Must be included before we declare SamplerCache.
+class SamplerHelper final : angle::NonCopyable
+{
+  public:
+    SamplerHelper(ContextVk *contextVk);
+    ~SamplerHelper();
+
+    explicit SamplerHelper(SamplerHelper &&samplerHelper);
+    SamplerHelper &operator=(SamplerHelper &&rhs);
+
+    bool valid() const { return mSampler.valid(); }
+    const Sampler &get() const { return mSampler; }
+    Sampler &get() { return mSampler; }
+    SamplerSerial getSamplerSerial() const { return mSamplerSerial; }
+
+  private:
+    Sampler mSampler;
+    SamplerSerial mSamplerSerial;
+};
+
+using RefCountedSampler = RefCounted<SamplerHelper>;
+using SamplerBinding    = BindingPointer<SamplerHelper>;
 }  // namespace vk
 }  // namespace rx
 
-// Introduce a std::hash for a RenderPassDesc
+// Introduce std::hash for the above classes.
 namespace std
 {
 template <>
@@ -854,6 +969,12 @@ struct hash<rx::vk::TextureDescriptorDesc>
 };
 
 template <>
+struct hash<rx::vk::UniformsAndXfbDesc>
+{
+    size_t operator()(const rx::vk::UniformsAndXfbDesc &key) const { return key.hash(); }
+};
+
+template <>
 struct hash<rx::vk::FramebufferDesc>
 {
     size_t operator()(const rx::vk::FramebufferDesc &key) const { return key.hash(); }
@@ -864,6 +985,17 @@ struct hash<rx::vk::SamplerDesc>
 {
     size_t operator()(const rx::vk::SamplerDesc &key) const { return key.hash(); }
 };
+
+// See Resource Serial types defined in vk_utils.h.
+#define ANGLE_HASH_VK_SERIAL(Type)                                                          \
+    template <>                                                                             \
+    struct hash<rx::vk::Type##Serial>                                                       \
+    {                                                                                       \
+        size_t operator()(const rx::vk::Type##Serial &key) const { return key.getValue(); } \
+    };
+
+ANGLE_VK_SERIAL_OP(ANGLE_HASH_VK_SERIAL)
+
 }  // namespace std
 
 namespace rx
@@ -1019,10 +1151,30 @@ class SamplerCache final : angle::NonCopyable
 
     angle::Result getSampler(ContextVk *contextVk,
                              const vk::SamplerDesc &desc,
-                             vk::BindingPointer<vk::Sampler> *samplerOut);
+                             vk::SamplerBinding *samplerOut);
 
   private:
     std::unordered_map<vk::SamplerDesc, vk::RefCountedSampler> mPayload;
+};
+
+// YuvConversion Cache
+class SamplerYcbcrConversionCache final : angle::NonCopyable
+{
+  public:
+    SamplerYcbcrConversionCache();
+    ~SamplerYcbcrConversionCache();
+
+    void destroy(RendererVk *render);
+
+    angle::Result getYuvConversion(
+        vk::Context *context,
+        uint64_t externalFormat,
+        const VkSamplerYcbcrConversionCreateInfo &yuvConversionCreateInfo,
+        vk::BindingPointer<vk::SamplerYcbcrConversion> *yuvConversionOut);
+    VkSamplerYcbcrConversion getYuvConversionFromExternalFormat(uint64_t externalFormat) const;
+
+  private:
+    std::unordered_map<uint64_t, vk::RefCountedSamplerYcbcrConversion> mPayload;
 };
 
 // Some descriptor set and pipeline layout constants.
